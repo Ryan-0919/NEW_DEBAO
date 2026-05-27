@@ -1,0 +1,1380 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum CourseContentType {
+  audio
+  video
+}
+
+enum CourseStatus {
+  open
+  closed
+  scheduled
+}
+
+enum AudioProcessStatus {
+  pending
+  processing
+  ready
+  failed
+}
+
+enum MockExamPaperStatus {
+  draft
+  published
+}
+
+enum MockExamQuestionType {
+  single_choice
+  multiple_choice
+  uncertain_choice
+  subjective_case
+}
+
+enum QuestionBankPaperType {
+  objective
+  subjective
+}
+
+enum BookQuestionBankStatus {
+  draft
+  published
+  closed
+}
+
+enum BookQuestionBankAccessType {
+  public
+  authorized
+}
+
+enum MockExamRecordStatus {
+  in_progress
+  submitted
+}
+
+enum MockExamReviewWorkflowStatus {
+  not_required
+  ai_pending
+  ai_processing
+  manual_pending
+  published
+}
+
+enum TypingPracticeTextStatus {
+  draft
+  published
+}
+
+enum TypingPracticeDifficulty {
+  easy
+  medium
+  hard
+}
+
+enum TypingPracticeMode {
+  guided
+  sprint
+  memorize
+}
+
+enum ShopProductType {
+  virtual
+  physical
+  hybrid
+}
+
+enum ShopProductStatus {
+  draft
+  on_sale
+  off_sale
+}
+
+enum ShopOrderStatus {
+  pending_payment
+  paid
+  partially_fulfilled
+  completed
+  cancelled
+  refunding
+  refunded
+}
+
+enum ShopPaymentStatus {
+  unpaid
+  paid
+  failed
+  refunded
+}
+
+enum ShopDigitalFulfillmentStatus {
+  pending
+  success
+  failed
+}
+
+enum ShopShipmentStatus {
+  pending
+  shipped
+  in_transit
+  signed
+  failed
+}
+
+enum ShopRefundStatus {
+  pending
+  approved
+  rejected
+  completed
+  failed
+}
+
+enum ShopBannerLinkType {
+  product
+  category
+  custom
+}
+
+model Admin {
+  id           String   @id @default(cuid())
+  account      String   @unique @db.VarChar(50)
+  passwordHash String   @db.VarChar(255)
+  name         String   @db.VarChar(100)
+  role         String   @default("super_admin") @db.VarChar(50)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  auditLogs    AuditLog[]
+}
+
+model User {
+  id             String                 @id @default(cuid())
+  phone          String                 @unique @db.VarChar(20)
+  nickname       String?                @db.VarChar(100)
+  avatarUrl      String?                @db.VarChar(500)
+  avatarObjectKey String?               @db.VarChar(255)
+  passwordHash   String                 @db.VarChar(255)
+  status         UserStatus             @default(active)
+  registeredAt   DateTime               @default(now())
+  lastLoginAt    DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  permissions    UserCoursePermission[]
+  devices        UserDevice[]
+  progresses     UserProgress[]
+  videoProgresses UserVideoProgress[]
+  courseNotes    UserCourseNote[]
+  addresses      UserAddress[]
+  cartItems      ShopCartItem[]
+  shopOrders     ShopOrder[]
+  digitalFulfillments ShopDigitalFulfillment[]
+  mockExamRecords MockExamRecord[]
+  mockExamPermissions UserMockExamPermission[]
+  mockExamSeriesPermissions UserMockExamSeriesPermission[]
+  mockExamLeaderboardEntries MockExamLeaderboardEntry[]
+  bookQuestionBankPermissions UserBookQuestionBankPermission[]
+  bookQuestionBankProgresses UserBookQuestionBankProgress[]
+  bookQuestionBankItemStates UserBookQuestionBankItemState[]
+  typingPracticeRecords TypingPracticeRecord[]
+}
+
+model UserDevice {
+  id        String   @id @default(cuid())
+  userId    String
+  deviceKey String   @db.VarChar(191)
+  type      String   @db.VarChar(50)
+  model     String   @db.VarChar(100)
+  ip        String   @db.VarChar(64)
+  loginAt   DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceKey])
+  @@index([userId])
+}
+
+model Course {
+  id                String                 @id @default(cuid())
+  name              String                 @db.VarChar(191)
+  coverUrl          String                 @db.VarChar(500)
+  coverObjectKey    String?                @db.VarChar(255)
+  handoutUrl        String?                @db.VarChar(500)
+  handoutObjectKey  String?                @db.VarChar(255)
+  handoutName       String?                @db.VarChar(255)
+  description       String                 @db.LongText
+  courseType        CourseContentType      @default(audio)
+  status            CourseStatus           @default(closed)
+  openTime          DateTime
+  sortOrder         Int                    @default(0)
+  openedAt          DateTime?
+  webhookNotifiedAt DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  tags              Tag[]
+  permissions       UserCoursePermission[]
+  notes             UserCourseNote[]
+  courseAudios      CourseAudio[]
+  courseVideos      CourseVideo[]
+  shopProducts      ShopProductCourse[]
+
+  @@index([courseType, status, openTime])
+  @@index([status, openTime])
+}
+
+model Tag {
+  id           String       @id @default(cuid())
+  courseId     String
+  name         String       @db.VarChar(100)
+  order        Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  course       Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseAudios CourseAudio[]
+  courseVideos CourseVideo[]
+
+  @@unique([courseId, name])
+  @@index([courseId, order])
+}
+
+model AudioFolder {
+  id        String   @id @default(cuid())
+  name      String   @unique @db.VarChar(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  audios    Audio[]
+}
+
+model Audio {
+  id             String             @id @default(cuid())
+  name           String             @db.VarChar(191)
+  folderId       String
+  duration       Int                @default(0)
+  scriptText     String?            @db.LongText
+  handoutUrl     String?            @db.VarChar(500)
+  handoutObjectKey String?          @db.VarChar(255)
+  handoutName    String?            @db.VarChar(255)
+  objectKey      String?            @unique @db.VarChar(255)
+  objectUrl      String?            @db.VarChar(500)
+  mimeType       String?            @db.VarChar(100)
+  processStatus  AudioProcessStatus @default(pending)
+  processMessage String?            @db.VarChar(500)
+  uploadedAt     DateTime           @default(now())
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  folder         AudioFolder        @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  courseAudios CourseAudio[]
+  progresses  UserProgress[]
+
+  @@index([folderId, uploadedAt])
+  @@index([processStatus, uploadedAt])
+}
+
+model VideoFolder {
+  id        String   @id @default(cuid())
+  name      String   @unique @db.VarChar(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  videos    Video[]
+}
+
+model Video {
+  id               String            @id @default(cuid())
+  name             String            @db.VarChar(191)
+  folderId         String
+  duration         Int               @default(0)
+  scriptText       String?           @db.LongText
+  handoutUrl       String?           @db.VarChar(500)
+  handoutObjectKey String?           @db.VarChar(255)
+  handoutName      String?           @db.VarChar(255)
+  objectKey        String?           @unique @db.VarChar(255)
+  objectUrl        String?           @db.VarChar(500)
+  mimeType         String?           @db.VarChar(100)
+  uploadedAt       DateTime          @default(now())
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  folder           VideoFolder       @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  courseVideos     CourseVideo[]
+  progresses       UserVideoProgress[]
+
+  @@index([folderId, uploadedAt])
+}
+
+model CourseAudio {
+  id        String   @id @default(cuid())
+  courseId  String
+  tagId     String
+  audioId   String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  audio     Audio    @relation(fields: [audioId], references: [id], onDelete: Restrict)
+
+  @@unique([courseId, audioId])
+  @@index([tagId, order])
+  @@index([courseId])
+  @@index([audioId])
+}
+
+model CourseVideo {
+  id        String   @id @default(cuid())
+  courseId  String
+  tagId     String
+  videoId   String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Restrict)
+
+  @@unique([courseId, videoId])
+  @@index([tagId, order])
+  @@index([courseId])
+  @@index([videoId])
+}
+
+model UserCoursePermission {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+}
+
+model UserProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  courseId    String
+  audioId     String
+  progress    Int      @default(0)
+  completed   Boolean  @default(false)
+  lastUpdated DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audio       Audio    @relation(fields: [audioId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId, audioId])
+  @@index([courseId])
+  @@index([audioId])
+}
+
+model UserVideoProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  courseId    String
+  videoId     String
+  progress    Int      @default(0)
+  completed   Boolean  @default(false)
+  lastUpdated DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId, videoId])
+  @@index([courseId])
+  @@index([videoId])
+}
+
+model UserCourseNote {
+  id        String            @id @default(cuid())
+  userId    String
+  courseId  String
+  mediaType CourseContentType
+  mediaId   String            @db.VarChar(191)
+  content   String            @db.LongText
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId, mediaType, mediaId])
+  @@index([courseId, mediaType, mediaId])
+  @@index([userId, updatedAt])
+}
+
+model SystemConfig {
+  id                 Int      @id @default(1)
+  webhookUrl         String?  @db.VarChar(500)
+  brandLogoUrl       String?  @db.VarChar(500)
+  brandLogoObjectKey String?  @db.VarChar(255)
+  playerDiscImageUrl String?  @db.VarChar(500)
+  customerServiceUrl String?  @db.VarChar(500)
+  portalConfigJson   String?  @db.LongText
+  mockExamAiReviewConfigJson String? @db.LongText
+  mockExamLaunchConfigJson String? @db.LongText
+  typingPracticeDifficultyConfigJson String? @db.LongText
+  typingPracticeHomeConfigJson String? @db.LongText
+  playerDiscImageObjectKey String? @db.VarChar(255)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+enum WebhookLogStatus {
+  success
+  failed
+  skipped
+}
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  adminId         String?
+  operatorAccount String?  @db.VarChar(50)
+  operatorName    String?  @db.VarChar(100)
+  action          String   @db.VarChar(100)
+  entityType      String   @db.VarChar(50)
+  entityId        String?  @db.VarChar(191)
+  entityName      String?  @db.VarChar(191)
+  detail          String?  @db.LongText
+  createdAt       DateTime @default(now())
+  admin           Admin?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, createdAt])
+}
+
+model WebhookLog {
+  id               String           @id @default(cuid())
+  scene            String           @db.VarChar(100)
+  status           WebhookLogStatus
+  title            String?          @db.VarChar(191)
+  webhookUrl       String?          @db.VarChar(500)
+  messagePreview   String?          @db.LongText
+  responseCode     Int?
+  errorMessage     String?          @db.VarChar(500)
+  relatedEntityType String?         @db.VarChar(50)
+  relatedEntityId  String?          @db.VarChar(191)
+  createdAt        DateTime         @default(now())
+
+  @@index([createdAt])
+  @@index([scene, createdAt])
+  @@index([status, createdAt])
+}
+
+model LawEntry {
+  id               String   @id @default(cuid())
+  sourceLawId      Int      @unique
+  topCategoryId    Int
+  topCategoryTitle String   @db.VarChar(191)
+  bookTitle        String?  @db.VarChar(255)
+  title            String   @db.VarChar(255)
+  pathString       String   @db.VarChar(1000)
+  pathTitlesJson   String   @db.LongText
+  content          String   @db.LongText
+  type             Int      @default(0)
+  sourceParentId   Int?
+  sourceTopId      Int?
+  position         Int      @default(0)
+  sourceCreatedAt  DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([topCategoryId, position])
+  @@index([topCategoryTitle])
+  @@index([bookTitle])
+  @@index([updatedAt])
+}
+
+model LawEntryOperation {
+  id             String   @id @default(cuid())
+  sourceLawId    Int      @unique
+  isPublished    Boolean  @default(true)
+  isPinned       Boolean  @default(false)
+  manualSortOrder Int     @default(0)
+  tagsJson       String?  @db.LongText
+  operatorNote   String?  @db.LongText
+  customTitle    String?  @db.VarChar(255)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isPublished, updatedAt])
+  @@index([isPinned, manualSortOrder])
+}
+
+model MockExamSeries {
+  id          String                       @id @default(cuid())
+  name        String                       @unique @db.VarChar(191)
+  description String?                      @db.VarChar(255)
+  sortOrder   Int                          @default(0)
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+
+  papers       MockExamPaper[]
+  permissions  UserMockExamSeriesPermission[]
+
+  @@index([sortOrder, createdAt])
+}
+
+model MockExamPaper {
+  id              String                @id @default(cuid())
+  seriesId        String?
+  code            String                @unique @db.VarChar(64)
+  title           String                @db.VarChar(191)
+  subtitle        String?               @db.VarChar(255)
+  coverUrl        String?               @db.VarChar(500)
+  coverObjectKey  String?               @db.VarChar(255)
+  paperType       QuestionBankPaperType?
+  year            Int?
+  phase           String?               @db.VarChar(50)
+  durationMinutes Int                   @default(180)
+  maxAttempts     Int                   @default(0)
+  reviewEnabled   Boolean               @default(true)
+  reviewAttemptLimit Int                @default(0)
+  permissionRequired Boolean            @default(false)
+  totalScore      Int                   @default(0)
+  questionCount   Int                   @default(0)
+  passScore       Int                   @default(0)
+  description     String?               @db.LongText
+  status          MockExamPaperStatus   @default(published)
+  openTime        DateTime?
+  sortOrder       Int                   @default(0)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  series          MockExamSeries?       @relation(fields: [seriesId], references: [id], onDelete: Restrict)
+  questions       MockExamQuestion[]
+  records         MockExamRecord[]
+  permissions     UserMockExamPermission[]
+  leaderboardEntries MockExamLeaderboardEntry[]
+
+  @@index([seriesId, sortOrder])
+  @@index([status, sortOrder])
+  @@index([year, sortOrder])
+  @@index([status, openTime, sortOrder])
+}
+
+model MockExamLeaderboardEntry {
+  id              String        @id @default(cuid())
+  paperId          String
+  userId           String
+  manualRank       Int?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  paper            MockExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([paperId, userId])
+  @@index([paperId, manualRank])
+  @@index([userId, updatedAt])
+}
+
+model UserMockExamPermission {
+  id                    String        @id @default(cuid())
+  userId                String
+  paperId               String
+  manualAttemptLimit    Int?
+  manualAttemptUsed     Int           @default(0)
+  currentRecordStartedAt DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @default(now()) @updatedAt
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paper                 MockExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, paperId])
+  @@index([paperId])
+}
+
+model UserMockExamSeriesPermission {
+  id        String         @id @default(cuid())
+  userId    String
+  seriesId  String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @default(now()) @updatedAt
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  series    MockExamSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, seriesId])
+  @@index([seriesId])
+}
+
+model QuestionBankFolder {
+  id        String                @id @default(cuid())
+  name      String                @db.VarChar(100)
+  paperType QuestionBankPaperType
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  items     QuestionBankItem[]
+
+  @@unique([paperType, name])
+  @@index([paperType, updatedAt])
+}
+
+model QuestionBankItem {
+  id                String                   @id @default(cuid())
+  folderId          String
+  type              MockExamQuestionType
+  stem              String                   @db.LongText
+  material          String?                  @db.LongText
+  analysis          String?                  @db.LongText
+  lessonAudioUrl    String?                  @db.LongText
+  lessonAudioObjectKey String?               @db.VarChar(255)
+  lessonAudioDurationSeconds Int             @default(0)
+  score             Int                      @default(2)
+  sortOrder         Int                      @default(0)
+  correctAnswerJson String                   @db.LongText
+  questionMetaJson  String?                  @db.LongText
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  folder            QuestionBankFolder       @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  options           QuestionBankItemOption[]
+  sourceQuestions   MockExamQuestion[]       @relation("QuestionBankSource")
+  bookQuestionBankItems BookQuestionBankItem[]
+  bookQuestionBankItemStates UserBookQuestionBankItemState[]
+
+  @@index([folderId, sortOrder])
+  @@index([type, updatedAt])
+}
+
+model BookQuestionBank {
+  id             String                        @id @default(cuid())
+  name           String                        @db.VarChar(191)
+  code           String                        @unique @db.VarChar(64)
+  coverUrl       String?                       @db.VarChar(500)
+  coverObjectKey String?                       @db.VarChar(255)
+  description    String?                       @db.LongText
+  status         BookQuestionBankStatus        @default(draft)
+  accessType     BookQuestionBankAccessType    @default(authorized)
+  paperType      QuestionBankPaperType         @default(objective)
+  isVisible      Boolean                       @default(true)
+  sortOrder      Int                           @default(0)
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
+
+  subjects       BookQuestionBankSubject[]
+  items          BookQuestionBankItem[]
+  permissions    UserBookQuestionBankPermission[]
+  progresses     UserBookQuestionBankProgress[]
+  itemStates     UserBookQuestionBankItemState[]
+
+  @@index([status, isVisible, sortOrder])
+  @@index([accessType, paperType, status, isVisible, sortOrder])
+  @@index([sortOrder, createdAt])
+}
+
+model BookQuestionBankSubject {
+  id          String                     @id @default(cuid())
+  bookId      String
+  name        String                     @db.VarChar(100)
+  code        String                     @db.VarChar(64)
+  description String?                    @db.VarChar(255)
+  sortOrder   Int                        @default(0)
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  book          BookQuestionBank         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  items         BookQuestionBankItem[]
+  lastProgresses UserBookQuestionBankProgress[] @relation("BookQuestionProgressLastSubject")
+
+  @@unique([bookId, name])
+  @@unique([bookId, code])
+  @@index([bookId, sortOrder])
+}
+
+model BookQuestionLibraryFolder {
+  id        String                    @id @default(cuid())
+  name      String                    @db.VarChar(100)
+  accessType BookQuestionBankAccessType @default(public)
+  paperType QuestionBankPaperType     @default(objective)
+  createdAt DateTime                  @default(now())
+  updatedAt DateTime                  @updatedAt
+
+  items     BookQuestionLibraryItem[]
+
+  @@index([accessType, paperType, name])
+  @@index([accessType, paperType, updatedAt])
+  @@index([paperType, name])
+  @@index([paperType, updatedAt])
+  @@index([updatedAt])
+}
+
+model BookQuestionLibraryItem {
+  id                String                         @id @default(cuid())
+  folderId          String
+  type              MockExamQuestionType
+  stem              String                         @db.LongText
+  material          String?                        @db.LongText
+  analysis          String?                        @db.LongText
+  lessonAudioUrl    String?                        @db.LongText
+  lessonAudioObjectKey String?                     @db.VarChar(255)
+  lessonAudioDurationSeconds Int                   @default(0)
+  score             Int                            @default(2)
+  sortOrder         Int                            @default(0)
+  correctAnswerJson String                         @db.LongText
+  questionMetaJson  String?                        @db.LongText
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+
+  folder            BookQuestionLibraryFolder      @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  options           BookQuestionLibraryItemOption[]
+  bookQuestionBankItems BookQuestionBankItem[]
+  bookQuestionBankItemStates UserBookQuestionBankItemState[]
+
+  @@index([folderId, sortOrder])
+  @@index([type, updatedAt])
+}
+
+model BookQuestionLibraryItemOption {
+  id        String                  @id @default(cuid())
+  itemId    String
+  optionKey String                  @db.VarChar(10)
+  content   String                  @db.LongText
+  sortOrder Int                     @default(0)
+
+  item      BookQuestionLibraryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, sortOrder])
+}
+
+model BookQuestionBankItem {
+  id                 String                         @id @default(cuid())
+  bookId             String
+  subjectId          String
+  questionBankItemId String?
+  bookQuestionLibraryItemId String?
+  title              String?                        @db.VarChar(191)
+  questionNo         String?                        @db.VarChar(50)
+  yearLabel          String?                        @db.VarChar(50)
+  pageLabel          String?                        @db.VarChar(50)
+  tagsJson           String?                        @db.LongText
+  type               MockExamQuestionType?
+  stem               String?                        @db.LongText
+  material           String?                        @db.LongText
+  analysis           String?                        @db.LongText
+  lessonAudioUrl     String?                        @db.LongText
+  lessonAudioObjectKey String?                      @db.VarChar(255)
+  lessonAudioDurationSeconds Int                    @default(0)
+  score              Int                            @default(2)
+  correctAnswerJson  String?                        @db.LongText
+  questionMetaJson   String?                        @db.LongText
+  sortOrder          Int                            @default(0)
+  status             Boolean                        @default(true)
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+
+  book              BookQuestionBank               @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  subject           BookQuestionBankSubject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  questionBankItem  QuestionBankItem?              @relation(fields: [questionBankItemId], references: [id], onDelete: SetNull)
+  bookQuestionLibraryItem BookQuestionLibraryItem?  @relation(fields: [bookQuestionLibraryItemId], references: [id], onDelete: SetNull)
+  options           BookQuestionBankItemOption[]
+  userStates        UserBookQuestionBankItemState[]
+  lastProgresses    UserBookQuestionBankProgress[] @relation("BookQuestionProgressLastItem")
+
+  @@index([bookId, sortOrder])
+  @@index([bookId, subjectId, sortOrder])
+  @@index([bookId, status, sortOrder])
+  @@index([type, updatedAt])
+  @@index([questionBankItemId])
+  @@index([bookQuestionLibraryItemId])
+}
+
+model UserBookQuestionBankPermission {
+  id         String            @id @default(cuid())
+  userId     String
+  bookId     String
+  sourceType String?           @db.VarChar(50)
+  sourceId   String?           @db.VarChar(191)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book       BookQuestionBank  @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId])
+  @@index([bookId])
+}
+
+model UserBookQuestionBankProgress {
+  id                String                  @id @default(cuid())
+  userId            String
+  bookId            String
+  lastSubjectId     String?
+  lastBookItemId    String?
+  answeredCount     Int                     @default(0)
+  viewedAnswerCount Int                     @default(0)
+  masteredCount     Int                     @default(0)
+  redoCount         Int                     @default(0)
+  lastPracticedAt   DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  user           User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book           BookQuestionBank           @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  lastSubject    BookQuestionBankSubject?   @relation("BookQuestionProgressLastSubject", fields: [lastSubjectId], references: [id], onDelete: SetNull)
+  lastBookItem   BookQuestionBankItem?      @relation("BookQuestionProgressLastItem", fields: [lastBookItemId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, bookId])
+  @@index([bookId])
+  @@index([userId, updatedAt])
+}
+
+model UserBookQuestionBankItemState {
+  id                 String              @id @default(cuid())
+  userId             String
+  bookId             String
+  bookItemId         String
+  questionBankItemId String?
+  bookQuestionLibraryItemId String?
+  answerJson         String?             @db.LongText
+  draftText          String?             @db.LongText
+  isAnswered         Boolean             @default(false)
+  hasViewedAnswer    Boolean             @default(false)
+  isMastered         Boolean             @default(false)
+  isRedoMarked       Boolean             @default(false)
+  answeredAt         DateTime?
+  viewedAnswerAt     DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book             BookQuestionBank     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  bookItem         BookQuestionBankItem @relation(fields: [bookItemId], references: [id], onDelete: Cascade)
+  questionBankItem QuestionBankItem?    @relation(fields: [questionBankItemId], references: [id], onDelete: SetNull)
+  bookQuestionLibraryItem BookQuestionLibraryItem? @relation(fields: [bookQuestionLibraryItemId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, bookItemId])
+  @@index([bookId, userId, updatedAt])
+  @@index([questionBankItemId])
+  @@index([bookQuestionLibraryItemId])
+}
+
+model BookQuestionBankItemOption {
+  id        String               @id @default(cuid())
+  itemId     String
+  optionKey String               @db.VarChar(10)
+  content   String               @db.LongText
+  sortOrder Int                  @default(0)
+
+  item      BookQuestionBankItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, sortOrder])
+}
+
+model QuestionBankItemOption {
+  id        String           @id @default(cuid())
+  itemId    String
+  optionKey String           @db.VarChar(10)
+  content   String           @db.LongText
+  sortOrder Int              @default(0)
+
+  item      QuestionBankItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, sortOrder])
+}
+
+model MockExamQuestion {
+  id                String               @id @default(cuid())
+  paperId           String
+  sourceBankItemId  String?
+  isActive          Boolean              @default(true)
+  type              MockExamQuestionType
+  stem              String               @db.LongText
+  material          String?              @db.LongText
+  analysis          String?              @db.LongText
+  lessonAudioUrl    String?              @db.LongText
+  lessonAudioObjectKey String?           @db.VarChar(255)
+  lessonAudioDurationSeconds Int         @default(0)
+  score             Int                  @default(2)
+  sortOrder         Int                  @default(0)
+  correctAnswerJson String               @db.LongText
+  questionMetaJson  String?              @db.LongText
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  paper             MockExamPaper        @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  sourceBankItem    QuestionBankItem?    @relation("QuestionBankSource", fields: [sourceBankItemId], references: [id], onDelete: SetNull)
+  options           MockExamQuestionOption[]
+  answers           MockExamAnswer[]
+
+  @@index([paperId, sortOrder])
+  @@index([paperId, isActive, sortOrder])
+  @@index([sourceBankItemId])
+  @@index([type, sortOrder])
+}
+
+model MockExamQuestionOption {
+  id         String           @id @default(cuid())
+  questionId String
+  optionKey  String           @db.VarChar(10)
+  content    String           @db.LongText
+  sortOrder  Int              @default(0)
+
+  question   MockExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId, sortOrder])
+}
+
+model MockExamRecord {
+  id             String               @id @default(cuid())
+  paperId        String
+  userId         String
+  activeKey      String?              @unique @db.VarChar(191)
+  paperSnapshotJson String?           @db.LongText
+  status         MockExamRecordStatus @default(in_progress)
+  reviewWorkflowStatus MockExamReviewWorkflowStatus @default(not_required)
+  manualReviewerId String?            @db.VarChar(191)
+  manualReviewerName String?          @db.VarChar(100)
+  manualReviewLockToken String?       @db.VarChar(191)
+  manualReviewClaimedAt DateTime?
+  manualReviewLockExpiresAt DateTime?
+  manualReviewVersion Int             @default(0)
+  isPaused       Boolean              @default(false)
+  attemptNo      Int                  @default(1)
+  questionCount  Int                  @default(0)
+  allottedSeconds Int                 @default(0)
+  consumedSeconds Int                 @default(0)
+  totalScore     Int                  @default(0)
+  correctCount   Int                  @default(0)
+  answeredCount  Int                  @default(0)
+  startedAt      DateTime             @default(now())
+  submittedAt    DateTime?
+  reviewedAt     DateTime?
+  aiReviewStartedAt DateTime?
+  aiReviewFinishedAt DateTime?
+  aiReviewRetryCount Int             @default(0)
+  aiReviewNextRetryAt DateTime?
+  publishedAt    DateTime?
+  lastAiReviewError String?           @db.LongText
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  paper          MockExamPaper        @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers        MockExamAnswer[]
+
+  @@index([userId, status, updatedAt])
+  @@index([paperId, userId, createdAt])
+  @@index([paperId, reviewWorkflowStatus, submittedAt])
+  @@index([userId, reviewWorkflowStatus, updatedAt])
+  @@index([paperId, manualReviewLockExpiresAt])
+  @@index([manualReviewerId, manualReviewLockExpiresAt])
+  @@index([reviewWorkflowStatus, aiReviewNextRetryAt, submittedAt])
+}
+
+model MockExamAnswer {
+  id          String           @id @default(cuid())
+  recordId    String
+  questionId  String
+  answerJson  String?          @db.LongText
+  reviewJson  String?          @db.LongText
+  isCorrect   Boolean?
+  score       Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  record      MockExamRecord   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  question    MockExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([recordId, questionId])
+  @@index([recordId, updatedAt])
+}
+
+model TypingPracticeFolder {
+  id        String               @id @default(cuid())
+  name      String               @unique @db.VarChar(100)
+  sortOrder Int                  @default(0)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  texts     TypingPracticeText[]
+
+  @@index([sortOrder, updatedAt])
+}
+
+model TypingPracticeText {
+  id            String                     @id @default(cuid())
+  folderId      String
+  title         String                     @db.VarChar(191)
+  difficulty    TypingPracticeDifficulty   @default(medium)
+  source        String?                    @db.VarChar(255)
+  tagsJson      String?                    @db.LongText
+  content       String                     @db.LongText
+  note          String?                    @db.LongText
+  status        TypingPracticeTextStatus   @default(published)
+  sortOrder     Int                        @default(0)
+  contentLength Int                        @default(0)
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  folder        TypingPracticeFolder       @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  records       TypingPracticeRecord[]
+
+  @@index([folderId, sortOrder])
+  @@index([status, updatedAt])
+  @@index([difficulty, updatedAt])
+}
+
+model TypingPracticeRecord {
+  id              String               @id @default(cuid())
+  userId          String
+  textId          String?
+  mode            TypingPracticeMode
+  difficulty      TypingPracticeDifficulty @default(medium)
+  titleSnapshot   String               @db.VarChar(191)
+  sourceSnapshot  String?              @db.VarChar(255)
+  contentSnapshot String               @db.LongText
+  typedContent    String?              @db.LongText
+  targetLength    Int                  @default(0)
+  typedLength     Int                  @default(0)
+  correctLength   Int                  @default(0)
+  errorCount      Int                  @default(0)
+  backspaceCount  Int                  @default(0)
+  comboMax        Int                  @default(0)
+  accuracyRate    Int                  @default(0)
+  completionRate  Int                  @default(0)
+  cpm             Int                  @default(0)
+  score           Int                  @default(0)
+  durationSeconds Int                  @default(0)
+  timeLimitSeconds Int?
+  previewSeconds  Int?
+  createdAt       DateTime             @default(now())
+  completedAt     DateTime             @default(now())
+
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text            TypingPracticeText?  @relation(fields: [textId], references: [id], onDelete: SetNull)
+
+  @@index([userId, completedAt])
+  @@index([mode, completedAt])
+  @@index([textId, completedAt])
+}
+
+model ShopConfig {
+  id                  Int         @id @default(1)
+  shopNotice          String?     @db.LongText
+  customerServiceUrl  String?     @db.VarChar(500)
+  featuredProductIds  String?     @db.LongText
+  featuredCategoryIds String?     @db.LongText
+  paymentGuide        String?     @db.LongText
+  enableWechatH5      Boolean     @default(true)
+  enableWechatJsapi   Boolean     @default(true)
+  enableAlipayWap     Boolean     @default(true)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  banners             ShopBanner[]
+}
+
+model ShopBanner {
+  id             String             @id @default(cuid())
+  configId       Int                @default(1)
+  title          String?            @db.VarChar(100)
+  imageUrl       String             @db.VarChar(500)
+  imageObjectKey String?            @db.VarChar(255)
+  linkType       ShopBannerLinkType @default(product)
+  linkTarget     String             @db.VarChar(255)
+  sortOrder      Int                @default(0)
+  status         Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  config         ShopConfig         @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@index([configId, sortOrder])
+  @@index([status, sortOrder])
+}
+
+model ShopCategory {
+  id        String        @id @default(cuid())
+  name      String        @unique @db.VarChar(100)
+  sortOrder Int           @default(0)
+  status    Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  products  ShopProduct[]
+
+  @@index([sortOrder])
+}
+
+model ShopProduct {
+  id               String             @id @default(cuid())
+  categoryId       String?
+  name             String             @db.VarChar(191)
+  subtitle         String?            @db.VarChar(255)
+  coverUrl         String             @db.VarChar(500)
+  coverObjectKey   String?            @db.VarChar(255)
+  type             ShopProductType
+  status           ShopProductStatus  @default(draft)
+  description      String?            @db.LongText
+  detailContent    String?            @db.LongText
+  detailImages     String?            @db.LongText
+  requiresShipping Boolean            @default(false)
+  sortOrder        Int                @default(0)
+  salesCount       Int                @default(0)
+  isDeleted        Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  category         ShopCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  images           ShopProductImage[]
+  skus             ShopSku[]
+  courses          ShopProductCourse[]
+  orderItems       ShopOrderItem[]
+  cartItems        ShopCartItem[]
+
+  @@index([categoryId, status, sortOrder])
+  @@index([type, status, sortOrder])
+}
+
+model ShopProductImage {
+  id             String      @id @default(cuid())
+  productId      String
+  imageUrl       String      @db.VarChar(500)
+  imageObjectKey String?     @db.VarChar(255)
+  sortOrder      Int         @default(0)
+  createdAt      DateTime    @default(now())
+
+  product        ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, sortOrder])
+}
+
+model ShopProductCourse {
+  id        String      @id @default(cuid())
+  productId String
+  courseId  String
+  createdAt DateTime    @default(now())
+
+  product   ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  course    Course      @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, courseId])
+  @@index([courseId])
+}
+
+model ShopSku {
+  id            String      @id @default(cuid())
+  productId     String
+  name          String      @db.VarChar(191)
+  price         Decimal     @db.Decimal(10, 2)
+  originalPrice Decimal?    @db.Decimal(10, 2)
+  stock         Int         @default(0)
+  weight        Int?        @default(0)
+  isDefault     Boolean     @default(false)
+  status        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  product       ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems     ShopCartItem[]
+  orderItems    ShopOrderItem[]
+
+  @@index([productId, status])
+}
+
+model UserAddress {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String   @db.VarChar(50)
+  phone     String   @db.VarChar(20)
+  province  String   @db.VarChar(50)
+  city      String   @db.VarChar(50)
+  district  String   @db.VarChar(50)
+  address   String   @db.VarChar(255)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isDefault])
+}
+
+model ShopCartItem {
+  id        String      @id @default(cuid())
+  userId    String
+  productId String
+  skuId     String
+  quantity  Int         @default(1)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku       ShopSku     @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skuId])
+  @@index([userId, updatedAt])
+}
+
+model ShopOrder {
+  id               String                  @id @default(cuid())
+  orderNo          String                  @unique @db.VarChar(50)
+  userId           String
+  status           ShopOrderStatus         @default(pending_payment)
+  paymentStatus    ShopPaymentStatus       @default(unpaid)
+  totalAmount      Decimal                 @db.Decimal(10, 2)
+  payAmount        Decimal                 @db.Decimal(10, 2)
+  freightAmount    Decimal                 @default(0) @db.Decimal(10, 2)
+  payExpireAt      DateTime?
+  remark           String?                 @db.VarChar(255)
+  receiverName     String?                 @db.VarChar(50)
+  receiverPhone    String?                 @db.VarChar(20)
+  receiverProvince String?                 @db.VarChar(50)
+  receiverCity     String?                 @db.VarChar(50)
+  receiverDistrict String?                 @db.VarChar(50)
+  receiverAddress  String?                 @db.VarChar(255)
+  paidAt           DateTime?
+  cancelledAt      DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items            ShopOrderItem[]
+  payments         ShopPaymentRecord[]
+  digitalFulfillments ShopDigitalFulfillment[]
+  shipments        ShopShipment[]
+  refunds          ShopRefundRecord[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([paymentStatus, createdAt])
+  @@index([status, paymentStatus, payExpireAt])
+}
+
+model ShopOrderItem {
+  id                    String      @id @default(cuid())
+  orderId               String
+  productId             String
+  skuId                 String
+  productNameSnapshot   String      @db.VarChar(191)
+  productTypeSnapshot   ShopProductType
+  coverSnapshot         String      @db.VarChar(500)
+  priceSnapshot         Decimal     @db.Decimal(10, 2)
+  originalPriceSnapshot Decimal?    @db.Decimal(10, 2)
+  quantity              Int         @default(1)
+  requiresShipping      Boolean     @default(false)
+  courseIdsSnapshot     String?     @db.LongText
+  createdAt             DateTime    @default(now())
+
+  order                 ShopOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product               ShopProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sku                   ShopSku     @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  digitalFulfillments   ShopDigitalFulfillment[]
+  shipmentItems         ShopShipmentItem[]
+  refunds               ShopRefundRecord[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([skuId])
+}
+
+model ShopPaymentRecord {
+  id            String            @id @default(cuid())
+  orderId       String
+  channel       String            @db.VarChar(50)
+  status        ShopPaymentStatus @default(unpaid)
+  transactionNo String?           @db.VarChar(100)
+  payAmount     Decimal           @db.Decimal(10, 2)
+  paidAt        DateTime?
+  rawPayload    String?           @db.LongText
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  order         ShopOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@index([transactionNo])
+}
+
+model ShopDigitalFulfillment {
+  id           String                       @id @default(cuid())
+  orderId      String
+  orderItemId  String
+  userId       String
+  status       ShopDigitalFulfillmentStatus @default(pending)
+  grantType    String                       @db.VarChar(50)
+  grantPayload String?                      @db.LongText
+  grantedAt    DateTime?
+  errorMessage String?                      @db.VarChar(500)
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
+
+  order        ShopOrder                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem    ShopOrderItem                @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  user         User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, status])
+  @@index([orderItemId])
+  @@index([userId, status])
+}
+
+model ShopShipment {
+  id         String             @id @default(cuid())
+  orderId    String
+  status     ShopShipmentStatus @default(pending)
+  company    String?            @db.VarChar(100)
+  trackingNo String?            @db.VarChar(100)
+  shippedAt  DateTime?
+  signedAt   DateTime?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  order      ShopOrder          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items      ShopShipmentItem[]
+  tracks     ShopShipmentTrack[]
+
+  @@index([orderId])
+  @@index([status, createdAt])
+  @@index([trackingNo])
+}
+
+model ShopShipmentItem {
+  id          String        @id @default(cuid())
+  shipmentId  String
+  orderItemId String
+  quantity    Int           @default(1)
+
+  shipment    ShopShipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderItem   ShopOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, orderItemId])
+  @@index([shipmentId])
+  @@index([orderItemId])
+}
+
+model ShopShipmentTrack {
+  id         String       @id @default(cuid())
+  shipmentId String
+  content    String       @db.VarChar(255)
+  location   String?      @db.VarChar(100)
+  trackTime  DateTime
+  createdAt  DateTime     @default(now())
+
+  shipment   ShopShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId, trackTime])
+}
+
+model ShopRefundRecord {
+  id            String           @id @default(cuid())
+  orderId       String
+  orderItemId   String?
+  status        ShopRefundStatus @default(pending)
+  refundAmount  Decimal          @db.Decimal(10, 2)
+  reason        String?          @db.VarChar(255)
+  resultMessage String?          @db.VarChar(500)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  order         ShopOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem     ShopOrderItem?   @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+  @@index([status, createdAt])
+}

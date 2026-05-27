@@ -1,0 +1,473 @@
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, Eye, EyeOff, ImagePlus, Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { Switch } from "../../components/ui/switch";
+import { Textarea } from "../../components/ui/textarea";
+import { AdminSystemConfig, PortalConfig, adminOperationsService } from "../../services/adminOperationsService";
+
+type FieldPath = (string | number)[];
+
+type BannerItem = {
+  id: string;
+  badge: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  imageObjectKey: string;
+  primaryButtonText: string;
+  primaryButtonTarget: string;
+  secondaryButtonText: string;
+  secondaryButtonTarget: string;
+  isVisible: boolean;
+  sortOrder: number;
+};
+
+const inputClass = "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:border-amber-400 focus-visible:ring-amber-100";
+const selectTriggerClass = "border-slate-200 bg-white text-slate-900 focus-visible:border-amber-400 focus-visible:ring-amber-100";
+
+const bannerTargetOptions = [
+  { label: "首页", value: "/" },
+  { label: "课程中心", value: "/courses" },
+  { label: "题库首页", value: "/question-bank" },
+  { label: "我的题库", value: "/question-bank/my" },
+  { label: "练习题库", value: "/question-bank/practice" },
+  { label: "客观题模考", value: "/user/objective-mock-exams" },
+  { label: "主观题批改", value: "/user/mock-exams" },
+  { label: "法条检索", value: "/user/laws" },
+  { label: "打字练习", value: "/user/typing-practice" },
+  { label: "我的页面", value: "/profile" },
+];
+
+const normalizeTarget = (value = "", fallback = "/courses") =>
+  bannerTargetOptions.some((item) => item.value === value) ? value : fallback;
+
+const getTargetLabel = (value = "") => bannerTargetOptions.find((item) => item.value === value)?.label ?? "未选择";
+
+const makeId = () => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `banner-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const getPathValue = (source: any, path: FieldPath, fallback = "") =>
+  path.reduce((current, key) => (current && current[key] !== undefined ? current[key] : undefined), source) ?? fallback;
+
+const setPathValue = (source: any, path: FieldPath, value: unknown) => {
+  const next = structuredClone(source ?? {});
+  let cursor = next;
+  path.forEach((key, index) => {
+    if (index === path.length - 1) {
+      cursor[key] = value;
+      return;
+    }
+    if (!cursor[key] || typeof cursor[key] !== "object") cursor[key] = typeof path[index + 1] === "number" ? [] : {};
+    cursor = cursor[key];
+  });
+  return next;
+};
+
+const emptyBanner = (sortOrder = 0): BannerItem => ({
+  id: makeId(),
+  badge: "课程推荐",
+  title: "新的首页 Banner",
+  description: "在这里填写课程卖点、学习规划或重要活动说明。",
+  imageUrl: "",
+  imageObjectKey: "",
+  primaryButtonText: "继续学习",
+  primaryButtonTarget: "/courses",
+  secondaryButtonText: "进入题库",
+  secondaryButtonTarget: "/question-bank",
+  isVisible: true,
+  sortOrder,
+});
+
+const readLegacyBanner = (portalConfig: PortalConfig = {}): BannerItem => ({
+  id: makeId(),
+  badge: `${getPathValue(portalConfig, ["memberHome", "hero", "badge"], "快捷入口")}`,
+  title: `${getPathValue(portalConfig, ["memberHome", "hero", "title"], "欢迎使用得宝")}`,
+  description: `${getPathValue(portalConfig, ["memberHome", "hero", "description"], "课程学习、机考训练、法条检索和打字练习统一收口。")}`,
+  imageUrl: `${getPathValue(portalConfig, ["memberHome", "bannerImageUrl"], "/portal/home-hero-banner.png")}`,
+  imageObjectKey: `${getPathValue(portalConfig, ["memberHome", "bannerImageObjectKey"], "")}`,
+  primaryButtonText: "继续学习",
+  primaryButtonTarget: "/courses",
+  secondaryButtonText: "进入题库",
+  secondaryButtonTarget: "/question-bank",
+  isVisible: true,
+  sortOrder: 0,
+});
+
+const readBannerItems = (portalConfig: PortalConfig = {}): BannerItem[] => {
+  const rawItems = getPathValue(portalConfig, ["memberHome", "banners"], []);
+  const source = Array.isArray(rawItems) && rawItems.length > 0 ? rawItems : [readLegacyBanner(portalConfig)];
+
+  return source
+    .filter((item) => item && typeof item === "object")
+    .map((item, index) => ({
+      id: `${item.id ?? ""}` || makeId(),
+      badge: `${item.badge ?? "法考学习"}`,
+      title: `${item.title ?? ""}`,
+      description: `${item.description ?? ""}`,
+      imageUrl: `${item.imageUrl ?? ""}`,
+      imageObjectKey: `${item.imageObjectKey ?? ""}`,
+      primaryButtonText: `${item.primaryButtonText ?? "继续学习"}`,
+      primaryButtonTarget: normalizeTarget(`${item.primaryButtonTarget ?? "/courses"}`, "/courses"),
+      secondaryButtonText: `${item.secondaryButtonText ?? "进入题库"}`,
+      secondaryButtonTarget: normalizeTarget(`${item.secondaryButtonTarget ?? "/question-bank"}`, "/question-bank"),
+      isVisible: item.isVisible !== false,
+      sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : index,
+    }))
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((item, index) => ({ ...item, sortOrder: index }));
+};
+
+const buildPortalConfig = (portalConfig: PortalConfig, items: BannerItem[]) => {
+  const normalizedItems = items.map((item, index) => ({
+    ...item,
+    badge: item.badge.trim(),
+    title: item.title.trim(),
+    description: item.description.trim(),
+    imageUrl: item.imageUrl.trim(),
+    imageObjectKey: item.imageObjectKey.trim(),
+    primaryButtonText: item.primaryButtonText.trim(),
+    primaryButtonTarget: normalizeTarget(item.primaryButtonTarget, "/courses"),
+    secondaryButtonText: item.secondaryButtonText.trim(),
+    secondaryButtonTarget: normalizeTarget(item.secondaryButtonTarget, "/question-bank"),
+    sortOrder: index,
+  }));
+  const primary = normalizedItems.find((item) => item.isVisible !== false) || normalizedItems[0] || emptyBanner(0);
+
+  let next = portalConfig;
+  next = setPathValue(next, ["memberHome", "banners"], normalizedItems);
+  next = setPathValue(next, ["memberHome", "hero", "badge"], primary.badge);
+  next = setPathValue(next, ["memberHome", "hero", "title"], primary.title);
+  next = setPathValue(next, ["memberHome", "hero", "description"], primary.description);
+  next = setPathValue(next, ["memberHome", "bannerImageUrl"], primary.imageUrl);
+  next = setPathValue(next, ["memberHome", "bannerImageObjectKey"], primary.imageObjectKey);
+  return next;
+};
+
+export function HomeBannerManagement() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [config, setConfig] = useState<AdminSystemConfig | null>(null);
+  const [items, setItems] = useState<BannerItem[]>([emptyBanner(0)]);
+  const [selectedId, setSelectedId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const selectedItem = items.find((item) => item.id === selectedId) || items[0] || emptyBanner(0);
+  const visibleCount = items.filter((item) => item.isVisible !== false).length;
+  const previewStyle = useMemo(
+    () => ({
+      backgroundImage: selectedItem.imageUrl
+        ? `linear-gradient(105deg,rgba(4,8,20,0.95) 0%,rgba(4,8,20,0.8) 42%,rgba(4,8,20,0.18) 100%), url("${selectedItem.imageUrl}")`
+        : "linear-gradient(105deg,#111827 0%,#0f172a 100%)",
+    }),
+    [selectedItem.imageUrl],
+  );
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const payload = await adminOperationsService.getSystemConfig();
+      const nextItems = readBannerItems(payload.portalConfig ?? {});
+      setConfig(payload);
+      setItems(nextItems);
+      setSelectedId(nextItems[0]?.id || "");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "首页 Banner 加载失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const patchSelected = (patch: Partial<BannerItem>) => {
+    setItems((current) => current.map((item) => (item.id === selectedItem.id ? { ...item, ...patch } : item)));
+  };
+
+  const saveItems = async (nextItems = items, successText = "首页 Banner 轮播已保存") => {
+    if (!config) return;
+    const normalizedItems = nextItems
+      .map((item, index) => ({ ...item, sortOrder: index }))
+      .filter((item) => item.title.trim() || item.description.trim() || item.imageUrl.trim());
+
+    if (normalizedItems.length === 0) {
+      toast.warning("请至少保留一张 Banner");
+      return;
+    }
+
+    if (!normalizedItems.some((item) => item.isVisible !== false)) {
+      toast.warning("请至少保留一张展示中的 Banner");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const nextPortalConfig = buildPortalConfig(config.portalConfig ?? {}, normalizedItems);
+      const payload = await adminOperationsService.updateSystemConfig({ portalConfig: nextPortalConfig });
+      const savedItems = readBannerItems(payload.portalConfig ?? {});
+      setConfig(payload);
+      setItems(savedItems);
+      setSelectedId((current) => savedItems.some((item) => item.id === current) ? current : savedItems[0]?.id || "");
+      toast.success(successText);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "首页 Banner 保存失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addBanner = () => {
+    const nextItem = emptyBanner(items.length);
+    setItems((current) => [...current, nextItem]);
+    setSelectedId(nextItem.id);
+  };
+
+  const removeSelected = () => {
+    if (items.length <= 1) {
+      toast.warning("至少保留一张 Banner");
+      return;
+    }
+    const currentIndex = items.findIndex((item) => item.id === selectedItem.id);
+    const nextItems = items.filter((item) => item.id !== selectedItem.id).map((item, index) => ({ ...item, sortOrder: index }));
+    setItems(nextItems);
+    setSelectedId(nextItems[Math.max(0, currentIndex - 1)]?.id || nextItems[0]?.id || "");
+  };
+
+  const moveSelected = (direction: -1 | 1) => {
+    const currentIndex = items.findIndex((item) => item.id === selectedItem.id);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) return;
+    const nextItems = [...items];
+    const [removed] = nextItems.splice(currentIndex, 1);
+    nextItems.splice(targetIndex, 0, removed);
+    setItems(nextItems.map((item, index) => ({ ...item, sortOrder: index })));
+  };
+
+  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !config) return;
+
+    setUploading(true);
+    try {
+      const uploaded = await adminOperationsService.uploadSystemImage(file);
+      patchSelected({ imageUrl: uploaded.url, imageObjectKey: uploaded.objectKey });
+      toast.success("图片已上传，请确认文案后保存轮播");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "图片上传失败");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="rounded-lg border border-slate-200 bg-white py-16 text-center text-slate-500">首页 Banner 加载中...</div>;
+  }
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">首页 Banner 轮播管理</h2>
+            <p className="mt-1 text-sm text-slate-500">维护学员登录后首页顶部轮播图。当前 {items.length} 张，展示 {visibleCount} 张。</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={loading || saving || uploading} onClick={() => void loadData()}>
+              <RefreshCw className="size-4" />
+              重新加载
+            </Button>
+            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={saving || uploading} onClick={addBanner}>
+              <Plus className="size-4" />
+              新增 Banner
+            </Button>
+            <Button className="bg-[#c9973e] text-slate-950 hover:bg-[#b88932]" disabled={saving || uploading} onClick={() => void saveItems()}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              保存轮播
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+        <div className="rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-100 px-4 py-3">
+            <div className="text-sm font-semibold text-slate-950">轮播列表</div>
+          </div>
+          <div className="max-h-[680px] space-y-2 overflow-y-auto p-3">
+            {items.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedId(item.id)}
+                className={`w-full rounded-lg border p-2 text-left transition ${item.id === selectedItem.id ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+              >
+                <div className="flex gap-3">
+                  <div className="h-16 w-24 shrink-0 overflow-hidden rounded-md bg-slate-100">
+                    {item.imageUrl ? <img src={item.imageUrl} alt={item.title} className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xs text-slate-400">无图</div>}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-slate-400">#{index + 1}</span>
+                      {item.isVisible !== false ? <Eye className="size-3 text-emerald-600" /> : <EyeOff className="size-3 text-slate-400" />}
+                    </div>
+                    <div className="mt-1 truncate text-sm font-semibold text-slate-900">{item.title || "未填写标题"}</div>
+                    <div className="mt-1 line-clamp-2 text-xs text-slate-500">{item.description || "未填写描述"}</div>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <div
+            className="relative min-h-[360px] overflow-hidden rounded-lg bg-cover bg-center p-8 shadow-sm"
+            style={previewStyle}
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+            <div className="relative z-10 flex h-full min-h-[300px] max-w-2xl flex-col justify-center">
+              <div className="mb-5 inline-flex w-fit items-center rounded-full border border-amber-300/40 bg-amber-300/15 px-3 py-1 text-xs font-bold tracking-wider text-amber-200">
+                {selectedItem.badge || "法考学习"}
+              </div>
+              <h3 className="whitespace-pre-line font-serif text-4xl font-bold leading-tight text-amber-50 drop-shadow">
+                {selectedItem.title || "欢迎使用得宝"}
+              </h3>
+              <p className="mt-4 max-w-xl text-sm leading-7 text-blue-100/75">
+                {selectedItem.description || "课程学习、机考训练、法条检索和打字练习统一收口。"}
+              </p>
+              {selectedItem.primaryButtonText.trim() || selectedItem.secondaryButtonText.trim() ? (
+                <div className="mt-7 flex flex-wrap gap-3">
+                  {selectedItem.primaryButtonText.trim() ? (
+                    <span className="rounded-lg bg-gradient-to-r from-[#c9973e] to-[#e8c46a] px-6 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/25">
+                      {selectedItem.primaryButtonText.trim()}
+                    </span>
+                  ) : null}
+                  {selectedItem.secondaryButtonText.trim() ? (
+                    <span className="rounded-lg border border-white/15 bg-white/10 px-5 py-3 text-sm text-blue-100">
+                      {selectedItem.secondaryButtonText.trim()}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          {selectedItem.imageUrl ? <p className="mt-3 break-all text-xs text-slate-500">{selectedItem.imageUrl}</p> : null}
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="flex items-center justify-between gap-3">
+              <Label>展示状态</Label>
+              <div className="flex items-center gap-2">
+                <Switch checked={selectedItem.isVisible !== false} onCheckedChange={(checked) => patchSelected({ isVisible: checked })} />
+                <span className="text-sm text-slate-600">{selectedItem.isVisible !== false ? "展示" : "隐藏"}</span>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={selectedItem.sortOrder <= 0} onClick={() => moveSelected(-1)}>
+                <ArrowUp className="size-4" />
+                上移
+              </Button>
+              <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={selectedItem.sortOrder >= items.length - 1} onClick={() => moveSelected(1)}>
+                <ArrowDown className="size-4" />
+                下移
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <Label>Banner 图片</Label>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+            <div className="mt-3 grid gap-2">
+              <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={uploading || saving} onClick={() => fileInputRef.current?.click()}>
+                {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+                上传图片
+              </Button>
+              <Button variant="outline" className="border-rose-200 bg-white text-rose-700 hover:bg-rose-50" disabled={uploading || saving || !selectedItem.imageUrl} onClick={() => patchSelected({ imageUrl: "", imageObjectKey: "" })}>
+                <Trash2 className="size-4" />
+                清空当前图片
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>徽标</Label>
+                <Input className={inputClass} value={selectedItem.badge} onChange={(event) => patchSelected({ badge: event.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>标题</Label>
+                <Input className={inputClass} value={selectedItem.title} onChange={(event) => patchSelected({ title: event.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>描述</Label>
+                <Textarea className={inputClass} rows={5} value={selectedItem.description} onChange={(event) => patchSelected({ description: event.target.value })} />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="mb-4">
+              <div className="text-sm font-semibold text-slate-950">按钮设置</div>
+              <p className="mt-1 text-xs text-slate-500">按钮文字留空则不显示；跳转页面从下方选择。</p>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>主按钮文字</Label>
+                <Input className={inputClass} value={selectedItem.primaryButtonText} placeholder="例如：继续学习" onChange={(event) => patchSelected({ primaryButtonText: event.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>主按钮跳转</Label>
+                <Select value={normalizeTarget(selectedItem.primaryButtonTarget, "/courses")} onValueChange={(value) => patchSelected({ primaryButtonTarget: value })}>
+                  <SelectTrigger className={selectTriggerClass}>
+                    <SelectValue placeholder="选择跳转页面" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bannerTargetOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value} className="focus:bg-amber-50 focus:text-amber-800">{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-400">当前：{getTargetLabel(selectedItem.primaryButtonTarget)}</p>
+              </div>
+              <div className="border-t border-slate-100 pt-4" />
+              <div className="space-y-2">
+                <Label>次按钮文字</Label>
+                <Input className={inputClass} value={selectedItem.secondaryButtonText} placeholder="例如：进入题库" onChange={(event) => patchSelected({ secondaryButtonText: event.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>次按钮跳转</Label>
+                <Select value={normalizeTarget(selectedItem.secondaryButtonTarget, "/question-bank")} onValueChange={(value) => patchSelected({ secondaryButtonTarget: value })}>
+                  <SelectTrigger className={selectTriggerClass}>
+                    <SelectValue placeholder="选择跳转页面" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bannerTargetOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value} className="focus:bg-amber-50 focus:text-amber-800">{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-400">当前：{getTargetLabel(selectedItem.secondaryButtonTarget)}</p>
+              </div>
+            </div>
+          </div>
+
+          <Button variant="outline" className="w-full border-rose-200 bg-white text-rose-700 hover:bg-rose-50" disabled={saving || uploading || items.length <= 1} onClick={removeSelected}>
+            <Trash2 className="size-4" />
+            删除当前 Banner
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+}
