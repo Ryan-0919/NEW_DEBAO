@@ -371,6 +371,7 @@ export function MockExamRoom() {
   const lawDialogRestoreRectRef = useRef<LawDialogRect | null>(null);
   const lastClipboardWarningAtRef = useRef(0);
   const answerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const answerComposingRef = useRef(false);
   const questionPromptRef = useRef<HTMLSpanElement | null>(null);
   const subjectiveTitleRef = useRef<HTMLDivElement | null>(null);
   const highlightSelectionRef = useRef<HighlightSelection | null>(null);
@@ -589,6 +590,7 @@ export function MockExamRoom() {
   };
 
   const flushPending = async () => {
+    commitAnswerTextarea({ force: true });
     for (const [key, entry] of Object.entries(pendingRef.current)) {
       if (timersRef.current[key]) { window.clearTimeout(timersRef.current[key]); delete timersRef.current[key]; }
       await persistSubjective(entry);
@@ -622,6 +624,7 @@ export function MockExamRoom() {
   ) => {
     const key = buildDraftKey(questionId, subQuestion.id);
     const previous = draftRef.current[key] ?? subQuestion.answer ?? "";
+    if (previous === value) return;
     if (!options?.skipHistory && previous !== value) {
       if (!undoHistoryRef.current[key]) undoHistoryRef.current[key] = [];
       undoHistoryRef.current[key].push(previous);
@@ -651,6 +654,7 @@ export function MockExamRoom() {
   const currentPromptHtml = promptHtml(currentQuestion);
   const currentPromptDisplayHtml = promptHighlightHtmlMap[currentQuestion.id] ?? currentPromptHtml;
   const currentSubQuestionTitleKey = currentSubQuestion ? buildSubjectiveTitleKey(currentQuestion.id, currentSubQuestion.id) : "";
+  const currentDraftKey = currentSubQuestion ? buildDraftKey(currentQuestion.id, currentSubQuestion.id) : "";
   const currentSubQuestionTitleBaseHtml = currentSubQuestion ? toHtml(currentSubQuestion.title) : "";
   const currentSubQuestionTitleDisplayHtml =
     currentSubQuestion && currentSubQuestionTitleKey
@@ -663,25 +667,45 @@ export function MockExamRoom() {
   const displayCardNo = getMockExamCardNo() || buildIdCardNo(displayPhone);
   const subjectName = getPaperSubjectName(record);
   const currentQuestionMarked = markedQuestionIds.includes(currentQuestion.id);
-  const currentSubjectiveUnfinishedCount = isSubjective
+  const getCurrentSubjectiveUnfinishedCount = () => isSubjective
     ? currentQuestion.subjectiveSubQuestions.filter((subQuestion) => !getDraftAnswer(currentQuestion.id, subQuestion, draftAnswers).trim()).length
     : 0;
+  const getLiveSubjectiveUnfinishedCount = () => isSubjective
+    ? currentQuestion.subjectiveSubQuestions.filter((subQuestion) => {
+      const key = buildDraftKey(currentQuestion.id, subQuestion.id);
+      return !(draftRef.current[key] ?? subQuestion.answer ?? "").trim();
+    }).length
+    : 0;
+  const currentSubjectiveUnfinishedCount = getCurrentSubjectiveUnfinishedCount();
   const currentObjectiveDescription = OFFICIAL_OBJECTIVE_DESCRIPTIONS[currentGroupIndex] ?? currentGroup?.description ?? currentQuestion.sectionDescription;
   const getExamSelection = () => getSelectionFromNode(questionPromptRef.current ?? subjectiveTitleRef.current ?? answerTextareaRef.current);
   const selectWindowText = () => getExamSelection()?.toString() ?? "";
 
+  const commitAnswerTextarea = (options?: { force?: boolean }) => {
+    if (!currentSubQuestion) return;
+    if (answerComposingRef.current && !options?.force) return;
+    const textarea = answerTextareaRef.current;
+    if (!textarea) return;
+    syncDraft(currentQuestion.id, currentSubQuestion, textarea.value);
+  };
+
   const performJump = (index: number) => {
+    commitAnswerTextarea({ force: true });
+    answerComposingRef.current = false;
     setActiveIndex(index);
     setActiveSubQuestionIndex(0);
   };
 
   const attemptJump = (index: number) => {
     if (index === activeIndex) return;
+    commitAnswerTextarea({ force: true });
+    answerComposingRef.current = false;
+    const liveUnfinishedCount = getLiveSubjectiveUnfinishedCount();
 
-    if (isSubjective && currentQuestion.subjectiveSubQuestions.length > 1 && currentSubjectiveUnfinishedCount > 0) {
+    if (isSubjective && currentQuestion.subjectiveSubQuestions.length > 1 && liveUnfinishedCount > 0) {
       setSubjectiveLeaveState({
         nextIndex: index,
-        message: `第 ${activeIndex + 1} 题还有 ${currentSubjectiveUnfinishedCount} 小问未作答，确认离开？`,
+        message: `第 ${activeIndex + 1} 题还有 ${liveUnfinishedCount} 小问未作答，确认离开？`,
       });
       return;
     }
@@ -719,6 +743,8 @@ export function MockExamRoom() {
         toast.warning("这是第一问");
         return;
       }
+      commitAnswerTextarea({ force: true });
+      answerComposingRef.current = false;
       setActiveSubQuestionIndex((current) => Math.max(0, current - 1));
       return;
     }
@@ -727,6 +753,8 @@ export function MockExamRoom() {
       toast.warning("这是最后一问");
       return;
     }
+    commitAnswerTextarea({ force: true });
+    answerComposingRef.current = false;
     setActiveSubQuestionIndex((current) => Math.min(currentQuestion.subjectiveSubQuestions.length - 1, current + 1));
   };
 
@@ -845,6 +873,7 @@ export function MockExamRoom() {
 
   const handleUndo = () => {
     if (!currentSubQuestion) return;
+    commitAnswerTextarea({ force: true });
     const key = buildDraftKey(currentQuestion.id, currentSubQuestion.id);
     const history = undoHistoryRef.current[key] ?? [];
     const currentValue = draftRef.current[key] ?? currentSubQuestion.answer ?? "";
@@ -853,6 +882,7 @@ export function MockExamRoom() {
       if (!currentValue) return;
       if (!redoHistoryRef.current[key]) redoHistoryRef.current[key] = [];
       redoHistoryRef.current[key].push(currentValue);
+      if (answerTextareaRef.current) answerTextareaRef.current.value = "";
       syncDraft(currentQuestion.id, currentSubQuestion, "", { skipHistory: true });
       return;
     }
@@ -860,11 +890,13 @@ export function MockExamRoom() {
     const previous = history.pop() ?? "";
     if (!redoHistoryRef.current[key]) redoHistoryRef.current[key] = [];
     redoHistoryRef.current[key].push(currentValue);
+    if (answerTextareaRef.current) answerTextareaRef.current.value = previous;
     syncDraft(currentQuestion.id, currentSubQuestion, previous, { skipHistory: true });
   };
 
   const handleRedo = () => {
     if (!currentSubQuestion) return;
+    commitAnswerTextarea({ force: true });
     const key = buildDraftKey(currentQuestion.id, currentSubQuestion.id);
     const history = redoHistoryRef.current[key] ?? [];
     if (history.length === 0) return;
@@ -873,6 +905,7 @@ export function MockExamRoom() {
     const nextValue = history.pop() ?? "";
     if (!undoHistoryRef.current[key]) undoHistoryRef.current[key] = [];
     undoHistoryRef.current[key].push(currentValue);
+    if (answerTextareaRef.current) answerTextareaRef.current.value = nextValue;
     syncDraft(currentQuestion.id, currentSubQuestion, nextValue, { skipHistory: true });
   };
 
@@ -939,6 +972,7 @@ export function MockExamRoom() {
     const cutText = textarea.value.slice(start, end);
     void navigator.clipboard.writeText(cutText).catch(() => undefined);
     const nextValue = `${textarea.value.slice(0, start)}${textarea.value.slice(end)}`;
+    textarea.value = nextValue;
     syncDraft(currentQuestion.id, currentSubQuestion, nextValue);
     window.requestAnimationFrame(() => {
       const nextTextarea = answerTextareaRef.current;
@@ -964,6 +998,7 @@ export function MockExamRoom() {
     const end = textarea.selectionEnd ?? start;
     const nextValue = `${textarea.value.slice(0, start)}${pasteText}${textarea.value.slice(end)}`;
     const nextCursor = start + pasteText.length;
+    textarea.value = nextValue;
     syncDraft(currentQuestion.id, currentSubQuestion, nextValue);
     window.requestAnimationFrame(() => {
       const nextTextarea = answerTextareaRef.current;
@@ -1223,7 +1258,7 @@ export function MockExamRoom() {
                         <div {...SCOPE} className=" partingTitle ">
                           {currentQuestion.subjectiveSubQuestions.map((subQuestion, index) => {
                             const answer = getDraftAnswer(currentQuestion.id, subQuestion, draftAnswers);
-                            return <li {...SCOPE} className={activeSubQuestionIndex === index ? "bewrite active2" : "bewrite"} id="bewrite03" key={subQuestion.id} onClick={() => setActiveSubQuestionIndex(index)}>{currentQuestion.subjectiveSubQuestions.length === 1 ? "问题" : `问题(${index + 1})`}{answer ? null : <b {...SCOPE} id="add03"> *</b>}</li>;
+                            return <li {...SCOPE} className={activeSubQuestionIndex === index ? "bewrite active2" : "bewrite"} id="bewrite03" key={subQuestion.id} onClick={() => { commitAnswerTextarea({ force: true }); answerComposingRef.current = false; setActiveSubQuestionIndex(index); }}>{currentQuestion.subjectiveSubQuestions.length === 1 ? "问题" : `问题(${index + 1})`}{answer ? null : <b {...SCOPE} id="add03"> *</b>}</li>;
                           })}
                           <li {...SCOPE} className="tip" style={{ fontSize: "15.5px", fontWeight: "bold", marginTop: "8px" }}>请在对应的答题区域内答题！</li>
                           <li {...SCOPE} className="rightFloat">
@@ -1248,12 +1283,22 @@ export function MockExamRoom() {
                               </div>
                               <textarea
                                 {...SCOPE}
+                                key={currentDraftKey}
                                 className="textAreaWh"
                                 id="textArea02"
                                 ref={answerTextareaRef}
-                                value={currentSubText}
+                                defaultValue={currentSubText}
                                 onMouseUp={handleQuestionMouseUp}
-                                onChange={(event) => syncDraft(currentQuestion.id, currentSubQuestion, event.target.value)}
+                                onCompositionStart={() => { answerComposingRef.current = true; }}
+                                onCompositionEnd={(event) => {
+                                  answerComposingRef.current = false;
+                                  syncDraft(currentQuestion.id, currentSubQuestion, event.currentTarget.value);
+                                }}
+                                onChange={(event) => {
+                                  if (answerComposingRef.current) return;
+                                  syncDraft(currentQuestion.id, currentSubQuestion, event.currentTarget.value);
+                                }}
+                                onBlur={(event) => syncDraft(currentQuestion.id, currentSubQuestion, event.currentTarget.value)}
                               />
                             </div>
                           ) : null}

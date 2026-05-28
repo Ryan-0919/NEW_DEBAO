@@ -206,6 +206,31 @@
   box-shadow: 0 18px 44px rgba(15,23,42,0.08);
 }
 
+.debao-theme-light .debao-course-card-cover > div:nth-child(2) {
+  color: rgba(255,255,255,0.92) !important;
+  text-shadow: 0 2px 12px rgba(15,23,42,0.34) !important;
+}
+
+.debao-theme-light .debao-mock-paper-card,
+.debao-theme-light .debao-mock-paper-group-card {
+  background: linear-gradient(180deg,#ffffff 0%,#f8fafc 100%) !important;
+  border-color: rgba(15,23,42,0.08) !important;
+  box-shadow: 0 16px 38px rgba(15,23,42,0.08) !important;
+}
+
+.debao-theme-light .debao-mock-paper-cover {
+  background: linear-gradient(135deg,rgba(78,142,247,0.10),rgba(29,201,164,0.08)) !important;
+}
+
+.debao-theme-light .debao-mock-paper-cover-shade {
+  display: none !important;
+}
+
+.debao-theme-light .debao-mock-paper-stat {
+  background: rgba(248,250,252,0.96) !important;
+  border: 1px solid rgba(15,23,42,0.07);
+}
+
 .debao-theme-light .debao-question-practice-page > div:first-child,
 .debao-theme-light .debao-question-practice-page > div:nth-child(2) {
   border-color: rgba(15,23,42,0.08) !important;

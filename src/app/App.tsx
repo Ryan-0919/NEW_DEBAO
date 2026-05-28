@@ -1631,7 +1631,7 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
               <div className="debao-course-card-cover" style={{ height: 110, position: "relative", background: categoryGrad[c.category] || "linear-gradient(135deg,#0f1826,#1a2a3a)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                 {/* decorative glow */}
                 <div style={{ position: "absolute", right: -20, top: -20, width: 120, height: 120, borderRadius: "50%", background: `${c.color}15`, filter: "blur(30px)" }} />
-                <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 30, fontWeight: 700, color: `${c.color}24`, letterSpacing: 0, userSelect: "none", textAlign: "center", padding: "0 22px", lineHeight: 1.2, maxWidth: "92%" }}>{c.title}</div>
+                <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 28, fontWeight: 800, color: "rgba(255,255,255,0.86)", letterSpacing: 0, userSelect: "none", textAlign: "center", padding: "0 22px", lineHeight: 1.22, maxWidth: "92%", textShadow: "0 2px 12px rgba(0,0,0,0.28)" }}>{c.title}</div>
                 {/* tag */}
                 <div style={{ position: "absolute", top: 12, left: 14, display: "flex", gap: 6 }}>
                   <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: `${c.color}22`, color: c.color, border: `1px solid ${c.color}30` }}>{c.category}</span>
@@ -3571,6 +3571,8 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   const [officialBlockPromptHighlightHtmlMap, setOfficialBlockPromptHighlightHtmlMap] = useState<Record<string, string>>({});
   const officialPromptRef = useRef<HTMLDivElement | null>(null);
   const officialBlockPromptRef = useRef<HTMLDivElement | null>(null);
+  const officialAnswerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const officialAnswerComposingRef = useRef(false);
   const officialHighlightSelectionRef = useRef<OfficialHighlightSelection | null>(null);
   const officialLawDialogRestoreRectRef = useRef<OfficialDialogRect | null>(null);
 
@@ -3760,6 +3762,9 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
 
   const handleSubmit = async () => {
     if (!q || submittingAnswer) return;
+    if (activeSubjectiveBlock && officialAnswerTextareaRef.current) {
+      updateSubjectiveDraft(activeSubjectiveBlock.id, officialAnswerTextareaRef.current.value);
+    }
     if (isSubjectiveQuestion) {
       if (!isSubmitted && subjectiveDraftChars === 0 && practiceModal !== "confirmReveal") {
         setPracticeModal("confirmReveal");
@@ -3928,9 +3933,11 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
 
   const updateSubjectiveDraft = (blockId: string, value: string) => {
     if (!q || !currentQuestionId) return;
+    const previousDrafts = subjectiveDrafts[currentQuestionId] ?? {};
+    if ((previousDrafts[blockId] ?? "") === value) return;
 
     const nextDrafts = {
-      ...(subjectiveDrafts[currentQuestionId] ?? {}),
+      ...previousDrafts,
       [blockId]: value,
     };
     Object.keys(nextDrafts).forEach((key) => {
@@ -3965,6 +3972,10 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
 
   const gotoSubjectiveBlock = (offset: number) => {
     if (subjectiveAnswerBlocks.length === 0) return;
+    if (activeSubjectiveBlock && officialAnswerTextareaRef.current) {
+      updateSubjectiveDraft(activeSubjectiveBlock.id, officialAnswerTextareaRef.current.value);
+    }
+    officialAnswerComposingRef.current = false;
     const nextIndex = Math.min(subjectiveAnswerBlocks.length - 1, Math.max(0, activeSubjectiveBlockIndex + offset));
     setActiveSubjectiveBlockId(subjectiveAnswerBlocks[nextIndex].id);
   };
@@ -4387,7 +4398,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                         <div {...OFFICIAL_EXAM_SCOPE} id="answerArea">
                           <div {...OFFICIAL_EXAM_SCOPE} className=" partingTitle ">
                             {subjectiveAnswerBlocks.map((block, index) => (
-                              <li {...OFFICIAL_EXAM_SCOPE} className={activeSubjectiveBlockIndex === index ? "bewrite active2" : "bewrite"} id="bewrite03" key={block.id} onClick={() => setActiveSubjectiveBlockId(block.id)}>
+                              <li {...OFFICIAL_EXAM_SCOPE} className={activeSubjectiveBlockIndex === index ? "bewrite active2" : "bewrite"} id="bewrite03" key={block.id} onClick={() => { if (activeSubjectiveBlock && officialAnswerTextareaRef.current) updateSubjectiveDraft(activeSubjectiveBlock.id, officialAnswerTextareaRef.current.value); officialAnswerComposingRef.current = false; setActiveSubjectiveBlockId(block.id); }}>
                                 {subjectiveAnswerBlocks.length === 1 ? "问题" : `问题(${index + 1})`}{officialSubjectiveBlockDone(block.id) ? null : <b {...OFFICIAL_EXAM_SCOPE} id="add03"> *</b>}
                               </li>
                             ))}
@@ -4414,10 +4425,21 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                                 </div>
                                 <textarea
                                   {...OFFICIAL_EXAM_SCOPE}
+                                  key={`${currentQuestionId}:${activeSubjectiveBlock.id}`}
                                   className="textAreaWh"
                                   id="textArea02"
-                                  value={officialCurrentBlockAnswer}
-                                  onChange={(event) => updateSubjectiveDraft(activeSubjectiveBlock.id, event.target.value)}
+                                  ref={officialAnswerTextareaRef}
+                                  defaultValue={officialCurrentBlockAnswer}
+                                  onCompositionStart={() => { officialAnswerComposingRef.current = true; }}
+                                  onCompositionEnd={(event) => {
+                                    officialAnswerComposingRef.current = false;
+                                    updateSubjectiveDraft(activeSubjectiveBlock.id, event.currentTarget.value);
+                                  }}
+                                  onChange={(event) => {
+                                    if (officialAnswerComposingRef.current) return;
+                                    updateSubjectiveDraft(activeSubjectiveBlock.id, event.currentTarget.value);
+                                  }}
+                                  onBlur={(event) => updateSubjectiveDraft(activeSubjectiveBlock.id, event.currentTarget.value)}
                                 />
                               </div>
                             ) : null}
@@ -6856,6 +6878,7 @@ function DebaoMockExamListPage({
       <button
         key={paper.id}
         type="button"
+        className="debao-mock-paper-card"
         onClick={() => goToPaper(paper)}
         style={{ textAlign: "left", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, background: "#0f1826", overflow: "hidden", cursor: paper.isOpen ? "pointer" : "not-allowed", opacity: paper.isOpen ? 1 : 0.72, transition: "border-color 0.16s, transform 0.16s, box-shadow 0.16s" }}
         onMouseEnter={(event) => {
@@ -6871,7 +6894,7 @@ function DebaoMockExamListPage({
           target.style.boxShadow = "none";
         }}
       >
-        <div style={{ height: 132, position: "relative", background: `linear-gradient(135deg,${accent}26,${secondaryAccent}1a)` }}>
+        <div className="debao-mock-paper-cover" style={{ height: 132, position: "relative", background: `linear-gradient(135deg,${accent}26,${secondaryAccent}1a)` }}>
           {paper.coverUrl ? (
             <img src={paper.coverUrl} alt={paper.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           ) : (
@@ -6879,7 +6902,7 @@ function DebaoMockExamListPage({
               <Icon size={42} color={accent} />
             </div>
           )}
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(4,8,20,0.04),rgba(4,8,20,0.42))" }} />
+          <div className="debao-mock-paper-cover-shade" style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(4,8,20,0.04),rgba(4,8,20,0.42))" }} />
           <span style={{ position: "absolute", left: 14, top: 12, padding: "4px 9px", borderRadius: 8, background: "rgba(5,11,22,0.62)", color: "#dde4f0", fontSize: 11, fontWeight: 700 }}>
             {isSubjective ? "主观题" : "客观题"}
           </span>
@@ -6904,7 +6927,7 @@ function DebaoMockExamListPage({
               { label: "时长", value: `${paper.durationMinutes || 0}分` },
               { label: "总分", value: `${paper.totalScore || 0}` },
             ].map((item) => (
-              <div key={item.label} style={{ borderRadius: 10, background: "rgba(255,255,255,0.035)", padding: "8px 9px" }}>
+              <div key={item.label} className="debao-mock-paper-stat" style={{ borderRadius: 10, background: "rgba(255,255,255,0.035)", padding: "8px 9px" }}>
                 <div style={{ fontSize: 10, color: "#2e4260", marginBottom: 3 }}>{item.label}</div>
                 <div style={{ fontSize: 12, color: "#8fa3be", fontWeight: 700 }}>{item.value}</div>
               </div>
@@ -6928,6 +6951,7 @@ function DebaoMockExamListPage({
       <button
         key={group.key}
         type="button"
+        className="debao-mock-paper-group-card"
         onClick={() => {
           setSelectedGroupKey(group.key);
           setCurrentMockExamSeriesQuery(group.key);
@@ -6946,7 +6970,7 @@ function DebaoMockExamListPage({
           target.style.boxShadow = "none";
         }}
       >
-        <div style={{ height: 176, position: "relative", background: `linear-gradient(135deg,${accent}22,${secondaryAccent}18)` }}>
+        <div className="debao-mock-paper-cover" style={{ height: 176, position: "relative", background: `linear-gradient(135deg,${accent}22,${secondaryAccent}18)` }}>
           {coverPaper?.coverUrl ? (
             <img src={coverPaper.coverUrl} alt={group.label} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           ) : (
@@ -6954,7 +6978,7 @@ function DebaoMockExamListPage({
               <Icon size={56} color={accent} />
             </div>
           )}
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(4,8,20,0.08),rgba(4,8,20,0.74))" }} />
+          <div className="debao-mock-paper-cover-shade" style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(4,8,20,0.08),rgba(4,8,20,0.74))" }} />
           <span style={{ position: "absolute", left: 16, top: 14, padding: "5px 10px", borderRadius: 9, background: "rgba(5,11,22,0.68)", color: "#dde4f0", fontSize: 12, fontWeight: 800 }}>
             {isSubjective ? "主观题套卷" : "客观题套卷"}
           </span>
@@ -6978,7 +7002,7 @@ function DebaoMockExamListPage({
               { label: "记录", value: `${groupFinishedCount}` },
               { label: "题量", value: `${totalQuestionCount}` },
             ].map((item) => (
-              <div key={item.label} style={{ borderRadius: 11, background: "rgba(255,255,255,0.04)", padding: "9px 10px" }}>
+              <div key={item.label} className="debao-mock-paper-stat" style={{ borderRadius: 11, background: "rgba(255,255,255,0.04)", padding: "9px 10px" }}>
                 <div style={{ fontSize: 10, color: "#354b67", marginBottom: 4 }}>{item.label}</div>
                 <div style={{ fontSize: 13, color: "#9db0c8", fontWeight: 800 }}>{item.value}</div>
               </div>
