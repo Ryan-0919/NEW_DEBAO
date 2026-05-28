@@ -929,19 +929,41 @@ const parseAiReviewPayloadFromTexts = (texts = []) => {
   return null;
 };
 
+const getJsonNormalizerEndpoint = (runtimeConfig) => {
+  if (!runtimeConfig?.jsonNormalizerEnabled) return "";
+  const baseUrl = `${runtimeConfig?.jsonNormalizerBaseUrl ?? ""}`.trim() || `${runtimeConfig?.baseUrl ?? ""}`.trim();
+  return baseUrl ? `${baseUrl.replace(/\/+$/, "")}/chat/completions` : "";
+};
+
+const getJsonNormalizerModel = (runtimeConfig) => `${runtimeConfig?.jsonNormalizerModel ?? ""}`.trim() || `${runtimeConfig?.model ?? ""}`.trim();
+
+const getJsonNormalizerApiKey = (runtimeConfig) => `${runtimeConfig?.jsonNormalizerApiKey ?? ""}`.trim() || `${runtimeConfig?.apiKey ?? ""}`.trim();
+
 const requestJsonRepairFromAi = async ({ runtimeConfig, endpoint, brokenText, signal }) => {
   const candidateText = extractJsonCandidateText(brokenText);
   if (!candidateText) return null;
 
-  const maxTokens = Math.max(0, Number(runtimeConfig.maxTokens ?? 0) || 0);
+  const repairEndpoint = getJsonNormalizerEndpoint(runtimeConfig) || endpoint;
+  const repairModel = getJsonNormalizerModel(runtimeConfig);
+  const repairApiKey = getJsonNormalizerApiKey(runtimeConfig);
+  if (!repairEndpoint || !repairModel || !repairApiKey) return null;
+
+  const maxTokens = Math.max(0, Number(runtimeConfig.jsonNormalizerMaxTokens ?? runtimeConfig.maxTokens ?? 0) || 0);
+  const userTemplate = `${runtimeConfig.jsonNormalizerUserPromptTemplate ?? ""}`.trim();
+  const userContent = userTemplate
+    ? userTemplate.split("{{原始批改输出}}").join(candidateText)
+    : [
+        "请修复下面这段 AI 批改 JSON，使其成为可被 JSON.parse 解析的合法 JSON，并保留 subQuestions 结构：",
+        candidateText,
+      ].join("\n\n");
   const requestBody = {
-    model: runtimeConfig.model,
+    model: repairModel,
     temperature: 0,
     response_format: { type: "json_object" },
     messages: [
       {
         role: "system",
-        content: [
+        content: `${runtimeConfig.jsonNormalizerSystemPrompt ?? ""}`.trim() || [
           "你是 JSON 修复器。",
           "你的任务是把用户提供的不合法 JSON 修复成合法 JSON 对象。",
           "只能返回修复后的 JSON，不要 Markdown，不要解释，不要代码块。",
@@ -951,10 +973,7 @@ const requestJsonRepairFromAi = async ({ runtimeConfig, endpoint, brokenText, si
       },
       {
         role: "user",
-        content: [
-          "请修复下面这段 AI 批改 JSON，使其成为可被 JSON.parse 解析的合法 JSON，并保留 subQuestions 结构：",
-          candidateText,
-        ].join("\n\n"),
+        content: userContent,
       },
     ],
   };
@@ -962,11 +981,11 @@ const requestJsonRepairFromAi = async ({ runtimeConfig, endpoint, brokenText, si
     requestBody.max_tokens = maxTokens;
   }
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(repairEndpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${runtimeConfig.apiKey}`,
+      Authorization: `Bearer ${repairApiKey}`,
     },
     body: JSON.stringify(requestBody),
     signal,

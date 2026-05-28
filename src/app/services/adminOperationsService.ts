@@ -136,6 +136,14 @@ export type AdminMockExamAiReviewConfig = {
   maxTokens: number;
   strictAnswerMarkValidation: boolean;
   temperature: number;
+  jsonNormalizerEnabled: boolean;
+  jsonNormalizerBaseUrl: string;
+  jsonNormalizerApiKey: string;
+  jsonNormalizerApiKeyConfigured: boolean;
+  jsonNormalizerModel: string;
+  jsonNormalizerMaxTokens: number;
+  jsonNormalizerSystemPrompt: string;
+  jsonNormalizerUserPromptTemplate: string;
   systemPrompt: string;
   gradingPrinciplesTemplate: string;
   outputRequirementsPrompt: string;

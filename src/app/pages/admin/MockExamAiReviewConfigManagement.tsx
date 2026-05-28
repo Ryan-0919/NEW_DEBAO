@@ -226,6 +226,62 @@ export function MockExamAiReviewConfigManagement() {
               </div>
             </div>
           </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-semibold text-slate-950">JSON标准化模型</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500">批改模型输出后，由这里配置的模型把结果整理成合法 JSON。建议使用 ChatGPT 或其他结构化输出稳定的模型。</p>
+              </div>
+              <Switch checked={config.jsonNormalizerEnabled} onCheckedChange={(checked) => patchConfig({ jsonNormalizerEnabled: checked })} />
+            </div>
+            <div className="mt-5 space-y-4">
+              <Field label="标准化模型名称" helper="例如 gpt-4.1-mini、gpt-4o-mini；留空则使用批改模型。">
+                <Input className={inputClass} value={config.jsonNormalizerModel} onChange={(event) => patchConfig({ jsonNormalizerModel: event.target.value })} placeholder="gpt-4.1-mini" disabled={!config.jsonNormalizerEnabled} />
+              </Field>
+              <Field label="标准化 Base URL" helper="填写到 /v1；留空则使用批改模型的 Base URL。">
+                <Input className={inputClass} value={config.jsonNormalizerBaseUrl} onChange={(event) => patchConfig({ jsonNormalizerBaseUrl: event.target.value })} placeholder="https://api.openai.com/v1" disabled={!config.jsonNormalizerEnabled} />
+              </Field>
+              <Field label="标准化 API Key" helper={config.jsonNormalizerApiKeyConfigured ? "已保存密钥。保持星号不变则继续使用原密钥。" : "留空则使用批改模型 API Key。"}>
+                <Input
+                  className={inputClass}
+                  value={config.jsonNormalizerApiKey}
+                  onChange={(event) => patchConfig({ jsonNormalizerApiKey: event.target.value })}
+                  placeholder="sk-..."
+                  type="password"
+                  disabled={!config.jsonNormalizerEnabled}
+                />
+              </Field>
+              <Field label="标准化最大输出 Token">
+                <Input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  value={config.jsonNormalizerMaxTokens}
+                  onChange={(event) => patchConfig({ jsonNormalizerMaxTokens: Math.max(1, numberValue(event.target.value, 16000)) })}
+                  disabled={!config.jsonNormalizerEnabled}
+                />
+              </Field>
+              <Field label="标准化 System Prompt">
+                <Textarea
+                  className={`${inputClass} font-mono text-xs`}
+                  rows={7}
+                  value={config.jsonNormalizerSystemPrompt}
+                  onChange={(event) => patchConfig({ jsonNormalizerSystemPrompt: event.target.value })}
+                  disabled={!config.jsonNormalizerEnabled}
+                />
+              </Field>
+              <Field label="标准化 User Prompt 模板" helper="必须保留 {{原始批改输出}} 占位符，系统会把批改模型原始返回放到这里。">
+                <Textarea
+                  className={`${inputClass} font-mono text-xs`}
+                  rows={13}
+                  value={config.jsonNormalizerUserPromptTemplate}
+                  onChange={(event) => patchConfig({ jsonNormalizerUserPromptTemplate: event.target.value })}
+                  disabled={!config.jsonNormalizerEnabled}
+                />
+              </Field>
+            </div>
+          </div>
         </div>
       </section>
     </div>

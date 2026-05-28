@@ -170,6 +170,38 @@ export const AI_REVIEW_OUTPUT_JSON_EXAMPLE_PROMPT =
     AI_REVIEW_OUTPUT_JSON_EXAMPLE,
   ].join("\n");
 
+export const DEFAULT_AI_REVIEW_JSON_NORMALIZER_SYSTEM_PROMPT =
+  [
+    "你是严格的 JSON 标准化器。",
+    "你的任务不是重新批改，而是把批改模型输出的内容整理成系统要求的合法 JSON。",
+    "不得改变得分、结论、遗漏点含义或老师点评含义。",
+    "只能修复 JSON 语法、字段名、字段结构、字符串引号、Markdown 包裹、数组对象格式等问题。",
+    "所有引用学生原文、法律概念或关键词的地方，统一使用中文引号“”，不要在字符串内部使用未转义英文双引号。",
+    "最终只能返回一个合法 JSON 对象，不要 Markdown，不要解释文字，不要代码块。",
+  ].join("\n");
+
+export const DEFAULT_AI_REVIEW_JSON_NORMALIZER_USER_PROMPT_TEMPLATE =
+  [
+    "请将下面的 AI 批改结果标准化为系统可解析的 JSON。",
+    "",
+    "【必须输出的 JSON 模板】",
+    AI_REVIEW_OUTPUT_JSON_EXAMPLE,
+    "",
+    "【标准化规则】",
+    "1. 顶层必须是对象，且必须包含 subQuestions 数组。",
+    "2. 每个小问必须包含 id、score、reviewComment、missedPoints、answerMarks、rubricPoints。",
+    "3. rubricPoints 必须使用 id、title、description、maxScore、awardedScore、hit、comment。",
+    "4. missedPoints 必须是对象数组，使用 id、title、description、score、comment、suggestion；如果原始内容是字符串数组，请转换成对象数组。",
+    "5. answerMarks 必须是对象数组，使用 id、segmentId 或 start/end/highlight、status、score、comment。",
+    "6. 不要重新批改，不要改变原始得分和点评，只做 JSON 标准化。",
+    "7. 如果原始结果缺少某些字段，请按模板补空数组或空字符串。",
+    "",
+    "【原始 AI 批改输出】",
+    "{{原始批改输出}}",
+    "",
+    "请只返回标准化后的 JSON。",
+  ].join("\n");
+
 export const DEFAULT_AI_REVIEW_OUTPUT_REQUIREMENTS_PROMPT =
   [
     "只能返回一个合法 JSON 对象，不要 Markdown，不要 ```json 代码块，不要解释文字、前缀或后缀。",
@@ -213,6 +245,13 @@ export const DEFAULT_MOCK_EXAM_AI_REVIEW_CONFIG = {
   maxTokens: 8192,
   strictAnswerMarkValidation: true,
   temperature: 0.2,
+  jsonNormalizerEnabled: true,
+  jsonNormalizerBaseUrl: "",
+  jsonNormalizerApiKey: "",
+  jsonNormalizerModel: "",
+  jsonNormalizerMaxTokens: 16000,
+  jsonNormalizerSystemPrompt: DEFAULT_AI_REVIEW_JSON_NORMALIZER_SYSTEM_PROMPT,
+  jsonNormalizerUserPromptTemplate: DEFAULT_AI_REVIEW_JSON_NORMALIZER_USER_PROMPT_TEMPLATE,
   systemPrompt: DEFAULT_AI_REVIEW_SYSTEM_PROMPT,
   gradingPrinciplesTemplate: DEFAULT_AI_REVIEW_GRADING_PRINCIPLES_TEMPLATE,
   outputRequirementsPrompt: DEFAULT_AI_REVIEW_OUTPUT_REQUIREMENTS_PROMPT,
@@ -245,6 +284,19 @@ export const normalizeMockExamAiReviewConfig = (value, envFallback = {}) => {
     maxTokens: toPositiveInt(source.maxTokens, fallback.maxTokens),
     strictAnswerMarkValidation: toBool(source.strictAnswerMarkValidation, fallback.strictAnswerMarkValidation ?? true),
     temperature: Number.isFinite(Number(source.temperature)) ? Math.min(Math.max(Number(source.temperature), 0), 2) : Number(fallback.temperature ?? 0.2),
+    jsonNormalizerEnabled: toBool(source.jsonNormalizerEnabled, fallback.jsonNormalizerEnabled ?? true),
+    jsonNormalizerBaseUrl: normalizeBaseUrl(source.jsonNormalizerBaseUrl, fallback.jsonNormalizerBaseUrl),
+    jsonNormalizerApiKey: typeof source.jsonNormalizerApiKey === "string" ? source.jsonNormalizerApiKey.trim() : fallback.jsonNormalizerApiKey,
+    jsonNormalizerModel: toTrimmedString(source.jsonNormalizerModel, fallback.jsonNormalizerModel),
+    jsonNormalizerMaxTokens: toPositiveInt(source.jsonNormalizerMaxTokens, fallback.jsonNormalizerMaxTokens),
+    jsonNormalizerSystemPrompt: toTrimmedString(
+      source.jsonNormalizerSystemPrompt,
+      fallback.jsonNormalizerSystemPrompt || DEFAULT_AI_REVIEW_JSON_NORMALIZER_SYSTEM_PROMPT,
+    ),
+    jsonNormalizerUserPromptTemplate: toTrimmedString(
+      source.jsonNormalizerUserPromptTemplate,
+      fallback.jsonNormalizerUserPromptTemplate || DEFAULT_AI_REVIEW_JSON_NORMALIZER_USER_PROMPT_TEMPLATE,
+    ),
     systemPrompt: toTrimmedString(source.systemPrompt, fallback.systemPrompt || DEFAULT_AI_REVIEW_SYSTEM_PROMPT),
     gradingPrinciplesTemplate: toTrimmedString(
       source.gradingPrinciplesTemplate,
@@ -271,5 +323,7 @@ export const serializeMockExamAiReviewConfigForAdmin = (value, envFallback = {})
     ...normalized,
     apiKey: normalized.apiKey ? "********" : "",
     apiKeyConfigured: Boolean(normalized.apiKey),
+    jsonNormalizerApiKey: normalized.jsonNormalizerApiKey ? "********" : "",
+    jsonNormalizerApiKeyConfigured: Boolean(normalized.jsonNormalizerApiKey),
   };
 };

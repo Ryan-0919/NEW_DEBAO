@@ -36,6 +36,9 @@ export const saveMockExamAiReviewConfig = async ({ db = prisma, input = {} } = {
   if (`${input?.apiKey ?? ""}`.trim() === "********") {
     nextInput.apiKey = current.apiKey;
   }
+  if (`${input?.jsonNormalizerApiKey ?? ""}`.trim() === "********") {
+    nextInput.jsonNormalizerApiKey = current.jsonNormalizerApiKey;
+  }
   const normalized = normalizeMockExamAiReviewConfig(nextInput, getEnvMockExamAiReviewConfig());
   const missingPlaceholders = getMissingMockExamAiReviewPromptTemplatePlaceholders(normalized.userPromptTemplate);
   if (missingPlaceholders.length > 0) {

@@ -1010,6 +1010,10 @@ adminOperationsRouter.patch("/mock-exam-ai-review-config", requireAdminRoles(...
         retryCooldownMs: payload.retryCooldownMs,
         queuePollIntervalMs: payload.queuePollIntervalMs,
         allowRuleFallback: payload.allowRuleFallback,
+        jsonNormalizerEnabled: payload.jsonNormalizerEnabled,
+        jsonNormalizerBaseUrl: payload.jsonNormalizerBaseUrl,
+        jsonNormalizerModel: payload.jsonNormalizerModel,
+        jsonNormalizerApiKeyConfigured: payload.jsonNormalizerApiKeyConfigured,
         apiKeyConfigured: payload.apiKeyConfigured,
       },
     });
