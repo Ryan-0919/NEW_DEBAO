@@ -351,12 +351,14 @@ function RecordRow({
   onSelect,
   onOpen,
   onClaim,
+  onRecall,
 }: {
   record: AdminMockExamReviewRecord;
   selected: boolean;
   onSelect: (recordId: string, selected: boolean) => void;
   onOpen: (record: AdminMockExamReviewRecord) => void;
   onClaim: (record: AdminMockExamReviewRecord) => void;
+  onRecall: (record: AdminMockExamReviewRecord) => void;
 }) {
   const status = statusMeta[record.reviewWorkflowStatus] ?? statusMeta.all;
   const claimLabel = record.lock.ownedByMe ? "继续批改" : record.reviewWorkflowStatus === "published" ? "重新修改" : "领取";
@@ -400,6 +402,11 @@ function RecordRow({
             <Button variant="outline" size="sm" className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" onClick={() => onClaim(record)}>
               <UserCheck className="size-4" />
               {claimLabel}
+            </Button>
+          ) : null}
+          {record.reviewWorkflowStatus === "published" || record.hasPublishedReview ? (
+            <Button variant="outline" size="sm" className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" onClick={() => onRecall(record)}>
+              收回
             </Button>
           ) : null}
           <Button variant="outline" size="sm" onClick={() => onOpen(record)}>
@@ -1069,6 +1076,27 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
     }
   };
 
+  const recallPublishedReview = async (record: AdminMockExamReviewRecord) => {
+    if (!window.confirm(`确认收回这份已经发送给学生的批改结果吗？\n考生：${record.userLabel}\n收回后学生端将显示为待批改，后台保留当前批改草稿，可修改后重新发送。`)) return;
+
+    setActionLoading(true);
+    try {
+      const payload = await adminMockExamReviewService.recallPublishedReview(record.id);
+      if (detail?.record.id === record.id) {
+        setDetail(payload);
+        const nextForm = toReviewForm(payload);
+        setReviewForm(nextForm);
+        setSavedFormSnapshot(serializeReviewForm(nextForm));
+      }
+      toast.success("批改结果已收回，学生端不可见");
+      await loadRecords(selectedPaper, recordsPage.page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "收回批改结果失败");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const updateReviewSubQuestion = (questionId: string, subQuestionId: string, patch: Partial<AdminMockExamReviewSubQuestion>) => {
     if (!canEdit) return;
     setReviewForm((current) =>
@@ -1221,6 +1249,16 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
               <Button className="bg-blue-600 text-white hover:bg-blue-700" disabled={actionLoading || aiReviewLoading} onClick={() => void claimRecord(detail.record)}>
                 <UserCheck className="size-4" />
                 {detailClaimLabel}
+              </Button>
+            ) : null}
+            {isRepublishDetail ? (
+              <Button
+                variant="outline"
+                className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                disabled={actionLoading || aiReviewLoading}
+                onClick={() => void recallPublishedReview(detail.record)}
+              >
+                收回批改
               </Button>
             ) : null}
             <Button variant="outline" disabled={actionLoading || aiReviewLoading || !detail.record.lock.canClaim || (isRepublishDetail && !detail.record.lock.ownedByMe)} onClick={() => void rerunAiReview()}>
@@ -1440,6 +1478,7 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
                       onSelect={toggleRecordSelected}
                       onOpen={openDetail}
                       onClaim={claimRecord}
+                      onRecall={recallPublishedReview}
                     />
                   ))
                 )}

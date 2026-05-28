@@ -1125,6 +1125,69 @@ adminMockExamReviewRouter.post("/records/:recordId/release", async (req, res) =>
   }
 });
 
+adminMockExamReviewRouter.post("/records/:recordId/recall-published-review", async (req, res) => {
+  try {
+    const recordId = `${req.params.recordId ?? ""}`.trim();
+    const currentTime = new Date();
+    const updatedRecord = await prisma.$transaction(async (tx) => {
+      const record = await getAdminReviewRecord(tx, recordId);
+      assertReviewableRecord(record);
+
+      if (!isRepublishingReviewRecord(record)) {
+        const error = new Error("这份试卷还没有发送给学生，无需收回");
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const lock = getLockInfo(record, req, currentTime);
+      if (lock.active && !lock.ownedByMe) {
+        const error = new Error(`该记录已被 ${record.manualReviewerName || "其他老师"} 领取，暂时不能收回`);
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const paper = getRecordPaper(record);
+      const subjectiveQuestionIds = new Set((paper?.questions ?? []).filter(isSubjectiveQuestion).map((question) => question.id));
+      const subjectiveAnswers = (record.answers ?? []).filter((answer) => subjectiveQuestionIds.has(answer.questionId));
+
+      await Promise.all(
+        subjectiveAnswers.map((answer) =>
+          tx.mockExamAnswer.update({
+            where: { id: answer.id },
+            data: {
+              publishedReviewJson: null,
+              publishedScore: null,
+            },
+          }),
+        ),
+      );
+
+      await tx.mockExamRecord.update({
+        where: { id: record.id },
+        data: {
+          reviewWorkflowStatus: "manual_pending",
+          publishedAt: null,
+          manualReviewVersion: { increment: 1 },
+        },
+      });
+
+      return getAdminReviewRecord(tx, record.id);
+    });
+
+    await writeAdminAuditLog(req, {
+      action: "recall_mock_exam_published_review",
+      entityType: "mock_exam_record",
+      entityId: recordId,
+      entityName: updatedRecord?.paper?.title ?? "",
+      detail: { recordId, paperId: updatedRecord?.paperId },
+    });
+
+    return ok(res, serializeReviewDetail(updatedRecord, req, currentTime), "已收回学生端可见的批改结果");
+  } catch (error) {
+    return fail(res, error.message || "收回批改结果失败", error.statusCode || 500);
+  }
+});
+
 adminMockExamReviewRouter.patch("/records/:recordId/review-draft", async (req, res) => {
   try {
     const recordId = `${req.params.recordId ?? ""}`.trim();

@@ -220,6 +220,8 @@ export const adminMockExamReviewService = {
   runAiReview: (recordId: string) => adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/ai-review`),
   batchRunAiReview: (recordIds: string[]) =>
     adminPostJson<AdminMockExamReviewBatchAiReviewResult>("/api/admin/mock-exam-reviews/records/batch-ai-review", { recordIds }),
+  recallPublishedReview: (recordId: string) =>
+    adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/recall-published-review`),
   releaseRecord: (recordId: string) => adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/release`),
   saveDraft: (recordId: string, payload: AdminMockExamReviewSavePayload) =>
     adminPatchJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/review-draft`, payload),
