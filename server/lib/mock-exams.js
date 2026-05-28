@@ -1378,6 +1378,20 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
   const paper = getRecordPaper(record);
   const subjectiveQuestions = (paper?.questions ?? []).filter((question) => isSubjectiveQuestion(question));
   if (!subjectiveQuestions.length) {
+    if (["ai_pending", "ai_processing"].includes(`${record.reviewWorkflowStatus ?? ""}`.trim())) {
+      await db.mockExamRecord.update({
+        where: { id: record.id },
+        data: {
+          reviewWorkflowStatus: "not_required",
+          aiReviewStartedAt: null,
+          aiReviewFinishedAt: currentTime,
+          aiReviewNextRetryAt: null,
+          aiReviewRetryCount: 0,
+          lastAiReviewError: null,
+          publishedAt: record.publishedAt ?? currentTime,
+        },
+      });
+    }
     return record;
   }
 

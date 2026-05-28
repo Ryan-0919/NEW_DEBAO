@@ -75,6 +75,7 @@ const LAW_DIALOG_MIN_WIDTH = 640;
 const LAW_DIALOG_MIN_HEIGHT = 420;
 const LAW_DIALOG_MARGIN = 16;
 const LAW_DIALOG_TOP_MARGIN = 8;
+const LAW_DIALOG_Z_INDEX = 1010;
 const CLIPBOARD_DISABLED_MESSAGE = "考试过程中不允许复制、剪切、粘贴";
 const STEM_HIGHLIGHT_CLASS = "mock-stem-highlight";
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -292,12 +293,6 @@ const stripLegacyYearLabel = (text: string) => text.replace(/（2019年真题）
 const promptHtml = (q: MockExamQuestion) =>
   toHtml(stripLegacyYearLabel(q.material && q.stem ? `${q.material}\n\n${q.stem}` : q.material || q.stem));
 const orderText = (index: number) => SECTION_ORDERS[index] ?? `${index + 1}. `;
-const getQuestionTypeCode = (question: MockExamQuestion) => {
-  if (question.type === "single_choice") return 0;
-  if (question.type === "multiple_choice") return 1;
-  if (question.type === "uncertain_choice") return 2;
-  return 11;
-};
 const getPaperSubjectName = (record: MockExamRecordDetail) => {
   const phaseLabel = record.paper.phase || getExamPhaseLabel(record);
   if (phaseLabel.includes("试卷一")) return "试卷一";
@@ -653,7 +648,6 @@ export function MockExamRoom() {
   const currentSubText = isSubjective && currentSubQuestion ? getDraftAnswer(currentQuestion.id, currentSubQuestion, draftAnswers) : "";
   const currentGroupIndex = groups.findIndex((group) => group.questions.some((question) => question.id === currentQuestion.id));
   const currentGroup = groups[currentGroupIndex] ?? groups[0];
-  const currentQuestionTypeCode = getQuestionTypeCode(currentQuestion);
   const currentPromptHtml = promptHtml(currentQuestion);
   const currentPromptDisplayHtml = promptHighlightHtmlMap[currentQuestion.id] ?? currentPromptHtml;
   const currentSubQuestionTitleKey = currentSubQuestion ? buildSubjectiveTitleKey(currentQuestion.id, currentSubQuestion.id) : "";
@@ -1172,31 +1166,6 @@ export function MockExamRoom() {
               <div {...SCOPE} id="sjHtml" style={{ paddingTop: "10px", paddingLeft: "10px" }}>
                 <div {...SCOPE} id="sjHtml2">
                   <div {...SCOPE} className="paperTitle">
-                    <li {...SCOPE} className="single">试卷</li>
-                    {currentQuestionTypeCode === 2 ? (
-                      <li {...SCOPE}>
-                        <a
-                          {...SCOPE}
-                          target="_self"
-                          id="mark"
-                          href="#!"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={(event) => { event.preventDefault(); handleStemMark(); }}
-                        >
-                          标记题干
-                        </a>
-                        <a
-                          {...SCOPE}
-                          target="_self"
-                          id="unmark"
-                          href="#!"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={(event) => { event.preventDefault(); handleStemUnmark(); }}
-                        >
-                          取消标记
-                        </a>
-                      </li>
-                    ) : null}
                     <li {...SCOPE} id="themeLi" onMouseEnter={() => setThemeMenuOpen(true)} onMouseLeave={() => setThemeMenuOpen(false)}>
                       <a {...SCOPE} id="themeP">切换风格</a>
                       {([1, 2, 3, 4, 5] as ThemeId[]).map((id) => (
@@ -1204,10 +1173,6 @@ export function MockExamRoom() {
                           风格{["一", "二", "三", "四", "五"][id - 1]}
                         </div>
                       ))}
-                    </li>
-                    <li {...SCOPE}>
-                      <a {...SCOPE} id="themeAdd" style={{ cursor: "pointer" }} href="#!" onClick={(event) => { event.preventDefault(); setFontSize((current) => Math.min(28, current + 2)); }}>字体大小+</a>
-                      <a {...SCOPE} id="themeDec" style={{ cursor: "pointer" }} href="#!" onClick={(event) => { event.preventDefault(); setFontSize((current) => Math.max(12, current - 2)); }}>字体大小-</a>
                     </li>
                   </div>
 
@@ -1339,7 +1304,7 @@ export function MockExamRoom() {
               top: `${lawDialogRect.top}px`,
               width: `${lawDialogRect.width}px`,
               height: `${lawDialogRect.height}px`,
-              zIndex: 900,
+              zIndex: LAW_DIALOG_Z_INDEX,
               backgroundColor: "#fff",
               overflow: "hidden",
             }}
@@ -1351,7 +1316,20 @@ export function MockExamRoom() {
                   {...SCOPE}
                   type="button"
                   onClick={closeLawDialog}
-                  style={{ border: "none", background: "transparent", color: "#606266", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}
+                  style={{
+                    position: "relative",
+                    zIndex: 260,
+                    width: "28px",
+                    height: "28px",
+                    border: "none",
+                    background: "transparent",
+                    color: "#606266",
+                    cursor: "pointer",
+                    fontSize: "18px",
+                    lineHeight: "28px",
+                    padding: 0,
+                    textAlign: "center",
+                  }}
                 >
                   ×
                 </button>

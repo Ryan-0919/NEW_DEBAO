@@ -72,6 +72,7 @@ export const config = {
     maxConcurrency: optionalPositiveInt("MOCK_EXAM_AI_MAX_CONCURRENCY", 3),
     maxRetryCount: optionalNonNegativeInt("MOCK_EXAM_AI_MAX_RETRY_COUNT", 3),
     retryDelayMs: optionalNonNegativeInt("MOCK_EXAM_AI_RETRY_DELAY_MS", 15000),
+    retryCooldownMs: optionalNonNegativeInt("MOCK_EXAM_AI_RETRY_COOLDOWN_MS", 2 * 60 * 60 * 1000),
     queuePollIntervalMs: optionalPositiveInt("MOCK_EXAM_AI_QUEUE_POLL_INTERVAL_MS", 3000),
     maxTokens: optionalPositiveInt("MOCK_EXAM_AI_MAX_TOKENS", 8192),
     strictAnswerMarkValidation: optionalBoolean("MOCK_EXAM_AI_STRICT_ANSWER_MARK_VALIDATION", true),

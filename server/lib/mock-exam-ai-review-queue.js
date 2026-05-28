@@ -6,6 +6,7 @@ import { autoReviewMockExamRecord } from "./mock-exams.js";
 const DEFAULT_MAX_CONCURRENCY = 3;
 const DEFAULT_MAX_RETRY_COUNT = 3;
 const DEFAULT_RETRY_DELAY_MS = 15000;
+const DEFAULT_RETRY_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_QUEUE_POLL_INTERVAL_MS = 3000;
 const DEFAULT_QUEUE_SCAN_BATCH_SIZE = 20;
 const STALE_AI_PROCESSING_MIN_RECOVERY_MS = 5 * 60 * 1000;
@@ -31,9 +32,11 @@ const getRuntimeConfig = async ({ db = prisma } = {}) => {
 const getMaxConcurrency = (runtimeConfig = config.mockExamAiReview) =>
   Math.max(1, Number(runtimeConfig?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY) || DEFAULT_MAX_CONCURRENCY);
 const getMaxRetryCount = (runtimeConfig = config.mockExamAiReview) =>
-  Math.max(0, Number(runtimeConfig?.maxRetryCount ?? DEFAULT_MAX_RETRY_COUNT) || DEFAULT_MAX_RETRY_COUNT);
+  Math.max(1, Number(runtimeConfig?.maxRetryCount ?? DEFAULT_MAX_RETRY_COUNT) || DEFAULT_MAX_RETRY_COUNT);
 const getRetryDelayMs = (runtimeConfig = config.mockExamAiReview) =>
   Math.max(0, Number(runtimeConfig?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS) || DEFAULT_RETRY_DELAY_MS);
+const getRetryCooldownMs = (runtimeConfig = config.mockExamAiReview) =>
+  Math.max(0, Number(runtimeConfig?.retryCooldownMs ?? DEFAULT_RETRY_COOLDOWN_MS) || DEFAULT_RETRY_COOLDOWN_MS);
 const getQueuePollIntervalMs = (runtimeConfig = config.mockExamAiReview) =>
   Math.max(500, Number(runtimeConfig?.queuePollIntervalMs ?? DEFAULT_QUEUE_POLL_INTERVAL_MS) || DEFAULT_QUEUE_POLL_INTERVAL_MS);
 
@@ -64,7 +67,7 @@ const canQueueAutoReview = ({ retryCount, lastError, runtimeConfig = config.mock
   const currentRetryCount = Math.max(0, Number(retryCount ?? 0) || 0);
   const maxRetryCount = getMaxRetryCount(runtimeConfig);
   if (currentRetryCount < maxRetryCount) return true;
-  return currentRetryCount === 0 && !`${lastError ?? ""}`.trim();
+  return false;
 };
 
 const getStaleAiProcessingCutoff = (currentTime = new Date(), runtimeConfig = config.mockExamAiReview) => {
@@ -92,6 +95,56 @@ const recoverStaleAiProcessingReviews = async ({ db, currentTime = new Date(), r
     },
   });
 };
+
+const recoverExhaustedAiPendingReviews = async ({ db, currentTime = new Date(), runtimeConfig = config.mockExamAiReview }) => {
+  const maxRetryCount = getMaxRetryCount(runtimeConfig);
+  const retryCooldownMs = getRetryCooldownMs(runtimeConfig);
+
+  const exhaustedRecords = await db.mockExamRecord.findMany({
+    where: {
+      status: "submitted",
+      reviewWorkflowStatus: "ai_pending",
+      aiReviewRetryCount: { gte: maxRetryCount },
+      aiReviewNextRetryAt: null,
+    },
+    take: DEFAULT_QUEUE_SCAN_BATCH_SIZE,
+    select: {
+      id: true,
+      updatedAt: true,
+    },
+  });
+
+  await Promise.all(
+    exhaustedRecords.map((record) => {
+      const cooldownStart = record.updatedAt ? new Date(record.updatedAt) : currentTime;
+      const cooldownEnd = new Date(cooldownStart.getTime() + retryCooldownMs);
+      const nextRetryAt = cooldownEnd.getTime() <= currentTime.getTime() ? currentTime : cooldownEnd;
+
+      return db.mockExamRecord.update({
+        where: { id: record.id },
+        data: {
+          aiReviewStartedAt: null,
+          aiReviewFinishedAt: null,
+          aiReviewRetryCount: 0,
+          aiReviewNextRetryAt: nextRetryAt,
+          lastAiReviewError: buildCooldownErrorMessage(
+            new Error("AI批改已达到本轮次数上限"),
+            maxRetryCount,
+            retryCooldownMs,
+          ),
+        },
+      });
+    }),
+  );
+};
+
+const countActiveAiProcessingReviews = async ({ db }) =>
+  db.mockExamRecord.count({
+    where: {
+      status: "submitted",
+      reviewWorkflowStatus: "ai_processing",
+    },
+  });
 
 const pruneCompletedRunningRecords = async ({ db }) => {
   if (runningRecordIds.size === 0 || typeof db?.mockExamRecord?.findMany !== "function") return;
@@ -122,6 +175,7 @@ const ensureRecoveredStaleAiProcessing = async ({ db, currentTime = new Date(), 
   queueRecoveryPromise = (async () => {
     try {
       await recoverStaleAiProcessingReviews({ db, currentTime, runtimeConfig });
+      await recoverExhaustedAiPendingReviews({ db, currentTime, runtimeConfig });
       await pruneCompletedRunningRecords({ db });
     } finally {
       queueRecoveryPromise = null;
@@ -131,9 +185,61 @@ const ensureRecoveredStaleAiProcessing = async ({ db, currentTime = new Date(), 
   await queueRecoveryPromise;
 };
 
-const buildRetryErrorMessage = (error, nextRetryCount) => `${normalizeErrorMessage(error)}（系统将在稍后自动重试，第 ${nextRetryCount} 次）`;
+const formatDurationText = (durationMs) => {
+  const totalMinutes = Math.max(1, Math.ceil(Number(durationMs ?? 0) / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0 && minutes > 0) return `${hours}小时${minutes}分钟`;
+  if (hours > 0) return `${hours}小时`;
+  return `${minutes}分钟`;
+};
 
-const buildExhaustedErrorMessage = (error, maxRetryCount) => `${normalizeErrorMessage(error)}（已自动重试 ${maxRetryCount} 次，已退回待批改）`;
+const buildRetryErrorMessage = (error, failedAttemptCount, maxRetryCount) =>
+  `${normalizeErrorMessage(error)}（系统将在稍后自动重试，本轮第 ${failedAttemptCount}/${maxRetryCount} 次失败）`;
+
+const buildCooldownErrorMessage = (error, maxRetryCount, retryCooldownMs) =>
+  `${normalizeErrorMessage(error)}（本轮已连续失败 ${maxRetryCount} 次，已暂停 ${formatDurationText(retryCooldownMs)}，冷却结束后会自动重新进入AI批改队列）`;
+
+const claimQueuedRecordForProcessing = async ({ db, recordId, currentTime = new Date(), runtimeConfig = config.mockExamAiReview }) => {
+  const maxConcurrency = getMaxConcurrency(runtimeConfig);
+  const activeProcessingCount = await countActiveAiProcessingReviews({ db });
+  if (activeProcessingCount >= maxConcurrency) return false;
+
+  const claimed = await db.mockExamRecord.updateMany({
+    where: {
+      id: recordId,
+      status: "submitted",
+      reviewWorkflowStatus: "ai_pending",
+      OR: [{ aiReviewNextRetryAt: null }, { aiReviewNextRetryAt: { lte: currentTime } }],
+    },
+    data: {
+      reviewWorkflowStatus: "ai_processing",
+      aiReviewStartedAt: currentTime,
+      aiReviewFinishedAt: null,
+      aiReviewNextRetryAt: null,
+      lastAiReviewError: null,
+    },
+  });
+
+  return Number(claimed.count ?? 0) > 0;
+};
+
+const releaseClaimedRecordAfterConflict = async ({ db, recordId, error }) => {
+  await db.mockExamRecord.updateMany({
+    where: {
+      id: recordId,
+      status: "submitted",
+      reviewWorkflowStatus: "ai_processing",
+    },
+    data: {
+      reviewWorkflowStatus: "ai_pending",
+      aiReviewStartedAt: null,
+      aiReviewFinishedAt: null,
+      aiReviewNextRetryAt: null,
+      lastAiReviewError: normalizeErrorMessage(error),
+    },
+  });
+};
 
 export const enqueueMockExamAiReview = async ({ db = prisma, recordId, adminId = "", currentTime = new Date() }) => {
   const normalizedRecordId = `${recordId ?? ""}`.trim();
@@ -246,32 +352,33 @@ const retryFailedMockExamAiReview = async ({ db, recordId, error, currentTime = 
 
   const currentRetryCount = Math.max(0, Number(latestRecord.aiReviewRetryCount ?? 0) || 0);
   const maxRetryCount = getMaxRetryCount(runtimeConfig);
-  if (currentRetryCount >= maxRetryCount) {
+  const nextFailedAttemptCount = currentRetryCount + 1;
+  if (nextFailedAttemptCount >= maxRetryCount) {
+    const retryCooldownMs = getRetryCooldownMs(runtimeConfig);
     await db.mockExamRecord.update({
       where: { id: recordId },
       data: {
         reviewWorkflowStatus: "ai_pending",
         aiReviewStartedAt: null,
         aiReviewFinishedAt: null,
-        aiReviewNextRetryAt: null,
-        aiReviewRetryCount: currentRetryCount,
-        lastAiReviewError: buildExhaustedErrorMessage(error, maxRetryCount),
+        aiReviewNextRetryAt: new Date(currentTime.getTime() + retryCooldownMs),
+        aiReviewRetryCount: 0,
+        lastAiReviewError: buildCooldownErrorMessage(error, maxRetryCount, retryCooldownMs),
       },
     });
     forcedAdminQueueMap.delete(recordId);
-    return "exhausted";
+    return "cooldown";
   }
 
-  const nextRetryCount = currentRetryCount + 1;
   await db.mockExamRecord.update({
     where: { id: recordId },
     data: {
       reviewWorkflowStatus: "ai_pending",
       aiReviewStartedAt: null,
       aiReviewFinishedAt: null,
-      aiReviewRetryCount: nextRetryCount,
+      aiReviewRetryCount: nextFailedAttemptCount,
       aiReviewNextRetryAt: new Date(currentTime.getTime() + getRetryDelayMs(runtimeConfig)),
-      lastAiReviewError: buildRetryErrorMessage(error, nextRetryCount),
+      lastAiReviewError: buildRetryErrorMessage(error, nextFailedAttemptCount, maxRetryCount),
     },
   });
   return "scheduled";
@@ -282,6 +389,8 @@ const consumeQueuedRecord = async ({ db, recordId }) => {
   try {
     const forcedAdminId = `${forcedAdminQueueMap.get(recordId) ?? ""}`.trim();
     const runtimeConfig = await getRuntimeConfig({ db });
+    const claimed = await claimQueuedRecordForProcessing({ db, recordId, runtimeConfig });
+    if (!claimed) return;
     await autoReviewMockExamRecord({ db, recordId, adminId: forcedAdminId, runtimeConfig });
     forcedAdminQueueMap.delete(recordId);
   } catch (error) {
@@ -291,6 +400,7 @@ const consumeQueuedRecord = async ({ db, recordId }) => {
         forcedAdminQueueMap.delete(recordId);
       }
     } else {
+      await releaseClaimedRecordAfterConflict({ db, recordId, error });
       forcedAdminQueueMap.delete(recordId);
     }
   } finally {
@@ -308,7 +418,9 @@ export const pumpMockExamAiReviewQueue = async ({ db = prisma, currentTime = new
       if (runtimeConfig.disableQueue) return;
       await ensureRecoveredStaleAiProcessing({ db, currentTime, runtimeConfig });
 
-      const availableSlots = Math.max(0, getMaxConcurrency(runtimeConfig) - runningRecordIds.size);
+      const activeProcessingCount = await countActiveAiProcessingReviews({ db });
+      const activeSlotCount = Math.max(activeProcessingCount, runningRecordIds.size);
+      const availableSlots = Math.max(0, getMaxConcurrency(runtimeConfig) - activeSlotCount);
       if (availableSlots <= 0) return;
 
       const runnableRecordIds = [];

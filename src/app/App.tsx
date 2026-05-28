@@ -1631,7 +1631,7 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
               <div className="debao-course-card-cover" style={{ height: 110, position: "relative", background: categoryGrad[c.category] || "linear-gradient(135deg,#0f1826,#1a2a3a)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                 {/* decorative glow */}
                 <div style={{ position: "absolute", right: -20, top: -20, width: 120, height: 120, borderRadius: "50%", background: `${c.color}15`, filter: "blur(30px)" }} />
-                <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 36, fontWeight: 700, color: `${c.color}18`, letterSpacing: "0.05em", userSelect: "none", textAlign: "center", padding: "0 16px" }}>{c.category}</div>
+                <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 30, fontWeight: 700, color: `${c.color}24`, letterSpacing: 0, userSelect: "none", textAlign: "center", padding: "0 22px", lineHeight: 1.2, maxWidth: "92%" }}>{c.title}</div>
                 {/* tag */}
                 <div style={{ position: "absolute", top: 12, left: 14, display: "flex", gap: 6 }}>
                   <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: `${c.color}22`, color: c.color, border: `1px solid ${c.color}30` }}>{c.category}</span>
@@ -4351,11 +4351,6 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                 <div {...OFFICIAL_EXAM_SCOPE} id="sjHtml" style={{ paddingTop: "10px", paddingLeft: "10px" }}>
                   <div {...OFFICIAL_EXAM_SCOPE} id="sjHtml2">
                     <div {...OFFICIAL_EXAM_SCOPE} className="paperTitle">
-                      <li {...OFFICIAL_EXAM_SCOPE} className="single">试卷</li>
-                      <li {...OFFICIAL_EXAM_SCOPE}>
-                        <a {...OFFICIAL_EXAM_SCOPE} target="_self" id="mark" href="#!" onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.preventDefault(); handleOfficialStemMark(); }}>标记题干</a>
-                        <a {...OFFICIAL_EXAM_SCOPE} target="_self" id="unmark" href="#!" onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.preventDefault(); handleOfficialStemUnmark(); }}>取消标记</a>
-                      </li>
                       <li {...OFFICIAL_EXAM_SCOPE} id="themeLi" onMouseEnter={() => setOfficialThemeMenuOpen(true)} onMouseLeave={() => setOfficialThemeMenuOpen(false)}>
                         <a {...OFFICIAL_EXAM_SCOPE} id="themeP">切换风格</a>
                         {([1, 2, 3, 4, 5] as OfficialThemeId[]).map((id) => (
@@ -4363,10 +4358,6 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                             风格{["一", "二", "三", "四", "五"][id - 1]}
                           </div>
                         ))}
-                      </li>
-                      <li {...OFFICIAL_EXAM_SCOPE}>
-                        <a {...OFFICIAL_EXAM_SCOPE} id="themeAdd" style={{ cursor: "pointer" }} href="#!" onClick={(event) => { event.preventDefault(); setOfficialFontSize((current) => Math.min(28, current + 2)); }}>字体大小+</a>
-                        <a {...OFFICIAL_EXAM_SCOPE} id="themeDec" style={{ cursor: "pointer" }} href="#!" onClick={(event) => { event.preventDefault(); setOfficialFontSize((current) => Math.max(12, current - 2)); }}>字体大小-</a>
                       </li>
                     </div>
 
@@ -4462,7 +4453,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                 top: officialLawDialogRect.top,
                 width: officialLawDialogRect.width,
                 height: officialLawDialogRect.height,
-                zIndex: 900,
+                zIndex: 1010,
                 backgroundColor: "#fff",
                 overflow: "hidden",
               }}
@@ -4474,7 +4465,20 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                   type="button"
                   onClick={() => setOfficialLawDialogOpen(false)}
                   onMouseDown={(event) => event.stopPropagation()}
-                  style={{ border: "none", background: "transparent", color: "#606266", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}
+                  style={{
+                    position: "relative",
+                    zIndex: 260,
+                    width: "28px",
+                    height: "28px",
+                    border: "none",
+                    background: "transparent",
+                    color: "#606266",
+                    cursor: "pointer",
+                    fontSize: "18px",
+                    lineHeight: "28px",
+                    padding: 0,
+                    textAlign: "center",
+                  }}
                 >
                   ×
                 </button>

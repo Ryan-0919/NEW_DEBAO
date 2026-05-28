@@ -130,6 +130,7 @@ export type AdminMockExamAiReviewConfig = {
   maxConcurrency: number;
   maxRetryCount: number;
   retryDelayMs: number;
+  retryCooldownMs: number;
   queuePollIntervalMs: number;
   allowRuleFallback: boolean;
   maxTokens: number;

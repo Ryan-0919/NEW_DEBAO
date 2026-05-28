@@ -999,6 +999,7 @@ adminOperationsRouter.patch("/mock-exam-ai-review-config", requireAdminRoles(...
         maxConcurrency: payload.maxConcurrency,
         maxRetryCount: payload.maxRetryCount,
         retryDelayMs: payload.retryDelayMs,
+        retryCooldownMs: payload.retryCooldownMs,
         queuePollIntervalMs: payload.queuePollIntervalMs,
         allowRuleFallback: payload.allowRuleFallback,
         apiKeyConfigured: payload.apiKeyConfigured,
