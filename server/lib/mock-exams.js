@@ -1010,6 +1010,13 @@ const getAiAnswerMarkScore = (mark) => mark?.score ?? mark?.awardedScore ?? mark
 const getAiAnswerMarkSegmentId = (mark) =>
   `${mark?.segmentId ?? mark?.segment_id ?? mark?.answerSegmentId ?? mark?.answer_segment_id ?? ""}`.trim();
 
+const isReasonableAiAnswerMarkRange = (range) => {
+  const text = `${range?.highlight ?? ""}`.trim();
+  if (!text) return false;
+  const compactLength = text.replace(/\s+/g, "").length;
+  return compactLength <= 60;
+};
+
 const trimWhitespaceRange = (value, start, end) => {
   let nextStart = start;
   let nextEnd = end;
@@ -1105,6 +1112,9 @@ const normalizeAndValidateAiAnswerMarks = ({ rawAnswerMarks, answerText, answerS
       if (!range) {
         throw createHttpError(`批改返回的局部批注无法对应到考生原文：${title || "unknown"}，${mark.highlight.slice(0, 40)}`, 502);
       }
+      if (!isReasonableAiAnswerMarkRange(range)) {
+        throw createHttpError(`批改返回的局部批注范围过长：${title || "unknown"}，${range.highlight.slice(0, 40)}`, 502);
+      }
 
       return {
         ...mark,
@@ -1135,6 +1145,7 @@ const normalizeAiAnswerMarksLoose = ({ rawAnswerMarks, answerText, answerSegment
           answerSegmentMap,
         });
         if (!range) return null;
+        if (!isReasonableAiAnswerMarkRange(range)) return null;
         return {
           id: `${mark?.id ?? mark?.markId ?? mark?.mark_id ?? `mark_${index + 1}`}`.trim(),
           highlight: range.highlight,
@@ -1350,6 +1361,12 @@ const buildAnswerReferenceSegments = (answerText) => {
 const REQUIRED_AI_REVIEW_OUTPUT_REQUIREMENTS = [
   "硬性校验：只能返回一个合法 JSON 对象，不要 Markdown，不要 ```json 代码块，不要解释文字、前缀或后缀。",
   "硬性校验：所有字符串内容中禁止直接使用未转义的英文双引号 \"；引用学生原文、法律概念或关键词时必须使用中文引号“”或将英文双引号转义为 \\\"。",
+  "硬性校验：answerMarks 必须同时体现得分点和错误点；学生原文中存在事实错误、法律关系错误、结论错误、逻辑错误、主体写反、概念误用时，必须生成 status:wrong 的错误批注。",
+  "硬性校验：wrong 错误批注的 comment 必须直接说明为什么错、正确应如何理解；不要只写“错误”“不准确”“表述有误”。",
+  "硬性校验：划线必须精确，只划最能承载判断的关键词、短语或短句，不要整段划线；优先划 6 到 35 个中文字符左右的关键表达。",
+  "硬性校验：错误批注必须划学生原文中具体错误的那一小段，例如错误主体、错误法律关系、错误结论或错误理由。",
+  "硬性校验：每个小问 reviewComment 必须是 300 到 400 个中文字符的自然语言老师点评，必须展开说明用户哪里答错了、为什么错、正确思路是什么、下次怎么补。",
+  "硬性校验：reviewComment 不要出现 AI、模型、系统、自动批改、算法、提示词 等暴露机器痕迹的表述。",
   "硬性校验：rubricPoints 中采分点编号字段必须使用 id，不要使用 pointId、point_id、rubricId 或其他编号字段。",
   "硬性校验：rubricPoints 中每条采分点必须是对象，并且必须使用 id、title、description、maxScore、awardedScore、hit、comment 字段；不要使用 point、achieved、matched 等替代字段。",
   "硬性校验：rubricPoints 中每个未命中的采分点必须设置 hit:false、awardedScore:0，并且必须在 missedPoints 中生成一条对应遗漏点。",

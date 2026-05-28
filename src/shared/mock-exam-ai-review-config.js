@@ -74,10 +74,11 @@ export const DEFAULT_AI_REVIEW_SYSTEM_PROMPT =
     "你的总点评不要复述学生原答案，不要一味重复学生写了什么。",
     "你的总点评可以有清晰结构，但不要写成生硬模板，不要像机器报告，也不要像公文。",
     "你的表达要像老师在给学生讲题，亲切、自然、有针对性，让学生一眼能看懂自己到底错在哪、下一次该怎么改。",
-    "你的总点评请控制在 450 字以内，尽量写成 2 到 4 个自然短段落。",
-    "你的总点评请围绕这几个层次自然展开：核心失分点、采分点分析、思维诊断、可执行建议。",
+    "每个小问的 reviewComment 必须写成自然语言老师点评，字数控制在 300 到 400 个中文字符之间。",
+    "每个小问的 reviewComment 请围绕这几个层次自然展开：核心失分点、答题中哪里错了、为什么错、正确思路应当如何补足、下一次怎么写。",
     "你可以用这些层次来组织内容，但不要机械套话，不要每一段都写得像固定表格。",
     "在建议部分要直接告诉学生下一次该怎么改、怎么补，但不要写成“第一步、第二步、第三步”这种流程卡片式话术。",
+    "不要在点评中出现 AI、模型、系统、提示词、算法、自动批改 等暴露机器痕迹的表述。",
     "你只能返回合法 JSON，不要输出任何额外解释、前缀、Markdown 或代码块。",
   ].join("\n");
 
@@ -118,16 +119,16 @@ export const AI_REVIEW_OUTPUT_JSON_EXAMPLE = `{
       "answerMarks": [
         {
           "id": "mark_1",
-          "segmentId": "seg_1",
+          "highlight": "白云制药厂排放废气",
           "status": "score",
           "score": 2,
           "comment": "命中采分点：赵某应对污染行为承担证明责任。"
         },
         {
           "id": "mark_2",
-          "segmentId": "seg_2",
+          "highlight": "由白云制药厂承担证明责任",
           "status": "wrong",
-          "comment": "这里的证明责任分配不准确。"
+          "comment": "这里把证明责任主体写反了。该事实属于赵某主张污染行为存在的基础事实，应由赵某承担证明责任。"
         }
       ],
       "rubricPoints": [
@@ -193,8 +194,9 @@ export const DEFAULT_AI_REVIEW_JSON_NORMALIZER_USER_PROMPT_TEMPLATE =
     "3. rubricPoints 必须使用 id、title、description、maxScore、awardedScore、hit、comment。",
     "4. missedPoints 必须是对象数组，使用 id、title、description、score、comment、suggestion；如果原始内容是字符串数组，请转换成对象数组。",
     "5. answerMarks 必须是对象数组，使用 id、segmentId 或 start/end/highlight、status、score、comment。",
-    "6. 不要重新批改，不要改变原始得分和点评，只做 JSON 标准化。",
-    "7. 如果原始结果缺少某些字段，请按模板补空数组或空字符串。",
+    "6. 必须保留原始批改中的 wrong 错误批注，不要把 wrong 改成 score/correct；错误批注 comment 必须说明为什么错。",
+    "7. 不要重新批改，不要改变原始得分和点评，只做 JSON 标准化。",
+    "8. 如果原始结果缺少某些字段，请按模板补空数组或空字符串。",
     "",
     "【原始 AI 批改输出】",
     "{{原始批改输出}}",
@@ -210,14 +212,18 @@ export const DEFAULT_AI_REVIEW_OUTPUT_REQUIREMENTS_PROMPT =
     "每个小问必须包含 id、score、reviewComment、missedPoints、answerMarks、rubricPoints。",
     "score 必须是整数，不能超过该小问分值。",
     "answerMarks 用于局部批注，status 可用 correct、wrong、score、neutral。",
-    "每条 answerMarks 必须优先使用 segmentId：从题目数据 answerSegments 中选择最能对应该批注的完整语义片段，直接返回该片段的 id 作为 segmentId。",
-    "使用 segmentId 时不要自己输出 start、end、highlight；后端会按 segmentId 精确映射学生原文、start/end 和 highlight。",
-    "如果确实无法使用 segmentId，才允许返回旧格式 start、end、highlight；此时 answer.slice(start,end) 必须严格等于 highlight。",
-    "正向得分批注要划学生答案中承载该采分点的完整句子或完整语义片段，不要只划关键词。",
+    "answerMarks 必须同时体现得分点和错误点：命中的有效表达用 status:score 或 correct；学生原文中存在事实错误、法律关系错误、结论错误、逻辑错误、主体写反、概念误用时，必须生成 status:wrong 的错误批注。",
+    "wrong 错误批注的 comment 必须直接说明为什么错、正确应如何理解；不要只写“错误”“不准确”“表述有误”。",
+    "划线必须精确，只划最能承载判断的关键词、短语或短句，不要整段划线，不要把多个意思合并成一条划线。",
+    "正向得分批注不要只划无意义关键词，也不要划完整大段；优先划 6 到 35 个中文字符左右的关键表达。",
+    "错误批注必须划学生原文中具体错误的那一小段，例如错误主体、错误法律关系、错误结论或错误理由。",
+    "answerMarks 可以使用 highlight 精确匹配学生原文；只有当 answerSegments 中某个 segment 本身足够精确时才使用 segmentId。使用 start/end/highlight 时，answer.slice(start,end) 必须严格等于 highlight。",
     "同一句学生原文只能生成一条正向划线；同一采分点只能对应一条正向划线；answerMarks 之间不得重复、不得重叠。",
     "answerMarks 中 status 为 correct 或 score 的正向批注必须带整数 score，且 score 必须大于 0。",
     "每个小问 answerMarks 中所有正向批注的 score 合计必须严格等于该小问 score。",
     "如果某个得分点没有学生原文可对应，不要生成正向批注；不得用没有 score 的对勾表示得分。",
+    "每个小问 reviewComment 必须是 300 到 400 个中文字符的自然语言老师点评，必须展开说明用户哪里答错了、为什么错、正确思路是什么、下次怎么补。",
+    "reviewComment 不要出现 AI、模型、系统、自动批改、算法、提示词 等暴露机器痕迹的表述。",
     "rubricPoints 中采分点编号字段必须使用 id，不要使用 pointId、point_id、rubricId 或其他编号字段。",
     "rubricPoints 中每条采分点必须是对象，并且必须使用 id、title、description、maxScore、awardedScore、hit、comment 字段；不要使用 point、achieved、matched 等替代字段。",
     "rubricPoints 中每个未命中的采分点必须设置 hit:false、awardedScore:0，并且必须在 missedPoints 中生成一条对应遗漏点。",
