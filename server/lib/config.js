@@ -61,6 +61,7 @@ export const config = {
   audioProcessingDir: optional("AUDIO_PROCESSING_DIR"),
   audioTranscodeEnabled: optionalBoolean("AUDIO_TRANSCODE_ENABLED", true),
   ffmpegPath: optional("FFMPEG_PATH"),
+  ffprobePath: optional("FFPROBE_PATH"),
   mockExamAiReview: {
     provider: optional("MOCK_EXAM_AI_PROVIDER") || "rules",
     baseUrl: normalizeBaseUrl(optional("MOCK_EXAM_AI_BASE_URL")),

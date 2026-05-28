@@ -88,7 +88,7 @@ export function TypingPracticeResult() {
   const thiefPosition = 82;
 
   if (isMobileBlocked) {
-    return <MockExamDesktopNotice />;
+    return <MockExamDesktopNotice feature="typingPractice" />;
   }
 
   if (loading) {

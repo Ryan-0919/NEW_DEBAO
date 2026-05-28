@@ -643,7 +643,7 @@ export function MockExamRoom() {
   if (!isMobileBlocked && (loading || !record)) return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>考试加载中...</div>;
 
   if (isMobileBlocked) {
-    return <MockExamDesktopNotice />;
+    return <MockExamDesktopNotice feature={record?.questions.some((question) => isSubjectiveQuestion(question)) ? "subjectiveReview" : "objectiveMock"} />;
   }
 
   const groups = buildQuestionGroups(record.questions);
@@ -1373,7 +1373,12 @@ export function MockExamRoom() {
                 title="法律法规汇编"
                 style={{ width: "100%", height: "100%", background: "#fff" }}
               >
-                <DebaoLawSearchPage setPage={() => closeLawDialog()} embedded onClose={closeLawDialog} />
+                <DebaoLawSearchPage
+                  setPage={() => closeLawDialog()}
+                  embedded
+                  onClose={closeLawDialog}
+                  fullscreenBridge={{ isFullscreen: lawDialogMaximized, toggleFullscreen: toggleLawDialogMaximize }}
+                />
               </div>
               {lawDialogInteracting ? (
                 <div

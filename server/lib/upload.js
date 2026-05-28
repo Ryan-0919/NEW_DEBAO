@@ -47,6 +47,24 @@ const buildOriginObjectUrl = (objectKey = "") => {
   return `https://${config.ossBucket}.${config.ossRegion}.aliyuncs.com/${objectKey}`;
 };
 
+const resolveUploadMeta = ({ fileName = "file", mimeType = "application/octet-stream", folder = "uploads" } = {}) => {
+  const normalizedFileName = normalizeDisplayText(fileName) || fileName;
+  const ext =
+    (mimeType && mimeExtension(mimeType)) ||
+    (normalizedFileName.includes(".") ? normalizedFileName.split(".").pop() : "") ||
+    (fileName.includes(".") ? fileName.split(".").pop() : "") ||
+    "bin";
+  const baseName = normalizedFileName.replace(/\.[^.]+$/, "") || "file";
+  const slug = slugify(baseName).slice(0, MAX_SLUG_LENGTH) || "file";
+  const suffix = `${Date.now()}-${randomUUID()}-${slug}.${ext}`;
+  const folderPrefix = `${folder}/`;
+  const maxSuffixLength = Math.max(MAX_OBJECT_KEY_LENGTH - folderPrefix.length, 32);
+  const objectKey = `${folderPrefix}${suffix.slice(0, maxSuffixLength)}`;
+  const contentType = mimeType || lookupMime(normalizedFileName) || lookupMime(fileName) || "application/octet-stream";
+
+  return { objectKey, contentType };
+};
+
 const getDefaultBucketHosts = () => [
   `http://${config.ossBucket}.${config.ossRegion}.aliyuncs.com/`,
   `https://${config.ossBucket}.${config.ossRegion}.aliyuncs.com/`,
@@ -104,25 +122,38 @@ export const ensureOssConfigured = () => {
 export const uploadBuffer = async ({ fileName, buffer, mimeType, folder }) => {
   ensureOssConfigured();
 
-  const normalizedFileName = normalizeDisplayText(fileName) || fileName;
-  const ext =
-    (mimeType && mimeExtension(mimeType)) ||
-    (normalizedFileName.includes(".") ? normalizedFileName.split(".").pop() : "") ||
-    (fileName.includes(".") ? fileName.split(".").pop() : "") ||
-    "bin";
-  const baseName = normalizedFileName.replace(/\.[^.]+$/, "") || "file";
-  const slug = slugify(baseName).slice(0, MAX_SLUG_LENGTH) || "file";
-  const suffix = `${Date.now()}-${randomUUID()}-${slug}.${ext}`;
-  const folderPrefix = `${folder}/`;
-  const maxSuffixLength = Math.max(MAX_OBJECT_KEY_LENGTH - folderPrefix.length, 32);
-  const objectKey = `${folderPrefix}${suffix.slice(0, maxSuffixLength)}`;
+  const { objectKey, contentType } = resolveUploadMeta({ fileName, mimeType, folder });
 
   const result = await ossClient.multipartUpload(objectKey, buffer, {
     timeout: config.ossTimeoutMs,
     parallel: config.ossMultipartParallel,
-    mime: mimeType || lookupMime(normalizedFileName) || lookupMime(fileName) || "application/octet-stream",
+    mime: contentType,
     headers: {
-      "Content-Type": mimeType || lookupMime(normalizedFileName) || lookupMime(fileName) || "application/octet-stream",
+      "Content-Type": contentType,
+    },
+  });
+
+  return {
+    objectKey,
+    url: buildPublicUrl(objectKey, buildOriginObjectUrl(objectKey)),
+    readableUrl: getReadableObjectUrl({
+      objectKey,
+      fallbackUrl: buildPublicUrl(objectKey, buildOriginObjectUrl(objectKey)),
+    }),
+  };
+};
+
+export const uploadFile = async ({ fileName, filePath, mimeType, folder }) => {
+  ensureOssConfigured();
+
+  const { objectKey, contentType } = resolveUploadMeta({ fileName, mimeType, folder });
+
+  await ossClient.multipartUpload(objectKey, filePath, {
+    timeout: config.ossTimeoutMs,
+    parallel: config.ossMultipartParallel,
+    mime: contentType,
+    headers: {
+      "Content-Type": contentType,
     },
   });
 

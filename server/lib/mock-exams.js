@@ -397,16 +397,29 @@ const getRecordPaper = (record) => mergeSnapshotWithLivePaper(parseRecordPaperSn
 const getReviewWorkflowStatus = (record) => {
   const explicit = `${record?.reviewWorkflowStatus ?? ""}`.trim();
   if (record?.status !== "submitted") return "not_required";
+  if (explicit === "published" || record?.publishedAt) return "published";
+  if ((record?.answers ?? []).some((answer) => Boolean(answer?.publishedReviewJson))) return "published";
   if (explicit && explicit !== "not_required") return explicit;
 
   const paper = getRecordPaper(record);
   const needsReview = Boolean(paper?.reviewEnabled) && (paper?.questions ?? []).some((question) => isSubjectiveQuestion(question));
   if (!needsReview) return "not_required";
-  if (record?.publishedAt) return "published";
   return explicit || "ai_pending";
 };
 
 const isRecordPublishedToUser = (record) => ["not_required", "published"].includes(getReviewWorkflowStatus(record));
+
+const getVisibleMockExamTotalScore = (record) => {
+  if (!record || !isRecordPublishedToUser(record)) return Number(record?.totalScore ?? 0);
+  const publishedSubjectiveScore = (record.answers ?? [])
+    .filter((answer) => answer.publishedReviewJson)
+    .reduce((sum, answer) => sum + Number(answer.publishedScore ?? answer.score ?? 0), 0);
+  if (publishedSubjectiveScore <= 0) return Number(record.totalScore ?? 0);
+  const currentSubjectiveScore = (record.answers ?? [])
+    .filter((answer) => answer.reviewJson)
+    .reduce((sum, answer) => sum + Number(answer.score ?? 0), 0);
+  return Math.max(0, Number(record.totalScore ?? 0) - currentSubjectiveScore + publishedSubjectiveScore);
+};
 
 const userVisibleReviewStatuses = new Set(["not_required", "ai_pending", "ai_processing", "manual_pending", "published"]);
 
@@ -427,7 +440,7 @@ const serializeRecordSummary = (record, currentTime = new Date()) => {
     questionCount: record.questionCount,
     answeredCount: record.answeredCount,
     correctCount: record.correctCount,
-    totalScore: record.totalScore,
+    totalScore: getVisibleMockExamTotalScore(record),
     allottedSeconds: record.allottedSeconds,
     consumedSeconds,
     remainingSeconds,
@@ -475,7 +488,8 @@ const serializeQuestion = (question, answer, revealAnswer) => {
 
   if (isSubjectiveQuestion(question)) {
     const answerMap = parseSubjectiveAnswerMap(answer?.answerJson, question);
-    const reviewJson = revealAnswer ? parseJsonSafely(answer?.reviewJson, null) : null;
+    const publishedReviewJson = parseJsonSafely(answer?.publishedReviewJson, null);
+    const reviewJson = revealAnswer ? publishedReviewJson ?? parseJsonSafely(answer?.reviewJson, null) : null;
     const reviewSource = `${reviewJson?.source ?? "system"}`.trim() || "system";
     const reviewProvider = normalizeReviewProvider(reviewJson?.reviewProvider ?? reviewJson?.provider ?? "");
     return {
@@ -491,7 +505,7 @@ const serializeQuestion = (question, answer, revealAnswer) => {
       userAnswerKeys: [],
       correctAnswerKeys: [],
       isCorrect: null,
-      earnedScore: revealAnswer ? Number(answer?.score ?? 0) : 0,
+      earnedScore: revealAnswer ? Number(answer?.publishedScore ?? answer?.score ?? 0) : 0,
       answerState,
       sectionLabel: questionMeta.sectionLabel,
       sectionDescription: questionMeta.sectionDescription,
@@ -582,6 +596,9 @@ export const serializeMockExamRecordDetail = (record, currentTime = new Date()) 
   const answerMap = new Map((record.answers ?? []).map((answer) => [answer.questionId, answer]));
   const revealAnswer = record.status === "submitted" && isRecordPublishedToUser(record);
   const questions = (paper?.questions ?? []).map((question) => serializeQuestion(question, answerMap.get(question.id), revealAnswer));
+  const visibleTotalScore = revealAnswer
+    ? questions.reduce((sum, question) => sum + Number(question.earnedScore ?? 0), 0)
+    : Number(record.totalScore ?? 0);
   const subjectiveQuestionCount = questions.filter((question) => isSubjectiveQuestionType(question.type)).length;
   const objectiveQuestions = questions.filter((question) => !isSubjectiveQuestionType(question.type));
   const objectiveAnsweredCount = objectiveQuestions.filter((question) => question.userAnswerKeys.length > 0).length;
@@ -599,7 +616,7 @@ export const serializeMockExamRecordDetail = (record, currentTime = new Date()) 
     questionCount: questions.length,
     answeredCount: questions.filter((question) => question.answerState === "answered").length,
     correctCount: record.correctCount,
-    totalScore: record.totalScore,
+    totalScore: visibleTotalScore,
     allottedSeconds: record.allottedSeconds,
     consumedSeconds,
     remainingSeconds,
@@ -637,7 +654,7 @@ export const serializeMockExamRecordDetail = (record, currentTime = new Date()) 
       unfinishedCount: Math.max(0, questions.length - questions.filter((question) => question.answerState === "answered").length),
       pendingReviewCount: finalScorePending ? subjectiveQuestionCount : 0,
       finalScorePending,
-      isPassed: record.status === "submitted" && !finalScorePending ? record.totalScore >= paper.passScore : null,
+      isPassed: record.status === "submitted" && !finalScorePending ? visibleTotalScore >= paper.passScore : null,
     },
     questions,
     reviewEnabled: Boolean(paper.reviewEnabled) && subjectiveQuestionCount > 0,
@@ -1368,6 +1385,7 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
   if (!["ai_pending", "ai_processing"].includes(workflowStatus)) {
     return record;
   }
+  const hasPublishedSnapshot = (record.answers ?? []).some((answer) => answer.publishedReviewJson);
 
   await db.$transaction(async (tx) => {
     const latestRecord = await tx.mockExamRecord.findUnique({
@@ -1472,11 +1490,19 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
 
     for (const item of reviewUpdates) {
       if (item.answerId) {
+        const existingAnswer = answerMap.get(item.questionId);
+        const shouldSeedPublishedSnapshot = !hasPublishedSnapshot && Boolean(record.publishedAt && existingAnswer?.reviewJson);
         await tx.mockExamAnswer.update({
           where: { id: item.answerId },
           data: {
             score: item.score,
             reviewJson: item.reviewJson,
+            ...(shouldSeedPublishedSnapshot
+              ? {
+                  publishedReviewJson: existingAnswer.reviewJson,
+                  publishedScore: Number(existingAnswer.score ?? 0) || 0,
+                }
+              : {}),
           },
         });
       } else {
@@ -1517,6 +1543,7 @@ const getRecordWithPaper = (db, recordId) =>
   db.mockExamRecord.findUnique({
     where: { id: recordId },
     include: {
+      answers: true,
       paper: {
         include: {
           questions: {
@@ -1528,7 +1555,6 @@ const getRecordWithPaper = (db, recordId) =>
           },
         },
       },
-      answers: true,
     },
   });
 
@@ -1948,6 +1974,10 @@ export const saveMockExamReviewFeedback = async ({ db, recordId, userId, questio
       throw createHttpError("è¯¥è€ƒè¯•è®°å½•å°šæœªäº¤å·", 409);
     }
 
+    if (!isRecordPublishedToUser(record)) {
+      throw createHttpError("批改结果尚未发送，不能提交满意度", 409);
+    }
+
     const paper = getRecordPaper(record);
     const question = (paper?.questions ?? []).find((item) => item.id === questionId);
     if (!question || !isSubjectiveQuestion(question)) {
@@ -1965,8 +1995,14 @@ export const saveMockExamReviewFeedback = async ({ db, recordId, userId, questio
     }
 
     const existingReviewJson = parseJsonSafely(answer.reviewJson, null) ?? {};
+    const existingPublishedReviewJson = parseJsonSafely(answer.publishedReviewJson, null) ?? existingReviewJson;
     const nextReviewJson = {
       ...existingReviewJson,
+      feedbackStars: normalizedStars,
+      feedbackSubmittedAt: currentTime.toISOString(),
+    };
+    const nextPublishedReviewJson = {
+      ...existingPublishedReviewJson,
       feedbackStars: normalizedStars,
       feedbackSubmittedAt: currentTime.toISOString(),
     };
@@ -1975,6 +2011,7 @@ export const saveMockExamReviewFeedback = async ({ db, recordId, userId, questio
       where: { id: answer.id },
       data: {
         reviewJson: JSON.stringify(nextReviewJson),
+        publishedReviewJson: JSON.stringify(nextPublishedReviewJson),
       },
     });
 
@@ -2038,6 +2075,7 @@ export const listUserVisibleMockExamPapers = async ({ db, userId, paperType = ""
             paperId: { in: paperIds },
           },
           orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+          include: { answers: true },
         })
       : [];
 
@@ -2057,11 +2095,12 @@ export const serializeUserMockExamHistoryItem = (record) => {
   const subjectiveQuestionCount = (paper?.questions ?? []).filter((question) => isSubjectiveQuestionType(question.type)).length;
   const reviewStatus = getReviewWorkflowStatus(record);
   const reviewEnabled = Boolean(paper?.reviewEnabled) && subjectiveQuestionCount > 0;
+  const visibleTotalScore = getVisibleMockExamTotalScore(record);
   return {
     id: record.id,
     status: record.status,
     attemptNo: record.attemptNo,
-    totalScore: Number(record.totalScore ?? 0),
+    totalScore: visibleTotalScore,
     questionCount: Number(record.questionCount ?? 0),
     subjectiveQuestionCount,
     answeredCount: Number(record.answeredCount ?? 0),
@@ -2095,6 +2134,7 @@ export const listUserVisibleMockExamRecords = async ({ db, userId, paperType = "
     },
     orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
     include: {
+      answers: true,
       paper: {
         include: {
           questions: {
@@ -2160,7 +2200,7 @@ const buildMockExamLeaderboardRows = (records = [], leaderboardEntries = [], cur
       return {
         userId,
         userPhone: `${record?.user?.phone ?? ""}`.trim(),
-        score: Number(record?.totalScore ?? 0),
+        score: getVisibleMockExamTotalScore(record),
         submittedAt: record?.submittedAt ? formatDateTime(record.submittedAt) : "",
         submittedAtMs: record?.submittedAt ? new Date(record.submittedAt).getTime() : Number.MAX_SAFE_INTEGER,
         attemptNo: Number(record?.attemptNo ?? 0),
@@ -2190,6 +2230,7 @@ export const listUserVisibleMockExamLeaderboardPapers = async ({ db, userId }) =
     },
     orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
     include: {
+      answers: true,
       paper: {
         include: {
           questions: {
@@ -2239,6 +2280,7 @@ export const getUserMockExamLeaderboardDetail = async ({ db, userId, paperId }) 
     },
     orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
     include: {
+      answers: true,
       user: {
         select: {
           id: true,
@@ -2298,6 +2340,7 @@ export const getRecentMockExamForUser = async ({ db, userId, currentTime = new D
     },
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     include: {
+      answers: true,
       paper: {
         include: {
           questions: {
@@ -2323,7 +2366,7 @@ export const getRecentMockExamForUser = async ({ db, userId, currentTime = new D
     paperSubtitle: paper?.subtitle ?? "",
     recordId: record.id,
     status: record.status,
-    totalScore: Number(record.totalScore ?? 0),
+    totalScore: getVisibleMockExamTotalScore(record),
     answeredCount: Number(record.answeredCount ?? 0),
     questionCount: Number(record.questionCount ?? 0),
     canResume: record.status === "in_progress" && getRemainingSeconds(record, currentTime) > 0,

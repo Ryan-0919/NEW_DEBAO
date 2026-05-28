@@ -89,6 +89,9 @@ export const serializeVideo = (video) => ({
   name: normalizeDisplayText(video.name),
   folderId: video.folderId,
   duration: video.duration,
+  processStatus: video.processStatus ?? "ready",
+  processMessage: video.processMessage ? normalizeDisplayText(video.processMessage) : "",
+  isReady: (video.processStatus ?? "ready") === "ready",
   hasScript: Boolean(video.scriptText?.trim()),
   script: video.scriptText ? normalizeDisplayText(video.scriptText) : undefined,
   handoutUrl: getReadableObjectUrl({
@@ -99,10 +102,13 @@ export const serializeVideo = (video) => ({
   handoutName: video.handoutName ? normalizeDisplayText(video.handoutName) : "",
   hasHandout: Boolean(video.handoutObjectKey || video.handoutUrl),
   uploadedAt: formatDateTime(video.uploadedAt),
-  videoUrl: getReadableObjectUrl({
-    objectKey: video.objectKey ?? "",
-    fallbackUrl: video.objectUrl ?? "",
-  }),
+  videoUrl:
+    (video.processStatus ?? "ready") === "ready"
+      ? getReadableObjectUrl({
+          objectKey: video.objectKey ?? "",
+          fallbackUrl: video.objectUrl ?? "",
+        })
+      : "",
 });
 
 export const serializeVideoListItem = (video) => ({
@@ -110,6 +116,9 @@ export const serializeVideoListItem = (video) => ({
   name: normalizeDisplayText(video.name),
   folderId: video.folderId,
   duration: video.duration,
+  processStatus: video.processStatus ?? "ready",
+  processMessage: video.processMessage ? normalizeDisplayText(video.processMessage) : "",
+  isReady: (video.processStatus ?? "ready") === "ready",
   hasScript: Boolean(video.scriptText?.trim()),
   handoutUrl: getReadableObjectUrl({
     objectKey: video.handoutObjectKey ?? "",

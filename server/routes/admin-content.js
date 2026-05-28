@@ -1,5 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
+import { randomUUID } from "node:crypto";
+import { extname } from "node:path";
 import { prisma } from "../lib/prisma.js";
 import { requireAdminAuth, requireAdminRoles } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
@@ -10,9 +12,59 @@ import { uploadBuffer } from "../lib/upload.js";
 import { cleanupObjectIfReplaced, cleanupObjectIfUnused } from "../lib/assets.js";
 import { normalizeDisplayText } from "../lib/text.js";
 import { writeAdminAuditLog } from "../lib/admin-audit.js";
+import {
+  cleanupStagedMediaUploadFile,
+  enqueueMediaProcessing,
+  getMediaUploadTempRoot,
+  promoteMediaUploadSource,
+} from "../lib/media-processing.js";
 
 const CONTENT_MANAGER_ROLES = ["super_admin", "operations_admin"];
 const MEDIA_TYPES = new Set(["audio", "video"]);
+const MB = 1024 * 1024;
+const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"]);
+const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv"]);
+const AUDIO_MIME_PREFIX = "audio/";
+const VIDEO_MIME_PREFIX = "video/";
+
+const buildUploadValidationError = (message) => {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+};
+
+const mediaUpload = multer({
+  storage: multer.diskStorage({
+    destination(_req, _file, callback) {
+      callback(null, getMediaUploadTempRoot());
+    },
+    filename(_req, file, callback) {
+      callback(null, `${Date.now()}-${randomUUID()}${extname(file.originalname).toLowerCase()}`);
+    },
+  }),
+  limits: {
+    fileSize: 2048 * MB,
+    files: 20,
+  },
+  fileFilter(req, file, callback) {
+    const type = readMediaType(req.body?.type);
+    const extension = extname(file.originalname).toLowerCase();
+    const mimeType = `${file.mimetype ?? ""}`.toLowerCase();
+    const extensionAllowed = type === "video" ? VIDEO_EXTENSIONS.has(extension) : AUDIO_EXTENSIONS.has(extension);
+    const mimeAllowed =
+      type === "video"
+        ? mimeType.startsWith(VIDEO_MIME_PREFIX) || !mimeType || mimeType === "application/octet-stream"
+        : mimeType.startsWith(AUDIO_MIME_PREFIX) || !mimeType || mimeType === "application/octet-stream";
+
+    if (extensionAllowed && mimeAllowed) {
+      callback(null, true);
+      return;
+    }
+
+    callback(buildUploadValidationError(`${type === "video" ? "视频" : "音频"}文件格式不支持，请重新选择后上传`));
+  },
+});
+
 const handoutUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -58,6 +110,11 @@ const getMediaModel = (type) => (type === "video" ? prisma.video : prisma.audio)
 const getMediaFolderModel = (type) => (type === "video" ? prisma.videoFolder : prisma.audioFolder);
 const getCourseMediaModel = (type) => (type === "video" ? prisma.courseVideo : prisma.courseAudio);
 const getMediaRefField = (type) => (type === "video" ? "videoId" : "audioId");
+
+const getDisplayNameFromUpload = (fileName = "", fallback = "未命名素材") => {
+  const normalized = normalizeDisplayText(fileName || "").replace(/\.[^.]+$/, "").trim();
+  return normalized || fallback;
+};
 
 const includeMediaLibraryRelations = (type) => ({
   folder: true,
@@ -276,6 +333,7 @@ const buildVideoWhere = (query = {}) => {
   const keyword = `${query.keyword ?? ""}`.trim();
   const courseId = `${query.courseId ?? ""}`.trim();
   const tagId = `${query.tagId ?? ""}`.trim();
+  const processStatus = `${query.processStatus ?? "all"}`.trim();
   const searchScope = `${query.searchScope ?? "current"}` === "all" ? "all" : "current";
   const refFilter = `${query.refFilter ?? "all"}`;
   const scriptFilter = `${query.scriptFilter ?? "all"}`;
@@ -294,6 +352,9 @@ const buildVideoWhere = (query = {}) => {
   return {
     ...(searchScope === "current" && folderId ? { folderId } : {}),
     ...(keyword ? { name: { contains: keyword } } : {}),
+    ...(processStatus === "pending" || processStatus === "processing" || processStatus === "ready" || processStatus === "failed"
+      ? { processStatus }
+      : {}),
     ...(scriptFilter === "scripted" ? { scriptText: { not: null } } : {}),
     ...(scriptFilter === "unscripted" ? { scriptText: null } : {}),
     ...(relationConditions.length === 1 ? relationConditions[0] : relationConditions.length > 1 ? { AND: relationConditions } : {}),
@@ -1094,17 +1155,18 @@ adminContentRouter.delete("/tags/:tagId", async (req, res) => {
 adminContentRouter.get("/media/meta", async (req, res) => {
   const type = readMediaType(req.query?.type);
   if (type === "video") {
-    const [totalCount, referencedCount, pendingScriptCount, tagOptions] = await Promise.all([
+    const [totalCount, referencedCount, pendingScriptCount, processingCount, tagOptions] = await Promise.all([
       prisma.video.count(),
       prisma.video.count({ where: { courseVideos: { some: {} } } }),
       prisma.video.count({ where: { scriptText: null } }),
+      prisma.video.count({ where: { processStatus: { in: ["pending", "processing", "failed"] } } }),
       prisma.tag.findMany({
         where: { course: { courseType: "video" } },
         select: { id: true, name: true, courseId: true },
         orderBy: { name: "asc" },
       }),
     ]);
-    return ok(res, { type, totalCount, referencedCount, pendingScriptCount, tagOptions });
+    return ok(res, { type, totalCount, referencedCount, pendingScriptCount, processingCount, tagOptions });
   }
 
   const [totalCount, referencedCount, pendingScriptCount, processingCount, tagOptions] = await Promise.all([
@@ -1280,6 +1342,77 @@ adminContentRouter.get("/media/items", async (req, res) => {
     pageSize,
     totalPages: Math.max(Math.ceil(total / pageSize), 1),
   });
+});
+
+adminContentRouter.post("/media/items/upload", mediaUpload.array("files"), async (req, res) => {
+  const type = readMediaType(req.body?.type);
+  const folderId = `${req.body?.folderId ?? ""}`.trim();
+  const script = `${req.body?.script ?? ""}`;
+  const files = req.files;
+
+  if (!folderId) {
+    await Promise.all((Array.isArray(files) ? files : []).map((file) => cleanupStagedMediaUploadFile(file.path)));
+    return fail(res, "请选择目标文件夹", 400);
+  }
+  if (!Array.isArray(files) || files.length === 0) return fail(res, `请选择要上传的${type === "video" ? "视频" : "音频"}文件`, 400);
+
+  const folder = await getMediaFolderModel(type).findUnique({ where: { id: folderId }, select: { id: true, name: true } });
+  if (!folder) {
+    await Promise.all(files.map((file) => cleanupStagedMediaUploadFile(file.path)));
+    return fail(res, "目标文件夹不存在", 404);
+  }
+
+  const mediaModel = getMediaModel(type);
+  const created = [];
+
+  try {
+    for (const [index, file] of files.entries()) {
+      const item = await mediaModel.create({
+        data: {
+          name: getDisplayNameFromUpload(file.originalname, type === "video" ? "未命名视频" : "未命名音频"),
+          folderId,
+          duration: 0,
+          scriptText: files.length === 1 ? script.trim() || null : index === 0 ? script.trim() || null : null,
+          mimeType: file.mimetype || null,
+          processStatus: "pending",
+          processMessage: "已进入后台处理队列",
+        },
+        include: includeMediaLibraryRelations(type),
+      });
+
+      try {
+        await promoteMediaUploadSource({
+          type,
+          itemId: item.id,
+          tempPath: file.path,
+          originalName: file.originalname,
+        });
+      } catch (error) {
+        await mediaModel.delete({ where: { id: item.id } }).catch(() => {});
+        throw error;
+      }
+
+      enqueueMediaProcessing(type, item.id);
+      created.push(serializeMediaLibraryItem(type, item));
+    }
+  } catch (error) {
+    await Promise.all(files.map((file) => cleanupStagedMediaUploadFile(file.path)));
+    return fail(res, error instanceof Error ? error.message : "素材上传失败", 500);
+  }
+
+  await writeAdminAuditLog(req, {
+    action: "upload_media_items",
+    entityType: type,
+    entityName: folder.name,
+    detail: {
+      type,
+      folderId,
+      uploadedCount: created.length,
+      fileNames: files.map((file) => normalizeDisplayText(file.originalname || "")),
+    },
+  });
+
+  return ok(res, created, `${type === "video" ? "视频" : "音频"}已上传，正在后台处理`);
 });
 
 adminContentRouter.post("/media/handout/upload", handoutUpload.single("file"), async (req, res) => {
@@ -1499,10 +1632,10 @@ adminContentRouter.post("/courses/:courseId/tags/:tagId/content", async (req, re
 
   if ((course.courseType ?? "audio") === "video") {
     const mediaItems = await prisma.video.findMany({
-      where: { id: { in: mediaIds } },
+      where: { id: { in: mediaIds }, processStatus: "ready" },
       select: { id: true },
     });
-    if (mediaItems.length !== mediaIds.length) return fail(res, "部分视频不存在，无法添加", 400);
+    if (mediaItems.length !== mediaIds.length) return fail(res, "部分视频不存在或尚未处理完成，无法添加", 400);
 
     const existing = await prisma.courseVideo.findMany({
       where: { courseId: course.id, videoId: { in: mediaIds } },

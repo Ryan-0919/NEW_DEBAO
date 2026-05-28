@@ -41,7 +41,7 @@ const formatFileSize = (bytes: number) => {
 const getFolderCount = (type: AdminCourseType, folder: AdminMediaFolder) => (type === "video" ? folder.videoCount ?? 0 : folder.audioCount ?? 0);
 
 const getProcessBadge = (item: AdminMediaItem, type: AdminCourseType) => {
-  if (type === "video" || item.processStatus === "ready" || !item.processStatus) {
+  if (item.processStatus === "ready" || !item.processStatus) {
     return (
       <Badge variant="outline" className="gap-1 border-emerald-100 bg-emerald-50 text-emerald-700">
         <CheckCircle2 className="size-3" />
@@ -77,6 +77,7 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
   const [totalPages, setTotalPages] = useState(1);
   const [showFolderDialog, setShowFolderDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showBatchMoveDialog, setShowBatchMoveDialog] = useState(false);
   const [editingFolder, setEditingFolder] = useState<AdminMediaFolder | null>(null);
   const [editingItem, setEditingItem] = useState<AdminMediaItem | null>(null);
@@ -92,6 +93,10 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
   const [handoutObjectKey, setHandoutObjectKey] = useState("");
   const [handoutFile, setHandoutFile] = useState<File | null>(null);
   const [savingItem, setSavingItem] = useState(false);
+  const [uploadFolderId, setUploadFolderId] = useState("");
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadScript, setUploadScript] = useState("");
+  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   const labels = type === "video"
     ? { title: "视频库", single: "视频", folder: "视频文件夹", icon: Video }
@@ -104,6 +109,7 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
   const selectedItems = useMemo(() => items.filter((item) => selectedItemSet.has(item.id)), [items, selectedItemSet]);
   const selectedReferencedCount = selectedItems.filter((item) => item.courseRefs.length > 0).length;
   const allVisibleSelected = items.length > 0 && items.every((item) => selectedItemSet.has(item.id));
+  const uploadAccept = type === "video" ? ".mp4,.mov,.m4v,.webm,.avi,.mkv,video/*" : ".mp3,.wav,.m4a,.aac,.ogg,.flac,audio/*";
 
   const loadBase = async () => {
     setLoading(true);
@@ -328,6 +334,43 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
     }
   };
 
+  const openUploadDialog = () => {
+    if (folders.length === 0) {
+      toast.error("请先创建文件夹");
+      return;
+    }
+    setUploadFolderId(selectedFolderId || folders[0]?.id || "");
+    setUploadFiles([]);
+    setUploadScript("");
+    setShowUploadDialog(true);
+  };
+
+  const uploadMediaItems = async () => {
+    if (!uploadFolderId) {
+      toast.error("请选择目标文件夹");
+      return;
+    }
+    if (uploadFiles.length === 0) {
+      toast.error(`请选择要上传的${labels.single}文件`);
+      return;
+    }
+
+    setUploadingMedia(true);
+    try {
+      const uploaded = await adminContentService.uploadMediaItems(type, uploadFolderId, uploadFiles, uploadScript);
+      toast.success(`已上传 ${uploaded.length} 个${labels.single}，后台处理中`);
+      setShowUploadDialog(false);
+      setUploadFiles([]);
+      setUploadScript("");
+      setSelectedFolderId(uploadFolderId);
+      await refreshAll();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `上传${labels.single}失败`);
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
   const clearHandout = () => {
     setHandoutFile(null);
     setHandoutName("");
@@ -345,17 +388,23 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
             <h1 className="text-2xl font-semibold text-slate-900">{labels.title}</h1>
             <p className="mt-2 text-sm text-slate-500">集中维护名称、文件夹、文稿、讲义、引用课程和处理状态。</p>
           </div>
-          <Button
-            className="bg-blue-600 text-white hover:bg-blue-700"
-            onClick={() => {
-              setEditingFolder(null);
-              setFolderName("");
-              setShowFolderDialog(true);
-            }}
-          >
-            <FolderPlus className="mr-2 size-4" />
-            新建文件夹
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" onClick={openUploadDialog}>
+              <UploadCloud className="mr-2 size-4" />
+              上传{labels.single}
+            </Button>
+            <Button
+              className="bg-blue-600 text-white hover:bg-blue-700"
+              onClick={() => {
+                setEditingFolder(null);
+                setFolderName("");
+                setShowFolderDialog(true);
+              }}
+            >
+              <FolderPlus className="mr-2 size-4" />
+              新建文件夹
+            </Button>
+          </div>
         </div>
 
         <div className="grid shrink-0 gap-3 md:grid-cols-4">
@@ -363,7 +412,7 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
             { label: `${labels.single}总数`, value: meta?.totalCount ?? 0, icon: TitleIcon },
             { label: "已引用", value: meta?.referencedCount ?? 0, icon: CheckCircle2 },
             { label: "缺文稿", value: meta?.pendingScriptCount ?? 0, icon: FileText },
-            { label: "文件夹", value: folders.length, icon: Folder },
+            { label: "处理中", value: meta?.processingCount ?? 0, icon: Loader2 },
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -659,6 +708,121 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
               disabled={batchActionLoading || !batchTargetFolderId || selectedItems.every((item) => item.folderId === batchTargetFolderId)}
             >
               {batchActionLoading ? "移动中..." : "确认移动"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showUploadDialog}
+        onOpenChange={(open) => {
+          if (uploadingMedia) return;
+          setShowUploadDialog(open);
+        }}
+      >
+        <DialogContent className="flex h-[calc(100vh-48px)] w-[calc(100vw-32px)] max-w-[1120px] flex-col overflow-hidden border border-slate-200 bg-white p-0 text-slate-900 sm:max-w-[1120px]">
+          <DialogHeader className="border-b border-slate-200 px-6 py-5">
+            <DialogTitle>上传{labels.single}到{labels.title}</DialogTitle>
+            <DialogDescription>
+              {type === "video"
+                ? "视频会先进入后台解码/转码队列，处理完成后可在课程中引用。支持长视频上传。"
+                : "音频会先进入后台解码/转码队列，处理完成后可在课程中引用。"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-h-0 overflow-y-auto px-6 py-5">
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <Label>目标文件夹</Label>
+                  <Select value={uploadFolderId} onValueChange={setUploadFolderId}>
+                    <SelectTrigger className="border-slate-200 bg-white">
+                      <SelectValue placeholder="请选择目标文件夹" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      {folders.map((folder) => (
+                        <SelectItem key={folder.id} value={folder.id}>
+                          {folder.name} ({getFolderCount(type, folder)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-blue-200 bg-blue-50/60 px-5 py-8 text-center hover:bg-blue-50">
+                  <UploadCloud className="mb-4 size-10 text-blue-600" />
+                  <span className="text-base font-semibold text-blue-700">选择本地{labels.single}文件</span>
+                  <span className="mt-2 text-sm text-slate-500">
+                    {type === "video" ? "支持 MP4、MOV、M4V、WEBM、AVI、MKV，可多选" : "支持 MP3、WAV、M4A、AAC、OGG、FLAC，可多选"}
+                  </span>
+                  <Input
+                    type="file"
+                    accept={uploadAccept}
+                    multiple
+                    className="hidden"
+                    onChange={(event) => setUploadFiles(Array.from(event.target.files ?? []))}
+                  />
+                </label>
+
+                <div className="space-y-2">
+                  <Label>文稿（可选）</Label>
+                  <Textarea
+                    rows={8}
+                    value={uploadScript}
+                    onChange={(event) => setUploadScript(event.target.value)}
+                    placeholder={`如果只上传一个${labels.single}，这里会作为该素材的文稿；多选时只写入第一个素材。`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <aside className="min-h-0 overflow-y-auto border-t border-slate-200 bg-slate-50 px-6 py-5 lg:border-l lg:border-t-0">
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-base font-semibold text-slate-900">待上传文件</h3>
+                  <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">{uploadFiles.length}</Badge>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {uploadFiles.length > 0 ? (
+                    uploadFiles.map((file, index) => (
+                      <div key={`${file.name}-${file.size}-${index}`} className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                          {type === "video" ? <Video className="size-4" /> : <Volume2 className="size-4" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-800">{file.name}</p>
+                          <p className="mt-1 text-xs text-slate-500">{formatFileSize(file.size) || "未知大小"}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-slate-400 hover:text-rose-600"
+                          onClick={() => setUploadFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                          aria-label={`移除${file.name}`}
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-md border border-dashed border-slate-200 px-3 py-12 text-center text-sm text-slate-400">
+                      还没有选择文件
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                {type === "video"
+                  ? "上传后会转成浏览器更稳定的 MP4 播放格式。长视频处理时间会更久，处理期间请在列表中查看状态。"
+                  : "上传后会统一处理为更适合在线播放的音频格式。处理完成前不能添加到课程。"}
+              </div>
+            </aside>
+          </div>
+
+          <DialogFooter className="border-t border-slate-200 px-6 py-4">
+            <Button variant="outline" onClick={() => setShowUploadDialog(false)} disabled={uploadingMedia}>取消</Button>
+            <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => void uploadMediaItems()} disabled={uploadingMedia || uploadFiles.length === 0 || !uploadFolderId}>
+              {uploadingMedia ? "上传中..." : `开始上传 ${uploadFiles.length || ""}`}
             </Button>
           </DialogFooter>
         </DialogContent>

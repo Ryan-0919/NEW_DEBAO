@@ -141,7 +141,8 @@ export function MockExamLaunch() {
   };
 
   if (isMobileBlocked) {
-    return <MockExamDesktopNotice />;
+    const selectedPaperType = selectedPaper?.paperType === "objective" ? "objectiveMock" : selectedPaper?.paperType === "subjective" ? "subjectiveReview" : "mockExam";
+    return <MockExamDesktopNotice feature={selectedPaperType} />;
   }
 
   if (loading) {

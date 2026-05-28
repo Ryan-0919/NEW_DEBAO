@@ -1,4 +1,4 @@
-import { adminDelete, adminPatchJson, adminPostForm, adminPostJson, adminRequest, buildAdminQueryString } from "./adminApiClient";
+import { adminDelete, adminPatchJson, adminPostForm, adminPostJson, adminRequest, adminRequestBlob, buildAdminQueryString } from "./adminApiClient";
 
 export type AdminRoleValue = "super_admin" | "operations_admin" | "user_admin" | "review_admin";
 
@@ -247,6 +247,8 @@ export type AdminExamRecordScorePage = AdminPagedResult<AdminExamRecord> & {
   paper: AdminExamPaperOption;
 };
 
+export type AdminExamRecordExportScope = "all" | "paper" | "series" | "filtered";
+
 export const adminOperationsService = {
   getDashboardSummary: () => adminRequest<AdminDashboardSummary>("/api/admin/dashboard/summary"),
   getAdmins: () => adminRequest<AdminAccount[]>("/api/admin/admins"),
@@ -296,6 +298,19 @@ export const adminOperationsService = {
       dateTo?: string;
     } = {},
   ) => adminRequest<AdminPagedResult<AdminExamRecord>>(`/api/admin/exam-records${buildAdminQueryString(params)}`),
+  exportExamRecords: (
+    params: {
+      scope: AdminExamRecordExportScope;
+      keyword?: string;
+      paperId?: string;
+      seriesId?: string;
+      paperType?: string;
+      status?: string;
+      reviewWorkflowStatus?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    },
+  ) => adminRequestBlob(`/api/admin/exam-records/export${buildAdminQueryString(params)}`),
   getExamRecordDetail: (recordId: string) => adminRequest<AdminExamRecordDetail>(`/api/admin/exam-records/${encodeURIComponent(recordId)}`),
   getPaperScores: (
     paperId: string,

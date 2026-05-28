@@ -47,10 +47,12 @@ export type AdminMockExamReviewRecord = {
   subjectiveQuestionCount: number;
   answeredSubjectiveCount: number;
   reviewedSubjectiveCount: number;
+  publishedSubjectiveCount?: number;
   submittedAt: string;
   updatedAt: string;
   reviewedAt: string;
   publishedAt: string;
+  hasPublishedReview?: boolean;
   consumedSeconds: number;
   lastAiReviewError: string;
   manualReviewVersion: number;

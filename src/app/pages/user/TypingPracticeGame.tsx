@@ -706,7 +706,7 @@ export function TypingPracticeGame() {
   }, [inputValue]);
 
   if (isMobileBlocked) {
-    return <MockExamDesktopNotice />;
+    return <MockExamDesktopNotice feature="typingPractice" />;
   }
 
   if (phase === "loading" || !text) {

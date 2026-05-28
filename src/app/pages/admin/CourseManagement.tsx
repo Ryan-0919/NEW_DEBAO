@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, FileText, Folder, ImageUp, Link, Pencil, Plus, Save, Search, Rows3, Trash2, Upload, Video, Volume2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, FileText, Folder, ImageUp, Link, Pencil, Plus, Save, Search, Rows3, Trash2, Upload, UploadCloud, Video, Volume2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -58,6 +58,11 @@ const formatDuration = (seconds = 0) => {
   const remainSeconds = safeSeconds % 60;
   return `${minutes}:${`${remainSeconds}`.padStart(2, "0")}`;
 };
+const formatFileSize = (bytes: number) => {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
 
 const mediaStatusMeta = (item: AdminMediaItem) => {
   if (!item.processStatus) return { label: "可用", className: "border-emerald-100 bg-emerald-50 text-emerald-700" };
@@ -98,6 +103,11 @@ export function CourseManagement() {
   const [mediaPickerFolderSelecting, setMediaPickerFolderSelecting] = useState(false);
   const [mediaPickerResult, setMediaPickerResult] = useState<AdminPagedResult<AdminMediaItem> | null>(null);
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
+  const [showCourseMediaUploadDialog, setShowCourseMediaUploadDialog] = useState(false);
+  const [courseUploadFolderId, setCourseUploadFolderId] = useState("");
+  const [courseUploadFiles, setCourseUploadFiles] = useState<File[]>([]);
+  const [courseUploadScript, setCourseUploadScript] = useState("");
+  const [courseUploading, setCourseUploading] = useState(false);
   const [authorizedQuestionBanks, setAuthorizedQuestionBanks] = useState<AdminQuestionBankBook[]>([]);
   const [courseQuestionBankLinks, setCourseQuestionBankLinks] = useState<AdminCourseQuestionBankLink[]>([]);
   const [linkedQuestionBankIds, setLinkedQuestionBankIds] = useState<string[]>([]);
@@ -153,9 +163,9 @@ export function CourseManagement() {
   const visibleSelectableMediaIds = useMemo(
     () =>
       (mediaPickerResult?.items ?? [])
-        .filter((item) => !boundMediaIds.has(item.id) && !(courseContent?.course.courseType === "audio" && item.processStatus !== "ready"))
+        .filter((item) => !boundMediaIds.has(item.id) && item.processStatus === "ready")
         .map((item) => item.id),
-    [boundMediaIds, courseContent?.course.courseType, mediaPickerResult],
+    [boundMediaIds, mediaPickerResult],
   );
 
   const allVisibleMediaSelected =
@@ -169,6 +179,9 @@ export function CourseManagement() {
 
   const coverPreviewUrl = form.coverUrl.trim();
   const hasHandout = Boolean(form.handoutUrl.trim() || form.handoutObjectKey.trim() || form.handoutName.trim());
+  const pickerType = courseContent?.course.courseType ?? "audio";
+  const pickerTypeLabel = pickerType === "video" ? "视频" : "音频";
+  const pickerUploadAccept = pickerType === "video" ? ".mp4,.mov,.m4v,.webm,.avi,.mkv,video/*" : ".mp3,.wav,.m4a,.aac,.ogg,.flac,audio/*";
 
   const loadCourses = async (initial = false) => {
     if (initial) setLoading(true);
@@ -213,17 +226,17 @@ export function CourseManagement() {
     void loadCourseQuestionBankLinks();
   }, []);
 
-  const loadMediaPickerItems = async (page = mediaPickerPage, searchKeyword = mediaPickerKeyword) => {
+  const loadMediaPickerItems = async (page = mediaPickerPage, searchKeyword = mediaPickerKeyword, folderIdOverride?: string) => {
     if (!courseContent || !mediaPickerTagId) return;
     setMediaPickerLoading(true);
+    const targetFolderId = folderIdOverride ?? mediaPickerFolderId;
     try {
       const result = await adminContentService.getMediaItems({
         type: courseContent.course.courseType,
-        folderId: mediaPickerFolderId,
+        folderId: targetFolderId,
         keyword: searchKeyword.trim(),
-        searchScope: mediaPickerFolderId ? "current" : "all",
+        searchScope: targetFolderId ? "current" : "all",
         refFilter: "all",
-        processStatus: courseContent.course.courseType === "audio" ? "ready" : undefined,
         sortMode: "uploaded-desc",
         page,
         pageSize: 20,
@@ -533,6 +546,48 @@ export function CourseManagement() {
     }
   };
 
+  const openCourseMediaUploadDialog = () => {
+    if (!courseContent) return;
+    if (mediaPickerFolders.length === 0) {
+      toast.error("请先在素材库创建文件夹");
+      return;
+    }
+    setCourseUploadFolderId(mediaPickerFolderId || mediaPickerFolders[0]?.id || "");
+    setCourseUploadFiles([]);
+    setCourseUploadScript("");
+    setShowCourseMediaUploadDialog(true);
+  };
+
+  const uploadCourseMediaItems = async () => {
+    if (!courseContent) return;
+    if (!courseUploadFolderId) {
+      toast.error("请选择目标文件夹");
+      return;
+    }
+    if (courseUploadFiles.length === 0) {
+      toast.error(`请选择要上传的${pickerTypeLabel}文件`);
+      return;
+    }
+
+    setCourseUploading(true);
+    try {
+      const uploaded = await adminContentService.uploadMediaItems(pickerType, courseUploadFolderId, courseUploadFiles, courseUploadScript);
+      toast.success(`已上传 ${uploaded.length} 个${pickerTypeLabel}，后台处理完成后可添加到课程`);
+      setShowCourseMediaUploadDialog(false);
+      setCourseUploadFiles([]);
+      setCourseUploadScript("");
+      setMediaPickerFolderId(courseUploadFolderId);
+      await Promise.all([
+        adminContentService.getMediaFolders(pickerType).then(setMediaPickerFolders),
+        loadMediaPickerItems(1, mediaPickerKeyword, courseUploadFolderId),
+      ]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `上传${pickerTypeLabel}失败`);
+    } finally {
+      setCourseUploading(false);
+    }
+  };
+
   const toggleMediaSelection = (mediaId: string) => {
     setSelectedMediaIds((current) => (current.includes(mediaId) ? current.filter((id) => id !== mediaId) : [...current, mediaId]));
   };
@@ -563,7 +618,6 @@ export function CourseManagement() {
         folderId: mediaPickerFolderId,
         searchScope: "current",
         refFilter: "all",
-        processStatus: courseContent.course.courseType === "audio" ? "ready" : undefined,
         sortMode: "uploaded-desc",
         pageSize: 100,
       };
@@ -574,7 +628,7 @@ export function CourseManagement() {
           : [];
       const folderItems = [firstPage, ...restPages].flatMap((pageResult) => pageResult.items);
       const nextIds = folderItems
-        .filter((item) => !boundMediaIds.has(item.id) && !(courseContent.course.courseType === "audio" && item.processStatus !== "ready"))
+        .filter((item) => !boundMediaIds.has(item.id) && item.processStatus === "ready")
         .map((item) => item.id);
       if (nextIds.length === 0) {
         toast.info("当前文件夹没有可添加的内容");
@@ -1244,6 +1298,10 @@ export function CourseManagement() {
                 当前：{selectedPickerFolder?.name ?? "全部文件夹"} · 共 {mediaPickerResult?.total ?? 0} 条 · 已选 {selectedMediaIds.length} 个
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" onClick={openCourseMediaUploadDialog}>
+                  <UploadCloud className="size-4" />
+                  批量上传{pickerTypeLabel}
+                </Button>
                 <Button variant="outline" className="border-slate-200 bg-white text-slate-700" disabled={visibleSelectableMediaIds.length === 0} onClick={toggleVisibleMediaSelection}>
                   {allVisibleMediaSelected ? "取消本页选择" : "选择本页"}
                 </Button>
@@ -1270,7 +1328,7 @@ export function CourseManagement() {
                   mediaPickerResult?.items.map((item) => {
                     const status = mediaStatusMeta(item);
                     const alreadyBound = boundMediaIds.has(item.id);
-                    const disabled = alreadyBound || (courseContent?.course.courseType === "audio" && item.processStatus !== "ready");
+                    const disabled = alreadyBound || item.processStatus !== "ready";
                     return (
                       <div key={item.id} className={`grid grid-cols-[44px_minmax(300px,1.4fr)_190px_120px_170px_140px_150px_110px] gap-3 px-4 py-3 ${disabled ? "bg-slate-50 text-slate-400" : "hover:bg-slate-50"}`}>
                         <div className="flex items-center">
@@ -1333,6 +1391,121 @@ export function CourseManagement() {
             <Button className="bg-blue-600 text-white hover:bg-blue-700" disabled={selectedMediaIds.length === 0 || contentActionLoading} onClick={() => void addSelectedMedia()}>
               <Check className="mr-2 size-4" />
               {contentActionLoading ? "添加中..." : `确认添加 ${selectedMediaIds.length} 个`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showCourseMediaUploadDialog}
+        onOpenChange={(open) => {
+          if (courseUploading) return;
+          setShowCourseMediaUploadDialog(open);
+        }}
+      >
+        <DialogContent className="flex h-[calc(100vh-48px)] w-[calc(100vw-32px)] max-w-[1040px] flex-col overflow-hidden border border-slate-200 bg-white p-0 text-slate-900 sm:max-w-[1040px]">
+          <DialogHeader className="border-b border-slate-200 px-6 py-5">
+            <DialogTitle>批量上传{pickerTypeLabel}</DialogTitle>
+            <DialogDescription>
+              文件会先进入{pickerTypeLabel}库处理队列，处理完成后再从列表中添加到当前课程，避免学生端播放未完成的内容。
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-h-0 overflow-y-auto px-6 py-5">
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <Label>目标文件夹</Label>
+                  <Select value={courseUploadFolderId} onValueChange={setCourseUploadFolderId}>
+                    <SelectTrigger className="border-slate-200 bg-white">
+                      <SelectValue placeholder="请选择目标文件夹" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      {mediaPickerFolders.map((folder) => (
+                        <SelectItem key={folder.id} value={folder.id}>
+                          {folder.name} ({getFolderCount(pickerType, folder)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-blue-200 bg-blue-50/60 px-5 py-8 text-center hover:bg-blue-50">
+                  <UploadCloud className="mb-4 size-10 text-blue-600" />
+                  <span className="text-base font-semibold text-blue-700">选择本地{pickerTypeLabel}文件</span>
+                  <span className="mt-2 text-sm text-slate-500">
+                    {pickerType === "video" ? "支持 MP4、MOV、M4V、WEBM、AVI、MKV，可多选" : "支持 MP3、WAV、M4A、AAC、OGG、FLAC，可多选"}
+                  </span>
+                  <Input
+                    type="file"
+                    accept={pickerUploadAccept}
+                    multiple
+                    className="hidden"
+                    onChange={(event) => setCourseUploadFiles(Array.from(event.target.files ?? []))}
+                  />
+                </label>
+
+                <div className="space-y-2">
+                  <Label>文稿（可选）</Label>
+                  <Textarea
+                    rows={8}
+                    value={courseUploadScript}
+                    onChange={(event) => setCourseUploadScript(event.target.value)}
+                    placeholder={`如果只上传一个${pickerTypeLabel}，这里会作为该素材的文稿；多选时只写入第一个素材。`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <aside className="min-h-0 overflow-y-auto border-t border-slate-200 bg-slate-50 px-6 py-5 lg:border-l lg:border-t-0">
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-base font-semibold text-slate-900">待上传文件</h3>
+                  <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">{courseUploadFiles.length}</Badge>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {courseUploadFiles.length > 0 ? (
+                    courseUploadFiles.map((file, index) => (
+                      <div key={`${file.name}-${file.size}-${index}`} className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                          {pickerType === "video" ? <Video className="size-4" /> : <Volume2 className="size-4" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-800">{file.name}</p>
+                          <p className="mt-1 text-xs text-slate-500">{formatFileSize(file.size) || "未知大小"}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-slate-400 hover:text-rose-600"
+                          onClick={() => setCourseUploadFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                          aria-label={`移除${file.name}`}
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-md border border-dashed border-slate-200 px-3 py-12 text-center text-sm text-slate-400">
+                      还没有选择文件
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                {pickerType === "video"
+                  ? "视频上传后会统一解码并转成 MP4，长视频处理时间会更久。处理完成前列表中不会作为可添加内容。"
+                  : "音频上传后会统一处理为在线播放格式。处理完成前列表中不会作为可添加内容。"}
+              </div>
+            </aside>
+          </div>
+
+          <DialogFooter className="border-t border-slate-200 px-6 py-4">
+            <Button variant="outline" onClick={() => setShowCourseMediaUploadDialog(false)} disabled={courseUploading}>
+              取消
+            </Button>
+            <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => void uploadCourseMediaItems()} disabled={courseUploading || courseUploadFiles.length === 0 || !courseUploadFolderId}>
+              {courseUploading ? "上传中..." : `开始上传 ${courseUploadFiles.length || ""}`}
             </Button>
           </DialogFooter>
         </DialogContent>

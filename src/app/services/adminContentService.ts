@@ -141,6 +141,8 @@ export type AdminMediaBatchDeleteResult = {
   blocked: string[];
 };
 
+export type AdminMediaUploadResult = AdminMediaItem[];
+
 export type AdminMockExamPaperType = "objective" | "subjective";
 export type AdminMockExamPaperStatus = "draft" | "published";
 
@@ -297,6 +299,17 @@ export const adminContentService = {
     formData.set("type", type);
     formData.set("file", file);
     return adminRequest<AdminHandoutUploadResult>("/api/admin/content/media/handout/upload", {
+      method: "POST",
+      body: formData,
+    });
+  },
+  uploadMediaItems: (type: AdminCourseType, folderId: string, files: File[], script?: string) => {
+    const formData = new FormData();
+    formData.set("type", type);
+    formData.set("folderId", folderId);
+    if (script) formData.set("script", script);
+    files.forEach((file) => formData.append("files", file));
+    return adminRequest<AdminMediaUploadResult>("/api/admin/content/media/items/upload", {
       method: "POST",
       body: formData,
     });

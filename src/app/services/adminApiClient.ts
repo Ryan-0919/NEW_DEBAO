@@ -63,6 +63,35 @@ export const adminRequest = async <T>(path: string, options?: RequestInit): Prom
   return json.data;
 };
 
+export const adminRequestBlob = async (path: string, options?: RequestInit): Promise<Blob> => {
+  const headers = new Headers(options?.headers);
+  const token = getAdminToken();
+
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path), {
+      ...options,
+      headers,
+    });
+  } catch {
+    throw new AdminApiRequestError("无法连接得宝后台服务，请确认 API 已启动");
+  }
+
+  if (!response.ok) {
+    const json = (await response.clone().json().catch(() => null)) as Partial<ApiEnvelope<unknown>> | null;
+    const message = json?.message ?? "请求失败";
+    if (response.status === 401) clearAdminSession();
+    throw new AdminApiRequestError(message, {
+      code: json?.code,
+      status: response.status,
+    });
+  }
+
+  return response.blob();
+};
+
 export const adminPostJson = <T>(path: string, body?: unknown) =>
   adminRequest<T>(path, {
     method: "POST",

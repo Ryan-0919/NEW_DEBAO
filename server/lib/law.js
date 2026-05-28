@@ -123,6 +123,13 @@ const sortLawEntries = (left, right) => {
   return (left.sourceLawId ?? 0) - (right.sourceLawId ?? 0);
 };
 
+const sortLawEntriesByTreeOrder = (left, right) => {
+  if (left.topCategoryId !== right.topCategoryId) return left.topCategoryId - right.topCategoryId;
+  if ((left.sourceLawId ?? 0) !== (right.sourceLawId ?? 0)) return (left.sourceLawId ?? 0) - (right.sourceLawId ?? 0);
+  if ((left.position ?? 0) !== (right.position ?? 0)) return (left.position ?? 0) - (right.position ?? 0);
+  return 0;
+};
+
 export const parseLawPathTitles = (value) =>
   parseJsonArray(value)
     .map((item) => normalizeDisplayText(item))
@@ -184,7 +191,7 @@ export const buildLawTree = (entries = []) => {
   const root = [];
   const folderMap = new Map();
 
-  for (const entry of [...entries].sort(sortLawEntries)) {
+  for (const entry of [...entries].sort(sortLawEntriesByTreeOrder)) {
     const pathLabels = parseLawPathTitles(entry.pathTitlesJson);
     const folderLabels = pathLabels.slice(0, Math.max(pathLabels.length - 1, 0));
     let currentChildren = root;
@@ -267,7 +274,7 @@ export const serializeLawSearchResult = (entry, keyword) => {
   };
 };
 
-export const listLawEntriesForNode = (entries = [], nodeId = "") => {
+export const listLawEntriesForNode = (entries = [], nodeId = "", sorter = sortLawEntriesByTreeOrder) => {
   const parsed = parseLawNodeId(nodeId);
 
   if (parsed.type === "record") {
@@ -291,7 +298,7 @@ export const listLawEntriesForNode = (entries = [], nodeId = "") => {
         const pathLabels = parseLawPathTitles(entry.pathTitlesJson);
         return parsed.pathLabels.every((label, index) => pathLabels[index] === label);
       })
-      .sort(sortLawEntries);
+      .sort(sorter);
 
     if (matched.length === 0) return null;
 
@@ -308,14 +315,14 @@ export const listLawEntriesForNode = (entries = [], nodeId = "") => {
   return null;
 };
 
-const getPublishedHydratedLawEntries = async ({ selectContent = false } = {}) => {
+const getPublishedHydratedLawEntries = async ({ selectContent = false, treeOrder = true } = {}) => {
   const entries = await prisma.lawEntry.findMany({
     select: selectContent ? lawEntryContentSelect : lawEntryMetaSelect,
     orderBy: [{ topCategoryId: "asc" }, { position: "asc" }, { sourceLawId: "asc" }],
   });
 
   const hydrated = await hydrateLawEntries(entries);
-  return hydrated.filter((entry) => entry.isPublished !== false).sort(sortLawEntries);
+  return hydrated.filter((entry) => entry.isPublished !== false).sort(treeOrder ? sortLawEntriesByTreeOrder : sortLawEntries);
 };
 
 export const getLawOverview = async () => {
@@ -355,7 +362,7 @@ export const getLawContentByNode = async (nodeId) => {
 
   if (parsed.type === "path") {
     const entries = await getPublishedHydratedLawEntries({ selectContent: true });
-    return listLawEntriesForNode(entries, nodeId);
+    return listLawEntriesForNode(entries, nodeId, sortLawEntriesByTreeOrder);
   }
 
   return null;

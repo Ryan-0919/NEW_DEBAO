@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import * as XLSX from "xlsx";
 import { prisma } from "../lib/prisma.js";
 import { hashPassword } from "../lib/auth.js";
 import { requireAdminAuth, requireAdminRoles } from "../middleware/auth.js";
@@ -51,6 +52,10 @@ const toStringArray = (value) =>
   [...new Set((Array.isArray(value) ? value : value ? [value] : []).map((item) => `${item}`.trim()).filter(Boolean))];
 
 const formatOptionalDateTime = (value) => (value ? formatDateTime(value) : "");
+const sanitizeFileNamePart = (value, fallback = "导出") => {
+  const text = toTrimmedString(value).replace(/[\\/:*?"<>|]+/g, "_").slice(0, 80);
+  return text || fallback;
+};
 
 const buildPagedResult = ({ items, total, page, pageSize }) => ({
   items,
@@ -408,6 +413,43 @@ const serializeExamRecord = (record, leaderboardEntry = null) => ({
   publishedAt: formatOptionalDateTime(record.publishedAt),
   updatedAt: formatOptionalDateTime(record.updatedAt),
 });
+
+const buildExamRecordExportRows = (records) =>
+  records.map((record) => {
+    const serialized = serializeExamRecord(
+      record,
+      (record.paper?.leaderboardEntries ?? []).find((entry) => entry.userId === record.userId) ?? null,
+    );
+    return {
+      记录ID: serialized.id,
+      用户ID: serialized.userId,
+      手机号: serialized.userPhone,
+      昵称: serialized.userNickname,
+      用户状态: serialized.userStatus,
+      试卷ID: serialized.paperId,
+      试卷编码: serialized.paperCode,
+      试卷名称: serialized.paperTitle,
+      试卷分组: serialized.seriesName || "未分组",
+      类型: serialized.paperTypeLabel,
+      考试状态: serialized.statusLabel,
+      批改状态: serialized.reviewWorkflowStatusLabel,
+      考试次数: serialized.attemptNo,
+      得分: serialized.score,
+      满分: serialized.paperTotalScore,
+      及格线: serialized.passScore,
+      题量: serialized.questionCount,
+      已答: serialized.answeredCount,
+      正确数: serialized.correctCount,
+      考试时长秒: serialized.allottedSeconds,
+      实际用时秒: serialized.consumedSeconds,
+      手动排名: serialized.manualRank ?? "",
+      开考时间: serialized.startedAt,
+      交卷时间: serialized.submittedAt,
+      批改时间: serialized.reviewedAt,
+      发布时间: serialized.publishedAt,
+      更新时间: serialized.updatedAt,
+    };
+  });
 
 const safeParseJson = (value, fallback) => {
   if (!value) return fallback;
@@ -1150,6 +1192,79 @@ adminOperationsRouter.get("/exam-records", requireAdminRoles(...EXAM_RECORD_VIEW
       pageSize,
     }),
   );
+});
+
+adminOperationsRouter.get("/exam-records/export", requireAdminRoles(...EXAM_RECORD_VIEW_ROLES), async (req, res) => {
+  const scope = `${req.query?.scope ?? "all"}`.trim();
+  const selectedPaperId = `${req.query?.paperId ?? ""}`.trim();
+  const selectedSeriesId = `${req.query?.seriesId ?? ""}`.trim();
+  let exportQuery = {};
+  let fileNamePrefix = "全部试卷考试记录";
+  let auditScope = "all";
+
+  if (scope === "paper") {
+    if (!selectedPaperId || selectedPaperId === "all") return fail(res, "请选择要导出的试卷", 400);
+    const paper = await prisma.mockExamPaper.findUnique({
+      where: { id: selectedPaperId },
+      include: { series: { select: { id: true, name: true } } },
+    });
+    if (!paper) return fail(res, "试卷不存在", 404);
+    exportQuery = { paperId: selectedPaperId };
+    fileNamePrefix = `${sanitizeFileNamePart(paper.title, "当前试卷")}-全部考试记录`;
+    auditScope = "paper";
+  } else if (scope === "series") {
+    if (!selectedSeriesId || selectedSeriesId === "all") return fail(res, "请选择要导出的试卷分组", 400);
+    const series =
+      selectedSeriesId === "__none__"
+        ? { id: "__none__", name: "未分组" }
+        : await prisma.mockExamSeries.findUnique({ where: { id: selectedSeriesId }, select: { id: true, name: true } });
+    if (!series) return fail(res, "试卷分组不存在", 404);
+    exportQuery = { seriesId: selectedSeriesId };
+    fileNamePrefix = `${sanitizeFileNamePart(series.name, "当前分组")}-全部考试记录`;
+    auditScope = "series";
+  } else if (scope === "filtered") {
+    exportQuery = req.query;
+    fileNamePrefix = "当前筛选考试记录";
+    auditScope = "filtered";
+  }
+
+  const where = buildExamRecordWhere(exportQuery);
+  const records = await prisma.mockExamRecord.findMany({
+    where,
+    include: {
+      user: { select: { id: true, phone: true, nickname: true, status: true } },
+      paper: {
+        include: {
+          series: { select: { id: true, name: true } },
+          leaderboardEntries: { select: { userId: true, manualRank: true } },
+        },
+      },
+    },
+    orderBy: [{ submittedAt: "desc" }, { updatedAt: "desc" }],
+  });
+
+  const rows = buildExamRecordExportRows(records);
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 提示: "暂无考试记录" }]);
+  XLSX.utils.book_append_sheet(workbook, sheet, "考试记录");
+  const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+  const fileName = `${fileNamePrefix}-${formatDateTime(new Date()).replace(/[ :]/g, "-")}.xlsx`;
+
+  await writeAdminAuditLog(req, {
+    action: "export_exam_records",
+    entityType: "mock_exam_record",
+    entityName: fileNamePrefix,
+    detail: {
+      scope: auditScope,
+      paperId: selectedPaperId,
+      seriesId: selectedSeriesId,
+      exportedCount: records.length,
+    },
+  });
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  return res.send(buffer);
 });
 
 adminOperationsRouter.get("/exam-records/:recordId", requireAdminRoles(...EXAM_RECORD_VIEW_ROLES), async (req, res) => {

@@ -1,0 +1,304 @@
+.debao-theme-toggle {
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.045);
+  color: #7f9fbd;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.debao-theme-toggle:hover {
+  border-color: rgba(201,151,62,0.35);
+  background: rgba(201,151,62,0.1);
+  color: #c9973e;
+}
+
+.debao-theme-light {
+  background: #f5f7fb !important;
+  color: #172033 !important;
+}
+
+.debao-theme-light .debao-app-content {
+  background:
+    radial-gradient(circle at top left, rgba(78,142,247,0.08), transparent 32%),
+    linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+  min-height: 100vh;
+}
+
+.debao-theme-light .debao-nav-shell {
+  background: rgba(255,255,255,0.92) !important;
+  border-bottom-color: rgba(15,23,42,0.08) !important;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.06);
+}
+
+.debao-theme-light .debao-nav-tabs > button {
+  color: #60758d !important;
+}
+
+.debao-theme-light .debao-nav-tabs > button[style*="#c9973e"],
+.debao-theme-light .debao-nav-tabs > button[style*="201, 151, 62"],
+.debao-theme-light .debao-nav-tabs > button[style*="201,151,62"] {
+  background: rgba(201,151,62,0.13) !important;
+  color: #93671f !important;
+}
+
+.debao-theme-light .debao-theme-toggle {
+  border-color: rgba(15,23,42,0.08);
+  background: #ffffff;
+  color: #314256;
+  box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+}
+
+.debao-theme-light .debao-nav-actions > div,
+.debao-theme-light .debao-nav-actions > button:not(.debao-theme-toggle) {
+  border-color: rgba(15,23,42,0.08) !important;
+  background: rgba(255,255,255,0.82) !important;
+}
+
+.debao-theme-light .debao-nav-actions [style*="#c8d8ee"],
+.debao-theme-light .debao-nav-actions [style*="rgb(200, 216, 238)"] {
+  color: #1d2d3f !important;
+}
+
+.debao-theme-light .debao-themed-page {
+  color: #1c2b3d !important;
+}
+
+.debao-theme-light .debao-themed-page[style*="background: #090e1a"],
+.debao-theme-light .debao-themed-page[style*="background:#090e1a"],
+.debao-theme-light .debao-themed-page[style*="background: rgb(9, 14, 26)"] {
+  background: transparent !important;
+}
+
+.debao-theme-light .debao-themed-page [style*="background: #0f1826"],
+.debao-theme-light .debao-themed-page [style*="background:#0f1826"],
+.debao-theme-light .debao-themed-page [style*="background: rgb(15, 24, 38)"],
+.debao-theme-light .debao-themed-page [style*="background-color: rgb(15, 24, 38)"],
+.debao-theme-light .debao-themed-page [style*="background: #0a1020"],
+.debao-theme-light .debao-themed-page [style*="background:#0a1020"],
+.debao-theme-light .debao-themed-page [style*="background: rgb(10, 16, 32)"],
+.debao-theme-light .debao-themed-page [style*="background-color: rgb(10, 16, 32)"],
+.debao-theme-light .debao-themed-page [style*="background: #101828"],
+.debao-theme-light .debao-themed-page [style*="background:#101828"],
+.debao-theme-light .debao-themed-page [style*="background: rgb(16, 24, 40)"],
+.debao-theme-light .debao-themed-page [style*="background-color: rgb(16, 24, 40)"],
+.debao-theme-light .debao-themed-page [style*="background: #090e1a"],
+.debao-theme-light .debao-themed-page [style*="background:#090e1a"],
+.debao-theme-light .debao-themed-page [style*="background: rgb(9, 14, 26)"],
+.debao-theme-light .debao-themed-page [style*="background-color: rgb(9, 14, 26)"],
+.debao-theme-light .debao-themed-page [style*="background: rgba(255,255,255,0.015)"],
+.debao-theme-light .debao-themed-page [style*="background: rgba(255, 255, 255, 0.015)"],
+.debao-theme-light .debao-themed-page [style*="background: rgba(255,255,255,0.02)"],
+.debao-theme-light .debao-themed-page [style*="background: rgba(255, 255, 255, 0.02)"],
+.debao-theme-light .debao-themed-page [style*="background: rgba(255,255,255,0.03)"],
+.debao-theme-light .debao-themed-page [style*="background: rgba(255, 255, 255, 0.03)"],
+.debao-theme-light .debao-themed-page [style*="background: rgba(255,255,255,0.035)"],
+.debao-theme-light .debao-themed-page [style*="background: rgba(255, 255, 255, 0.035)"],
+.debao-theme-light .debao-themed-page [style*="background: rgba(255,255,255,0.04)"],
+.debao-theme-light .debao-themed-page [style*="background: rgba(255, 255, 255, 0.04)"] {
+  background: #ffffff !important;
+}
+
+.debao-theme-light .debao-themed-page [style*="rgba(255,255,255,0.05)"],
+.debao-theme-light .debao-themed-page [style*="rgba(255, 255, 255, 0.05)"],
+.debao-theme-light .debao-themed-page [style*="rgba(255,255,255,0.06)"],
+.debao-theme-light .debao-themed-page [style*="rgba(255, 255, 255, 0.06)"],
+.debao-theme-light .debao-themed-page [style*="rgba(255,255,255,0.07)"],
+.debao-theme-light .debao-themed-page [style*="rgba(255, 255, 255, 0.07)"],
+.debao-theme-light .debao-themed-page [style*="rgba(255,255,255,0.08)"],
+.debao-theme-light .debao-themed-page [style*="rgba(255, 255, 255, 0.08)"],
+.debao-theme-light .debao-themed-page [style*="rgba(255,255,255,0.09)"],
+.debao-theme-light .debao-themed-page [style*="rgba(255, 255, 255, 0.09)"] {
+  border-color: rgba(15,23,42,0.09) !important;
+}
+
+.debao-theme-light .debao-themed-page [style*="#dde4f0"],
+.debao-theme-light .debao-themed-page [style*="rgb(221, 228, 240)"],
+.debao-theme-light .debao-themed-page [style*="#f0e6d0"],
+.debao-theme-light .debao-themed-page [style*="rgb(240, 230, 208)"],
+.debao-theme-light .debao-themed-page [style*="#c8d8ee"],
+.debao-theme-light .debao-themed-page [style*="rgb(200, 216, 238)"] {
+  color: #162334 !important;
+}
+
+.debao-theme-light .debao-themed-page [style*="#8fa3be"],
+.debao-theme-light .debao-themed-page [style*="rgb(143, 163, 190)"],
+.debao-theme-light .debao-themed-page [style*="#7a9abe"],
+.debao-theme-light .debao-themed-page [style*="rgb(122, 154, 190)"],
+.debao-theme-light .debao-themed-page [style*="#5a7898"],
+.debao-theme-light .debao-themed-page [style*="rgb(90, 120, 152)"],
+.debao-theme-light .debao-themed-page [style*="#4a6888"],
+.debao-theme-light .debao-themed-page [style*="rgb(74, 104, 136)"],
+.debao-theme-light .debao-themed-page [style*="#4a6a88"],
+.debao-theme-light .debao-themed-page [style*="rgb(74, 106, 136)"] {
+  color: #5f7287 !important;
+}
+
+.debao-theme-light .debao-themed-page [style*="#3a5570"],
+.debao-theme-light .debao-themed-page [style*="rgb(58, 85, 112)"],
+.debao-theme-light .debao-themed-page [style*="#2e4260"],
+.debao-theme-light .debao-themed-page [style*="rgb(46, 66, 96)"],
+.debao-theme-light .debao-themed-page [style*="#1e3050"],
+.debao-theme-light .debao-themed-page [style*="rgb(30, 48, 80)"] {
+  color: #7a8797 !important;
+}
+
+.debao-theme-light .debao-themed-page input,
+.debao-theme-light .debao-themed-page select,
+.debao-theme-light .debao-themed-page textarea {
+  background-color: #fff !important;
+  border-color: rgba(15,23,42,0.12) !important;
+  color: #172033 !important;
+}
+
+.debao-theme-light .debao-themed-page input::placeholder,
+.debao-theme-light .debao-themed-page textarea::placeholder {
+  color: #93a1b2 !important;
+}
+
+.debao-theme-light .debao-home-hero [style*="linear-gradient(105deg"] {
+  background: linear-gradient(105deg, rgba(12,22,36,0.72) 0%, rgba(12,22,36,0.4) 42%, rgba(12,22,36,0.08) 100%) !important;
+}
+
+.debao-theme-light .debao-auth-page {
+  background:
+    radial-gradient(circle at 20% 15%, rgba(78,142,247,0.12), transparent 28%),
+    radial-gradient(circle at 80% 20%, rgba(29,201,164,0.10), transparent 26%),
+    #f5f7fb !important;
+}
+
+.debao-theme-light .debao-audio-breadcrumb,
+.debao-theme-light .debao-video-breadcrumb {
+  background: rgba(255,255,255,0.76) !important;
+  border-bottom-color: rgba(15,23,42,0.08) !important;
+}
+
+.debao-theme-light .debao-audio-sidebar,
+.debao-theme-light .debao-video-sidebar {
+  border-color: rgba(15,23,42,0.08) !important;
+}
+
+.debao-theme-light .debao-audio-player-bar {
+  background: rgba(255,255,255,0.96) !important;
+  border-top-color: rgba(15,23,42,0.08) !important;
+  box-shadow: 0 -12px 32px rgba(15,23,42,0.07);
+}
+
+.debao-theme-light .debao-audio-player-bar [style*="#c8d8ee"],
+.debao-theme-light .debao-audio-player-bar [style*="#dde4f0"] {
+  color: #172033 !important;
+}
+
+.debao-theme-light .debao-video-player {
+  box-shadow: 0 16px 44px rgba(15,23,42,0.12);
+}
+
+.debao-theme-light .debao-course-card-cover,
+.debao-theme-light .debao-home-hero {
+  box-shadow: 0 18px 44px rgba(15,23,42,0.08);
+}
+
+.debao-theme-light .debao-question-practice-page > div:first-child,
+.debao-theme-light .debao-question-practice-page > div:nth-child(2) {
+  border-color: rgba(15,23,42,0.08) !important;
+}
+
+.debao-theme-light .debao-question-practice-page [style*="position: fixed"][style*="rgba(3,7,13"],
+.debao-theme-light .debao-question-practice-page [style*="position: fixed"][style*="rgba(3, 7, 13"] {
+  background: rgba(15,23,42,0.36) !important;
+}
+
+.debao-theme-light .debao-mock-exam-list-page [style*="linear-gradient(180deg,#101b2b"],
+.debao-theme-light .debao-mock-exam-list-page [style*="linear-gradient(180deg, #101b2b"] {
+  background: linear-gradient(180deg,#ffffff 0%,#f8fafc 100%) !important;
+}
+
+.debao-theme-light .debao-desktop-only-notice {
+  background: #f5f7fb !important;
+  color: #172033 !important;
+}
+
+.debao-theme-light .debao-desktop-only-notice > div:first-child {
+  background: linear-gradient(180deg,#ffffff 0%,#f5f7fb 58%,#eef3f8 100%) !important;
+}
+
+.debao-theme-light .debao-desktop-only-panel {
+  border-color: rgba(15,23,42,0.08) !important;
+  background: rgba(255,255,255,0.94) !important;
+  box-shadow: 0 24px 80px rgba(15,23,42,0.10) !important;
+}
+
+.debao-theme-light .debao-desktop-only-notice .text-white,
+.debao-theme-light .debao-desktop-only-notice [class*="text-white"] {
+  color: #172033 !important;
+}
+
+.debao-theme-light .debao-desktop-only-notice [class*="border-white"],
+.debao-theme-light .debao-desktop-only-notice [class*="border-white/"] {
+  border-color: rgba(15,23,42,0.10) !important;
+}
+
+.debao-theme-light .debao-desktop-only-notice [class*="bg-white/"],
+.debao-theme-light .debao-desktop-only-notice [class*="bg-black/"] {
+  background-color: rgba(248,250,252,0.84) !important;
+}
+
+.debao-theme-dark .debao-my-exam-record-page {
+  background: radial-gradient(circle at top,#111827 0%,#090e1a 58%,#050814 100%) !important;
+  color: #dde4f0 !important;
+}
+
+.debao-theme-dark .debao-my-exam-record-page .bg-white,
+.debao-theme-dark .debao-my-exam-record-page .bg-white\/90,
+.debao-theme-dark .debao-my-exam-record-page .bg-\[\#fafafa\],
+.debao-theme-dark .debao-my-exam-record-page .bg-\[\#fcfcfd\],
+.debao-theme-dark .debao-my-exam-record-page .bg-\[linear-gradient\(180deg\,\#ffffff_0\%\,\#fbfbfd_100\%\)\] {
+  background: #0f1826 !important;
+}
+
+.debao-theme-dark .debao-my-exam-record-page .border-white\/80,
+.debao-theme-dark .debao-my-exam-record-page .border-\[\#ececf1\],
+.debao-theme-dark .debao-my-exam-record-page .border-\[\#eef0f3\],
+.debao-theme-dark .debao-my-exam-record-page .border-\[\#e5e7eb\] {
+  border-color: rgba(255,255,255,0.08) !important;
+}
+
+.debao-theme-dark .debao-my-exam-record-page .text-\[\#18181b\],
+.debao-theme-dark .debao-my-exam-record-page .text-\[\#27272a\],
+.debao-theme-dark .debao-my-exam-record-page .text-\[\#433b35\] {
+  color: #dde4f0 !important;
+}
+
+.debao-theme-dark .debao-my-exam-record-page .text-\[\#52525b\],
+.debao-theme-dark .debao-my-exam-record-page .text-\[\#71717a\],
+.debao-theme-dark .debao-my-exam-record-page .text-\[\#8f8f95\],
+.debao-theme-dark .debao-my-exam-record-page .text-\[\#a1a1aa\] {
+  color: #8fa3be !important;
+}
+
+@media (max-width: 767px) {
+  .debao-theme-light {
+    background: #f5f7fb !important;
+  }
+
+  .debao-theme-light .debao-app-content {
+    background: #f5f7fb !important;
+  }
+
+  .debao-theme-light .debao-nav-shell {
+    background: rgba(255,255,255,0.96) !important;
+    border-top-color: rgba(15,23,42,0.08) !important;
+  }
+
+  .debao-theme-light .debao-theme-toggle {
+    display: none;
+  }
+}

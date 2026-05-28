@@ -43,29 +43,54 @@ type AdminLayoutProps = {
   pageDescription?: string;
 };
 
-const navItems = [
-  { href: "/admin/dashboard", label: "数据仪表盘", icon: BarChart3, roles: "all" },
-  { href: "/admin/admins", label: "管理员账号", icon: UserCog, roles: "super" },
-  { href: "/admin/users", label: "用户管理", icon: Users, roles: "user" },
-  { href: "/admin/exam-records", label: "学员考试记录", icon: ListTree, roles: "exam" },
-  { href: "/admin/courses", label: "课程管理", icon: BookOpen, roles: "content" },
-  { href: "/admin/home-banner", label: "首页Banner管理", icon: Image, roles: "system" },
-  { href: "/admin/learning-announcements", label: "学习公告管理", icon: Bell, roles: "system" },
-  { href: "/admin/mock-exams", label: "机考试卷发布管理", icon: FileText, roles: "content" },
-  { href: "/admin/objective-exam-question-bank", label: "客观机考题库", icon: ListChecks, roles: "content" },
-  { href: "/admin/subjective-exam-question-bank", label: "主观机考题库", icon: PenSquare, roles: "content" },
-  { href: "/admin/public-question-library", label: "免费练习原题库", icon: FileQuestion, roles: "content" },
-  { href: "/admin/authorized-question-library", label: "授权题库原题库", icon: FileQuestion, roles: "content" },
-  { href: "/admin/public-question-banks", label: "免费练习题库", icon: BookOpen, roles: "content" },
-  { href: "/admin/authorized-question-banks", label: "授权题库", icon: ShieldCheck, roles: "content" },
-  { href: "/admin/mock-exam-reviews", label: "批改中心", icon: ShieldCheck, roles: "review" },
-  { href: "/admin/mock-exam-ai-review-config", label: "AI批改配置", icon: BrainCircuit, roles: "system" },
-  { href: "/admin/laws", label: "法条检索", icon: Scale, roles: "content" },
-  { href: "/admin/typing-practice", label: "打字练习", icon: Keyboard, roles: "content" },
-  { href: "/admin/audio-library", label: "音频库", icon: Library, roles: "content" },
-  { href: "/admin/video-library", label: "视频库", icon: Video, roles: "content" },
-  { href: "/admin/settings", label: "系统门户配置", icon: Settings, roles: "system" },
-  { href: "/admin/logs", label: "系统日志", icon: ScrollText, roles: "system" },
+const navGroups = [
+  {
+    label: "总览与账号",
+    items: [
+      { href: "/admin/dashboard", label: "数据仪表盘", icon: BarChart3, roles: "all" },
+      { href: "/admin/admins", label: "管理员账号", icon: UserCog, roles: "super" },
+      { href: "/admin/users", label: "用户管理", icon: Users, roles: "user" },
+    ],
+  },
+  {
+    label: "课程内容",
+    items: [
+      { href: "/admin/courses", label: "课程管理", icon: BookOpen, roles: "content" },
+      { href: "/admin/audio-library", label: "音频库", icon: Library, roles: "content" },
+      { href: "/admin/video-library", label: "视频库", icon: Video, roles: "content" },
+      { href: "/admin/laws", label: "法条检索", icon: Scale, roles: "content" },
+      { href: "/admin/typing-practice", label: "打字练习", icon: Keyboard, roles: "content" },
+    ],
+  },
+  {
+    label: "题库与机考",
+    items: [
+      { href: "/admin/mock-exams", label: "机考试卷发布管理", icon: FileText, roles: "content" },
+      { href: "/admin/objective-exam-question-bank", label: "客观机考题库", icon: ListChecks, roles: "content" },
+      { href: "/admin/subjective-exam-question-bank", label: "主观机考题库", icon: PenSquare, roles: "content" },
+      { href: "/admin/public-question-library", label: "免费练习原题库", icon: FileQuestion, roles: "content" },
+      { href: "/admin/authorized-question-library", label: "授权题库原题库", icon: FileQuestion, roles: "content" },
+      { href: "/admin/public-question-banks", label: "免费练习题库", icon: BookOpen, roles: "content" },
+      { href: "/admin/authorized-question-banks", label: "授权题库", icon: ShieldCheck, roles: "content" },
+      { href: "/admin/exam-records", label: "学员考试记录", icon: ListTree, roles: "exam" },
+    ],
+  },
+  {
+    label: "批改运营",
+    items: [
+      { href: "/admin/mock-exam-reviews", label: "批改中心", icon: ShieldCheck, roles: "review" },
+      { href: "/admin/mock-exam-ai-review-config", label: "AI批改配置", icon: BrainCircuit, roles: "system" },
+    ],
+  },
+  {
+    label: "运营配置",
+    items: [
+      { href: "/admin/home-banner", label: "首页Banner管理", icon: Image, roles: "system" },
+      { href: "/admin/learning-announcements", label: "学习公告管理", icon: Bell, roles: "system" },
+      { href: "/admin/settings", label: "系统门户配置", icon: Settings, roles: "system" },
+      { href: "/admin/logs", label: "系统日志", icon: ScrollText, roles: "system" },
+    ],
+  },
 ] as const;
 
 export function AdminLayout({ children, pageTitle = "后台管理", pageDescription = "得宝平台运营工作台" }: AdminLayoutProps) {
@@ -98,7 +123,7 @@ export function AdminLayout({ children, pageTitle = "后台管理", pageDescript
     window.location.href = "/admin/login";
   };
 
-  const visibleNavItems = navItems.filter((item) => {
+  const canShowNavItem = (item: (typeof navGroups)[number]["items"][number]) => {
     if (item.roles === "all") return isAnyAdminRole(role);
     if (item.roles === "super") return role === "super_admin";
     if (item.roles === "user") return isUserManagementRole(role);
@@ -106,24 +131,33 @@ export function AdminLayout({ children, pageTitle = "后台管理", pageDescript
     if (item.roles === "system") return isSystemManagementRole(role);
     if (item.roles === "exam") return isUserManagementRole(role) || isReviewManagementRole(role);
     return isContentManagementRole(role);
-  });
+  };
+  const visibleNavGroups = navGroups
+    .map((group) => ({ ...group, items: group.items.filter(canShowNavItem) }))
+    .filter((group) => group.items.length > 0);
+
   const renderNavLinks = () =>
-    visibleNavItems.map((item) => {
-      const Icon = item.icon;
-      const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-      return (
-        <a
-          key={item.href}
-          href={item.href}
-          className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold transition ${
-            active ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-          }`}
-        >
-          <Icon className="size-4 shrink-0" />
-          <span className="truncate">{item.label}</span>
-        </a>
-      );
-    });
+    visibleNavGroups.map((group) => (
+      <div key={group.label} className="space-y-1.5">
+        <div className="px-3 pb-1 pt-3 text-[11px] font-bold tracking-[0.12em] text-slate-400">{group.label}</div>
+        {group.items.map((item) => {
+          const Icon = item.icon;
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          return (
+            <a
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
+                active ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+              }`}
+            >
+              <Icon className="size-4 shrink-0" />
+              <span className="truncate">{item.label}</span>
+            </a>
+          );
+        })}
+      </div>
+    ));
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f3f6fb] text-slate-900">

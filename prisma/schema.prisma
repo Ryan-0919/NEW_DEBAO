@@ -298,6 +298,8 @@ model Video {
   objectKey        String?           @unique @db.VarChar(255)
   objectUrl        String?           @db.VarChar(500)
   mimeType         String?           @db.VarChar(100)
+  processStatus    AudioProcessStatus @default(ready)
+  processMessage   String?           @db.VarChar(500)
   uploadedAt       DateTime          @default(now())
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -306,6 +308,7 @@ model Video {
   progresses       UserVideoProgress[]
 
   @@index([folderId, uploadedAt])
+  @@index([processStatus, uploadedAt])
 }
 
 model CourseAudio {
@@ -973,6 +976,8 @@ model MockExamAnswer {
   questionId  String
   answerJson  String?          @db.LongText
   reviewJson  String?          @db.LongText
+  publishedReviewJson String?   @db.LongText
+  publishedScore Int?
   isCorrect   Boolean?
   score       Int              @default(0)
   createdAt   DateTime         @default(now())

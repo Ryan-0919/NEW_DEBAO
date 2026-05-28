@@ -196,6 +196,30 @@ const hasSubjectiveReviewEnabled = (record) => {
 
 const serializeDate = (value) => (value ? formatDateTime(value) : "");
 
+const hasPublishedReviewSnapshot = (record) =>
+  (record?.answers ?? []).some((answer) => Boolean(answer?.publishedReviewJson));
+
+const isRepublishingReviewRecord = (record) => Boolean(record?.publishedAt || hasPublishedReviewSnapshot(record));
+
+const ensurePublishedReviewSnapshot = async ({ tx, record }) => {
+  if (!isRepublishingReviewRecord(record) || hasPublishedReviewSnapshot(record)) return false;
+  const subjectiveQuestionIds = new Set((getRecordPaper(record)?.questions ?? []).filter(isSubjectiveQuestion).map((question) => question.id));
+  const publishedAnswers = (record.answers ?? []).filter((answer) => subjectiveQuestionIds.has(answer.questionId) && answer.reviewJson);
+  if (publishedAnswers.length === 0) return false;
+  await Promise.all(
+    publishedAnswers.map((answer) =>
+      tx.mockExamAnswer.update({
+        where: { id: answer.id },
+        data: {
+          publishedReviewJson: answer.reviewJson,
+          publishedScore: Number(answer.score ?? 0) || 0,
+        },
+      }),
+    ),
+  );
+  return true;
+};
+
 const getLockInfo = (record, req, currentTime = new Date()) => {
   const expiresAt = record?.manualReviewLockExpiresAt ? new Date(record.manualReviewLockExpiresAt) : null;
   const active = Boolean(expiresAt && expiresAt.getTime() > currentTime.getTime() && record.manualReviewerId);
@@ -206,8 +230,8 @@ const getLockInfo = (record, req, currentTime = new Date()) => {
     active,
     ownedByMe,
     expired,
-    canClaim: record?.reviewWorkflowStatus !== "published" && (!active || ownedByMe),
-    canEdit: record?.reviewWorkflowStatus !== "published" && ownedByMe,
+    canClaim: Boolean(record && (!active || ownedByMe)),
+    canEdit: Boolean(record && ownedByMe),
     reviewerId: record?.manualReviewerId ?? "",
     reviewerName: record?.manualReviewerName ?? "",
     claimedAt: serializeDate(record?.manualReviewClaimedAt),
@@ -227,6 +251,7 @@ const serializeRecordListItem = (record, req, currentTime = new Date()) => {
     return Object.values(answerMapBySubQuestion).some((item) => item.trim());
   }).length;
   const reviewedSubjectiveCount = subjectiveQuestions.filter((question) => Boolean(answerMap.get(question.id)?.reviewJson)).length;
+  const publishedSubjectiveCount = subjectiveQuestions.filter((question) => Boolean(answerMap.get(question.id)?.publishedReviewJson)).length;
   const lock = getLockInfo(record, req, currentTime);
 
   return {
@@ -243,10 +268,12 @@ const serializeRecordListItem = (record, req, currentTime = new Date()) => {
     subjectiveQuestionCount: subjectiveQuestions.length,
     answeredSubjectiveCount,
     reviewedSubjectiveCount,
+    publishedSubjectiveCount,
     submittedAt: serializeDate(record.submittedAt),
     updatedAt: serializeDate(record.updatedAt),
     reviewedAt: serializeDate(record.reviewedAt),
     publishedAt: serializeDate(record.publishedAt),
+    hasPublishedReview: hasPublishedReviewSnapshot(record),
     consumedSeconds: Number(record.consumedSeconds ?? 0) || 0,
     lastAiReviewError: normalizeText(record.lastAiReviewError ?? ""),
     manualReviewVersion: record.manualReviewVersion,
@@ -296,6 +323,7 @@ const serializeReviewDetail = (record, req, currentTime = new Date()) => {
       submittedAt: serializeDate(record.submittedAt),
       reviewedAt: serializeDate(record.reviewedAt),
       publishedAt: serializeDate(record.publishedAt),
+      hasPublishedReview: hasPublishedReviewSnapshot(record),
       updatedAt: serializeDate(record.updatedAt),
       manualReviewVersion: record.manualReviewVersion,
       lastAiReviewError: normalizeText(record.lastAiReviewError ?? ""),
@@ -409,11 +437,6 @@ const assertReviewableRecord = (record) => {
 const assertEditableLock = (record, req, { lockToken, version, currentTime = new Date() } = {}) => {
   const lock = getLockInfo(record, req, currentTime);
   const parsedVersion = typeof version === "number" ? version : Number.NaN;
-  if (record.reviewWorkflowStatus === "published") {
-    const error = new Error("已发送给学生的记录不能直接编辑");
-    error.statusCode = 409;
-    throw error;
-  }
   if (!lock.ownedByMe || !record.manualReviewLockToken || record.manualReviewLockToken !== `${lockToken ?? ""}`.trim()) {
     const error = new Error("请先领取该记录，或刷新页面后重试");
     error.statusCode = 409;
@@ -917,11 +940,8 @@ adminMockExamReviewRouter.post("/records/:recordId/claim", async (req, res) => {
     const updatedRecord = await prisma.$transaction(async (tx) => {
       const record = await getAdminReviewRecord(tx, recordId);
       assertReviewableRecord(record);
-      if (record.reviewWorkflowStatus === "published") {
-        const error = new Error("已发送给学生的记录不能领取");
-        error.statusCode = 409;
-        throw error;
-      }
+      const wasPublished = record.reviewWorkflowStatus === "published";
+      await ensurePublishedReviewSnapshot({ tx, record });
 
       const lock = getLockInfo(record, req, currentTime);
       if (lock.active && !lock.ownedByMe) {
@@ -933,7 +953,6 @@ adminMockExamReviewRouter.post("/records/:recordId/claim", async (req, res) => {
       const claimResult = await tx.mockExamRecord.updateMany({
         where: {
           id: record.id,
-          reviewWorkflowStatus: { not: "published" },
           OR: [
             { manualReviewerId: req.auth.adminId },
             { manualReviewLockExpiresAt: null },
@@ -941,7 +960,7 @@ adminMockExamReviewRouter.post("/records/:recordId/claim", async (req, res) => {
           ],
         },
         data: {
-          reviewWorkflowStatus: "manual_pending",
+          reviewWorkflowStatus: wasPublished ? "published" : "manual_pending",
           manualReviewerId: req.auth.adminId,
           manualReviewerName: getAdminName(req),
           manualReviewLockToken: lockToken,
@@ -979,11 +998,7 @@ adminMockExamReviewRouter.post("/records/:recordId/ai-review", async (req, res) 
     await prisma.$transaction(async (tx) => {
       const record = await getAdminReviewRecord(tx, recordId);
       assertReviewableRecord(record);
-      if (record.reviewWorkflowStatus === "published") {
-        const error = new Error("已发送给学生的记录不能直接AI重批");
-        error.statusCode = 409;
-        throw error;
-      }
+      await ensurePublishedReviewSnapshot({ tx, record });
 
       const lock = getLockInfo(record, req, currentTime);
       if (lock.active && !lock.ownedByMe) {
@@ -1072,6 +1087,7 @@ adminMockExamReviewRouter.patch("/records/:recordId/review-draft", async (req, r
         where: { id: record.id },
         data: {
           reviewWorkflowStatus: "manual_pending",
+          publishedAt: null,
           manualReviewVersion: { increment: 1 },
           manualReviewLockExpiresAt: buildLockExpiresAt(currentTime),
         },
@@ -1127,6 +1143,18 @@ adminMockExamReviewRouter.post("/records/:recordId/publish", async (req, res) =>
         .filter((answer) => !subjectiveQuestionIds.has(answer.questionId))
         .reduce((sum, answer) => sum + Number(answer.score ?? 0), 0);
       const subjectiveScore = normalized.reduce((sum, item) => sum + Number(item.score ?? 0), 0);
+
+      await Promise.all(
+        normalized.map((item) =>
+          tx.mockExamAnswer.update({
+            where: { id: item.existingAnswer.id },
+            data: {
+              publishedReviewJson: JSON.stringify(item.reviewJson),
+              publishedScore: item.score,
+            },
+          }),
+        ),
+      );
 
       await tx.mockExamRecord.update({
         where: { id: record.id },

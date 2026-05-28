@@ -272,7 +272,7 @@ export function MockExamHome() {
   };
 
   if (isMobileBlocked) {
-    return <MockExamDesktopNotice />;
+    return <MockExamDesktopNotice feature={pageCategory === "objective" ? "objectiveMock" : "subjectiveReview"} />;
   }
 
   if (loading) {

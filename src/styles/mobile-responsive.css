@@ -22,6 +22,16 @@ textarea {
   touch-action: manipulation;
 }
 
+.debao-mobile-home-head,
+.debao-nav-tab-icon {
+  display: none;
+}
+
+.debao-nav-logo img,
+.debao-mobile-home-logo img {
+  display: block;
+}
+
 @supports (padding: max(0px)) {
   .pb-safe {
     padding-bottom: max(env(safe-area-inset-bottom), 0px);
@@ -78,72 +88,154 @@ textarea {
     min-width: 0;
     overflow-x: hidden;
     padding-bottom: env(safe-area-inset-bottom);
+    background: #090e1a !important;
+    color: #dde4f0 !important;
   }
 
   .debao-nav-shell {
-    position: sticky !important;
-    top: 0 !important;
+    position: fixed !important;
+    top: auto !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    z-index: 80 !important;
+    border-top: 1px solid rgba(15, 23, 42, 0.08) !important;
+    border-bottom: 0 !important;
+    background: rgba(255,255,255,0.96) !important;
+    backdrop-filter: blur(18px) !important;
+    box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.08) !important;
   }
 
   .debao-nav-inner {
     width: 100% !important;
     max-width: none !important;
-    height: auto !important;
-    min-height: 58px !important;
-    gap: 12px !important;
-    padding: 8px 12px 10px !important;
-    flex-wrap: wrap !important;
+    height: calc(62px + env(safe-area-inset-bottom)) !important;
+    min-height: 0 !important;
+    gap: 0 !important;
+    padding: 6px 10px max(8px, env(safe-area-inset-bottom)) !important;
+    display: block !important;
   }
 
-  .debao-nav-brand {
-    min-width: 0;
+  .debao-nav-brand,
+  .debao-nav-actions {
+    display: none !important;
   }
 
   .debao-nav-tabs {
-    order: 3;
-    width: 100%;
-    gap: 6px !important;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 2px;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .debao-nav-tabs::-webkit-scrollbar {
-    display: none;
+    width: 100% !important;
+    height: 100% !important;
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 2px !important;
   }
 
   .debao-nav-tabs > button {
-    min-width: 68px;
-    flex: 0 0 auto;
-    padding: 8px 12px !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    border-radius: 14px !important;
+    padding: 7px 4px 6px !important;
     font-size: 12px !important;
+    color: #7b8798 !important;
+    background: transparent !important;
     white-space: nowrap;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
   }
 
-  .debao-nav-actions {
-    margin-left: auto !important;
-    gap: 8px !important;
+  .debao-nav-tab-icon {
+    display: grid !important;
+    place-items: center;
+    color: currentColor;
+    line-height: 0;
   }
 
-  .debao-nav-actions > div:first-child {
-    display: none !important;
+  .debao-nav-tab-label {
+    display: block;
+    line-height: 1.1;
   }
 
-  .debao-nav-actions > div:last-child {
-    padding-left: 0 !important;
-    border-left: 0 !important;
-  }
-
-  .debao-nav-actions > div:last-child > div:last-child {
-    display: none !important;
+  .debao-nav-tabs > button[style*="rgb(201, 151, 62)"],
+  .debao-nav-tabs > button[style*="#c9973e"],
+  .debao-nav-tabs > button[style*="201,151,62"] {
+    color: #1687e8 !important;
+    font-weight: 800 !important;
   }
 
   .debao-page {
     width: 100% !important;
     max-width: none !important;
-    padding: 14px 12px 76px !important;
+    padding: 18px 14px 88px !important;
+    background: #090e1a !important;
+    color: #dde4f0 !important;
+  }
+
+  .debao-mobile-home-head {
+    display: block !important;
+    margin-bottom: 16px;
+  }
+
+  .debao-mobile-home-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 4px 0 14px;
+  }
+
+  .debao-mobile-home-logo {
+    min-width: 0;
+  }
+
+  .debao-mobile-home-logo > div {
+    width: 150px !important;
+    height: 42px !important;
+  }
+
+  .debao-mobile-home-logo p {
+    color: #f0e6d0 !important;
+  }
+
+  .debao-mobile-home-title {
+    color: #f0e6d0;
+    font-size: 24px;
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: 0;
+    position: relative;
+  }
+
+  .debao-mobile-home-title::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -10px;
+    width: 28px;
+    height: 4px;
+    border-radius: 999px;
+    background: #1687e8;
+  }
+
+  .debao-mobile-home-subtitle {
+    margin-top: 6px;
+    color: #4a6a88;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .debao-mobile-menu-button {
+    width: 38px;
+    height: 38px;
+    min-height: 38px !important;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: #8fa3be;
+    display: grid;
+    place-items: center;
   }
 
   .debao-home-hero-grid,
@@ -154,35 +246,144 @@ textarea {
   }
 
   .debao-home-hero {
-    min-height: 250px !important;
+    min-height: 154px !important;
     border-radius: 16px !important;
+    box-shadow: 0 12px 28px rgba(41, 111, 221, 0.12);
+  }
+
+  .debao-home-hero-arrow {
+    display: none !important;
+  }
+
+  .debao-home-hero-dots {
+    left: auto !important;
+    right: 14px !important;
+    bottom: 10px !important;
+    gap: 5px !important;
+    z-index: 4 !important;
+  }
+
+  .debao-home-hero-dot {
+    min-height: 6px !important;
+    height: 6px !important;
+    flex: 0 0 auto;
   }
 
   .debao-home-hero-content {
-    padding: 24px 20px !important;
+    padding: 14px 15px !important;
     justify-content: flex-end !important;
   }
 
-  .debao-home-hero-title {
-    font-size: 26px !important;
-    line-height: 1.28 !important;
-    margin-bottom: 10px !important;
-    overflow-wrap: anywhere;
+  .debao-home-hero-content > div:first-child,
+  .debao-home-hero-content > p {
+    display: none !important;
   }
 
-  .debao-home-announcements {
-    max-height: 260px;
-    border-radius: 16px !important;
+  .debao-home-hero-title {
+    font-size: 19px !important;
+    line-height: 1.26 !important;
+    margin-bottom: 8px !important;
+    overflow-wrap: anywhere;
+    color: #fff !important;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.2) !important;
+    max-width: 72%;
+  }
+
+  .debao-home-hero-content > div:last-child {
+    gap: 7px !important;
+  }
+
+  .debao-home-hero-content > div:last-child button {
+    min-height: 28px !important;
+    padding: 6px 11px !important;
+    border-radius: 8px !important;
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    box-shadow: none !important;
+  }
+
+  .debao-home-modules-section {
+    margin-top: 18px !important;
+  }
+
+  .debao-home-modules-section > div:first-child {
+    display: none !important;
   }
 
   .debao-module-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 10px !important;
+    display: flex !important;
+    grid-template-columns: none !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 8px !important;
+    padding: 0 2px 4px;
+    border-bottom: 0;
+  }
+
+  .debao-module-grid::-webkit-scrollbar {
+    display: none;
   }
 
   .debao-module-grid > button {
-    min-height: 126px;
-    padding: 16px 14px !important;
+    flex: 0 0 72px !important;
+    width: 72px !important;
+    min-height: 76px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 7px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: rgba(255,255,255,0.035) !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+  }
+
+  .debao-module-card-icon {
+    width: 34px !important;
+    height: 34px !important;
+    margin: 7px 0 0 !important;
+    border-radius: 10px !important;
+    background: rgba(255,255,255,0.04) !important;
+    box-shadow: none;
+  }
+
+  .debao-module-card-title,
+  .debao-module-card-subtitle {
+    grid-column: auto;
+  }
+
+  .debao-module-card-title {
+    margin: 0 !important;
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+    color: #c8d8ee !important;
+    text-align: center !important;
+    font-weight: 700 !important;
+    width: 100%;
+    white-space: normal;
+  }
+
+  .debao-module-card-subtitle {
+    display: none !important;
+  }
+
+  .debao-module-grid > button > span {
+    top: -3px !important;
+    right: 3px !important;
+    transform: none !important;
+    font-size: 8px !important;
+    padding: 1px 4px !important;
+    border-radius: 6px !important;
+  }
+
+  .debao-module-desktop-badge {
+    white-space: nowrap;
   }
 
   .debao-home-content-grid > div:last-child {
@@ -190,60 +391,146 @@ textarea {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
+  .debao-home-content-grid {
+    gap: 16px !important;
+    margin-top: 18px !important;
+  }
+
+  .debao-home-study-column > div:first-child h2,
+  .debao-home-study-column > div:first-child span:first-of-type {
+    color: #dde4f0 !important;
+  }
+
+  .debao-home-study-column > div:first-child button {
+    color: #1687e8 !important;
+  }
+
+  .debao-home-study-column > div:nth-child(2) > div {
+    background: #0f1826 !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 14px !important;
+    box-shadow: none;
+  }
+
+  .debao-home-study-column > div:first-child {
+    margin-bottom: 10px !important;
+  }
+
+  .debao-home-study-column > div:first-child h2 {
+    font-size: 14px !important;
+  }
+
+  .debao-home-study-column > div:first-child span:first-of-type,
+  .debao-home-study-column > div:first-child button {
+    font-size: 10px !important;
+  }
+
+  .debao-continue-card {
+    grid-template-columns: 3px minmax(0, 1fr) 42px !important;
+    border-radius: 13px !important;
+  }
+
+  .debao-continue-card-body {
+    padding: 12px 12px !important;
+  }
+
+  .debao-continue-card-title {
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    margin-bottom: 4px !important;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+  }
+
+  .debao-continue-card-meta {
+    gap: 6px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .debao-continue-card-meta span {
+    font-size: 10px !important;
+  }
+
+  .debao-continue-card-action {
+    padding: 0 10px !important;
+  }
+
+  .debao-continue-card-action button {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  .debao-diagnosis-card,
+  .debao-learning-rank-card {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+
+  .debao-diagnosis-card div,
+  .debao-learning-rank-card div {
+    font-size: 11px !important;
+    line-height: 1.45 !important;
+  }
+
+  .debao-home-study-column > div:nth-child(2) > div * {
+    color: inherit;
+  }
+
+  .debao-home-study-column > div:nth-child(2) > div div[style*="#dde4f0"] {
+    color: #dde4f0 !important;
+  }
+
+  .debao-home-study-column > div:nth-child(2) > div div[style*="#3a5570"],
+  .debao-home-study-column > div:nth-child(2) > div span[style*="#2e4260"] {
+    color: #7b8798 !important;
+  }
+
+  .debao-home-study-column > div:nth-child(3),
+  .debao-home-study-column > div:nth-child(4) {
+    background: #0f1826 !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    box-shadow: none;
+    border-radius: 14px !important;
+    align-items: center !important;
+  }
+
+  .debao-home-study-column > div:nth-child(3) div,
+  .debao-home-study-column > div:nth-child(4) div {
+    color: #dde4f0;
+  }
+
+  .debao-home-study-column > div:nth-child(3) button {
+    background: rgba(78,142,247,0.1) !important;
+    color: #4e8ef7 !important;
+    border-color: rgba(78,142,247,0.2) !important;
+  }
+
+  .debao-home-side-column {
+    gap: 12px !important;
+  }
+
+  .debao-home-side-column > div {
+    background: #0f1826 !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 16px !important;
+    box-shadow: none;
+  }
+
+  .debao-home-side-column span,
+  .debao-home-side-column div {
+    color: inherit;
+  }
+
   .debao-app-content {
     min-width: 0;
   }
 
-  .debao-app-content *,
-  .debao-app-content *::before,
-  .debao-app-content *::after {
-    box-sizing: border-box;
-  }
-
-  .debao-app-content > div {
-    max-width: 100% !important;
-  }
-
-  .debao-app-content > div[style*="max-width"],
-  .debao-app-content > main,
-  .debao-app-content section {
-    max-width: 100% !important;
-  }
-
-  .debao-app-content div[style*="grid-template-columns"] {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  .debao-app-content div[style*="min-width: 360"],
-  .debao-app-content div[style*="width: 38%"] {
-    min-width: 0 !important;
-    width: 100% !important;
-  }
-
-  .debao-app-content textarea {
-    min-height: 220px;
-    font-size: 16px !important;
-  }
-
   .debao-app-content input,
-  .debao-app-content select {
+  .debao-app-content select,
+  .debao-app-content textarea {
     font-size: 16px !important;
-  }
-
-  .debao-app-content button {
-    min-height: 36px;
-  }
-
-  .debao-app-content [style*="padding: 36px 36px"],
-  .debao-app-content [style*="padding: 28px 36px"],
-  .debao-app-content [style*="padding: 24px 28px"] {
-    padding: 18px 12px 76px !important;
-  }
-
-  .debao-app-content [style*="width: 430px"],
-  .debao-app-content [style*="width: 380px"] {
-    width: calc(100vw - 24px) !important;
-    max-width: calc(100vw - 24px) !important;
   }
 
   .debao-app-content [style*="height: 100vh"] {
@@ -252,6 +539,1761 @@ textarea {
 
   .debao-app-content [style*="position: fixed"][style*="inset: 0"] > div {
     max-width: calc(100vw - 24px) !important;
+  }
+
+  .debao-desktop-only-notice {
+    min-height: calc(100dvh - 106px) !important;
+    padding: 14px 12px 24px !important;
+  }
+
+  .debao-desktop-only-panel {
+    border-radius: 18px !important;
+  }
+
+  .debao-desktop-only-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .debao-desktop-only-actions button {
+    width: 100%;
+  }
+
+  .debao-question-bank-home,
+  .debao-my-question-bank-page {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 14px 12px 88px !important;
+  }
+
+  .debao-qb-topbar {
+    position: relative;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    margin-bottom: 12px !important;
+    min-height: 36px;
+  }
+
+  .debao-qb-exam-switch {
+    order: 2;
+    margin-left: auto;
+    border-radius: 999px !important;
+    padding: 2px !important;
+    flex-shrink: 0;
+  }
+
+  .debao-qb-exam-switch button {
+    min-height: 26px !important;
+    padding: 4px 9px !important;
+    border-radius: 999px !important;
+    font-size: 11px !important;
+    white-space: nowrap;
+  }
+
+  .debao-qb-topbar-divider {
+    display: none !important;
+  }
+
+  .debao-qb-subnav {
+    order: 1;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .debao-qb-subnav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .debao-qb-subnav button {
+    min-height: 28px !important;
+    padding: 5px 10px 4px !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+  }
+
+  .debao-qb-quick-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .debao-qb-countdown-card {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: center !important;
+    gap: 4px 10px !important;
+    min-height: 42px !important;
+    border-radius: 12px !important;
+    padding: 9px 12px !important;
+  }
+
+  .debao-qb-countdown-card > div[style*="border-radius: 50%"] {
+    display: none !important;
+  }
+
+  .debao-qb-countdown-label {
+    margin: 0 !important;
+    font-size: 11px !important;
+    letter-spacing: 0 !important;
+  }
+
+  .debao-qb-countdown-desc {
+    margin: 0 !important;
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debao-qb-countdown-number {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    gap: 3px !important;
+  }
+
+  .debao-qb-countdown-number span:first-child {
+    font-size: 22px !important;
+  }
+
+  .debao-qb-countdown-number span:last-child {
+    font-size: 11px !important;
+  }
+
+  .debao-qb-countdown-progress,
+  .debao-qb-countdown-range {
+    display: none !important;
+  }
+
+  .debao-qb-quick-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .debao-qb-quick-card {
+    min-height: 72px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 9px 6px !important;
+    border-radius: 13px !important;
+    text-align: center !important;
+  }
+
+  .debao-qb-quick-icon {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 9px !important;
+  }
+
+  .debao-qb-quick-title {
+    margin: 0 !important;
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+  }
+
+  .debao-qb-quick-sub,
+  .debao-qb-quick-card > svg {
+    display: none !important;
+  }
+
+  .debao-question-bank-home h2 {
+    font-size: 15px !important;
+  }
+
+  .debao-qb-subject-grid,
+  .debao-qb-wrong-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .debao-qb-subject-card {
+    min-height: 92px !important;
+    padding: 12px 12px 10px !important;
+    border-radius: 13px !important;
+  }
+
+  .debao-qb-subject-card > div:first-of-type {
+    margin-bottom: 8px !important;
+  }
+
+  .debao-qb-subject-card > div:first-of-type > div:first-child {
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+  }
+
+  .debao-qb-subject-proficiency {
+    display: none !important;
+  }
+
+  .debao-my-qb-header {
+    align-items: center !important;
+    gap: 8px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .debao-my-qb-header > button {
+    min-height: 30px !important;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .debao-my-qb-header > div:nth-child(2) {
+    display: none !important;
+  }
+
+  .debao-my-qb-header h1 {
+    font-size: 16px !important;
+  }
+
+  .debao-my-qb-header span {
+    font-size: 10px !important;
+  }
+
+  .debao-my-qb-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .debao-my-qb-stats > div {
+    padding: 10px 9px !important;
+    border-radius: 12px !important;
+  }
+
+  .debao-my-qb-stats > div > div:first-child {
+    font-size: 10px !important;
+    margin-bottom: 5px !important;
+  }
+
+  .debao-my-qb-stats > div > div:last-child {
+    font-size: 18px !important;
+  }
+
+  .debao-my-qb-section {
+    margin-bottom: 18px !important;
+  }
+
+  .debao-my-qb-section-title {
+    margin-bottom: 10px !important;
+    gap: 6px !important;
+  }
+
+  .debao-my-qb-section-title span {
+    font-size: 11px !important;
+  }
+
+  .debao-my-qb-section-title span:nth-of-type(2) {
+    display: none;
+  }
+
+  .debao-my-qb-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .debao-my-qb-card {
+    border-radius: 13px !important;
+  }
+
+  .debao-my-qb-card-head {
+    padding: 12px 11px 10px !important;
+  }
+
+  .debao-my-qb-card-title {
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .debao-my-qb-card-icon {
+    width: 30px !important;
+    height: 34px !important;
+    border-radius: 8px !important;
+  }
+
+  .debao-my-qb-card-body {
+    padding: 10px 11px 12px !important;
+    gap: 9px !important;
+  }
+
+  .debao-my-qb-progress {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  .debao-my-qb-progress > span {
+    font-size: 10px !important;
+  }
+
+  .debao-my-qb-card button {
+    min-height: 32px !important;
+    font-size: 11px !important;
+    border-radius: 9px !important;
+  }
+
+  .debao-my-qb-subject-picker-head {
+    align-items: flex-start !important;
+    flex-direction: column;
+    gap: 8px !important;
+  }
+
+  .debao-my-qb-subject-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+  }
+
+  .debao-my-qb-subject-card {
+    min-height: 66px !important;
+    padding: 8px !important;
+  }
+
+  .debao-audio-page {
+    min-height: 100dvh !important;
+    padding-bottom: calc(164px + env(safe-area-inset-bottom)) !important;
+    overflow-x: hidden;
+  }
+
+  .debao-audio-breadcrumb-inner {
+    max-width: none !important;
+    padding: 10px 14px !important;
+    overflow: hidden;
+  }
+
+  .debao-audio-breadcrumb-inner span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debao-audio-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    max-width: none !important;
+    padding: 0 12px !important;
+    gap: 12px !important;
+  }
+
+  .debao-audio-sidebar {
+    display: none !important;
+  }
+
+  .debao-audio-main {
+    order: 1;
+    width: 100% !important;
+    padding: 12px 0 0 !important;
+    gap: 12px !important;
+  }
+
+  .debao-audio-mobile-picker {
+    display: block !important;
+    position: sticky;
+    top: 41px;
+    z-index: 45;
+    width: 100%;
+  }
+
+  .debao-audio-mobile-picker-trigger {
+    width: min(100%, 360px);
+    min-height: 46px !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 11px;
+    border: 1px solid rgba(78,142,247,0.24);
+    border-radius: 14px;
+    background: rgba(10,16,32,0.96);
+    color: #c8d8ee;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.22);
+    backdrop-filter: blur(16px);
+  }
+
+  .debao-audio-mobile-picker-trigger > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .debao-audio-mobile-picker-trigger span {
+    font-size: 10px;
+    color: #4e8ef7;
+    font-weight: 800;
+  }
+
+  .debao-audio-mobile-picker-trigger strong {
+    max-width: 100%;
+    font-size: 12px;
+    line-height: 1.3;
+    color: #dde4f0;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debao-audio-mobile-picker-menu {
+    width: min(100%, 360px);
+    max-height: 42dvh;
+    margin-top: 8px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    background: rgba(8,13,25,0.98);
+    box-shadow: 0 20px 45px rgba(0,0,0,0.34);
+    padding: 8px;
+  }
+
+  .debao-audio-mobile-picker-status,
+  .debao-audio-mobile-picker-error {
+    padding: 8px 9px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .debao-audio-mobile-picker-status {
+    color: #5a7898;
+  }
+
+  .debao-audio-mobile-picker-error {
+    color: #f76e6e;
+  }
+
+  .debao-audio-mobile-picker-chapter {
+    margin-bottom: 5px;
+  }
+
+  .debao-audio-mobile-picker-chapter-button {
+    width: 100%;
+    min-height: 34px !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    color: #7a9abe;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .debao-audio-mobile-picker-chapter-button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debao-audio-mobile-picker-lessons {
+    padding: 5px 0 2px 6px;
+  }
+
+  .debao-audio-mobile-picker-lesson {
+    width: 100%;
+    min-height: 42px !important;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #5a7898;
+    text-align: left;
+  }
+
+  .debao-audio-mobile-picker-lesson.is-active {
+    background: rgba(78,142,247,0.16);
+    color: #4e8ef7;
+  }
+
+  .debao-audio-mobile-picker-lesson-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    background: rgba(255,255,255,0.06);
+    color: currentColor;
+  }
+
+  .debao-audio-mobile-picker-lesson-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .debao-audio-mobile-picker-lesson-main span {
+    max-width: 100%;
+    font-size: 12px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debao-audio-mobile-picker-lesson-main em {
+    font-style: normal;
+    font-size: 10px;
+    color: #2e4260;
+  }
+
+  .debao-audio-now-card {
+    align-items: flex-start !important;
+    gap: 12px !important;
+    padding: 14px !important;
+    border-radius: 16px !important;
+    flex-wrap: wrap;
+  }
+
+  .debao-audio-cover {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 12px !important;
+  }
+
+  .debao-audio-meta {
+    flex: 1 1 calc(100% - 64px);
+  }
+
+  .debao-audio-meta > div {
+    overflow-wrap: anywhere;
+  }
+
+  .debao-audio-waveform {
+    flex: 1 1 100% !important;
+    width: 100%;
+  }
+
+  .debao-audio-waveform > div:first-child {
+    overflow: hidden;
+  }
+
+  .debao-audio-transcript {
+    height: 38dvh !important;
+    min-height: 220px;
+    padding: 18px 16px !important;
+    border-radius: 16px !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .debao-audio-notes {
+    padding: 16px !important;
+    border-radius: 16px !important;
+  }
+
+  .debao-audio-notes > div:first-child {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+
+  .debao-audio-notes textarea {
+    min-height: 120px !important;
+  }
+
+  .debao-audio-player-bar {
+    bottom: calc(62px + env(safe-area-inset-bottom)) !important;
+    z-index: 70 !important;
+    padding: 10px 12px !important;
+  }
+
+  .debao-audio-player-inner {
+    height: auto !important;
+    max-width: none !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 10px 12px !important;
+    align-items: center !important;
+  }
+
+  .debao-audio-track-info {
+    width: auto !important;
+    min-width: 0;
+  }
+
+  .debao-audio-controls {
+    grid-column: 1 / -1;
+    order: 3;
+    width: 100%;
+  }
+
+  .debao-audio-right-controls {
+    width: auto !important;
+    min-width: 0;
+    justify-content: flex-end !important;
+    gap: 6px !important;
+  }
+
+  .debao-audio-volume {
+    display: none !important;
+  }
+
+  .debao-audio-handout-button {
+    padding: 6px 9px !important;
+    white-space: nowrap;
+  }
+
+  .debao-courses-page {
+    max-width: none !important;
+    padding: 16px 12px calc(92px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .debao-courses-header {
+    margin-bottom: 14px !important;
+  }
+
+  .debao-courses-breadcrumb {
+    display: none !important;
+  }
+
+  .debao-courses-title-row {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .debao-courses-title-row h1 {
+    font-size: 20px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .debao-courses-title-row p {
+    font-size: 11px !important;
+    color: #5a7898 !important;
+  }
+
+  .debao-courses-search {
+    width: 100% !important;
+  }
+
+  .debao-courses-search input {
+    width: 100% !important;
+    height: 38px !important;
+    font-size: 12px !important;
+    border-radius: 11px !important;
+    box-sizing: border-box;
+  }
+
+  .debao-courses-summary {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .debao-courses-summary-card {
+    min-width: 0;
+    padding: 10px 11px !important;
+    gap: 8px !important;
+    border-radius: 13px !important;
+  }
+
+  .debao-courses-summary-card > div:first-child {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 9px !important;
+  }
+
+  .debao-courses-summary-card > div:first-child svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .debao-courses-summary-card > div:last-child {
+    min-width: 0;
+  }
+
+  .debao-courses-summary-card > div:last-child > div:first-child {
+    font-size: 10px !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .debao-courses-summary-card > div:last-child > div:last-child {
+    font-size: 16px !important;
+  }
+
+  .debao-courses-filters {
+    align-items: stretch !important;
+    flex-direction: column !important;
+    gap: 9px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .debao-courses-opened-count {
+    width: fit-content;
+    min-height: 30px !important;
+    padding: 6px 10px !important;
+    border-radius: 10px !important;
+    font-size: 11px !important;
+  }
+
+  .debao-courses-tabs {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 7px !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 3px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .debao-courses-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .debao-courses-tabs > button {
+    flex: 0 0 auto;
+    min-height: 30px !important;
+    padding: 6px 11px !important;
+    font-size: 11px !important;
+    border-radius: 999px !important;
+    white-space: nowrap;
+  }
+
+  .debao-courses-result-count {
+    margin-bottom: 10px !important;
+    font-size: 10px !important;
+  }
+
+  .debao-course-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .debao-course-card {
+    border-radius: 13px !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  .debao-course-card-cover {
+    height: 76px !important;
+  }
+
+  .debao-course-card-cover > div:nth-child(2) {
+    font-size: 20px !important;
+    line-height: 1.2 !important;
+    padding: 0 8px !important;
+  }
+
+  .debao-course-card-cover > div:nth-child(3) {
+    left: 8px !important;
+    top: 8px !important;
+    right: 8px !important;
+    gap: 4px !important;
+    flex-wrap: wrap;
+  }
+
+  .debao-course-card-cover > div:nth-child(3) span,
+  .debao-course-card-cover > span {
+    font-size: 8px !important;
+    padding: 1px 5px !important;
+    border-radius: 5px !important;
+  }
+
+  .debao-course-card-cover > span {
+    top: 8px !important;
+    right: 8px !important;
+  }
+
+  .debao-course-card-body {
+    padding: 10px 10px 11px !important;
+  }
+
+  .debao-course-card-title {
+    min-height: 34px;
+    margin-bottom: 8px !important;
+    font-size: 12px !important;
+    line-height: 1.38 !important;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .debao-course-card-teacher {
+    gap: 6px !important;
+    margin-bottom: 9px !important;
+  }
+
+  .debao-course-card-teacher > div {
+    width: 18px !important;
+    height: 18px !important;
+    font-size: 8px !important;
+  }
+
+  .debao-course-card-teacher span {
+    min-width: 0;
+    font-size: 10px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .debao-course-card-meta {
+    margin-bottom: 9px !important;
+    padding-top: 8px !important;
+  }
+
+  .debao-course-card-action {
+    min-height: 31px !important;
+    padding: 7px !important;
+    font-size: 11px !important;
+    border-radius: 9px !important;
+  }
+
+  .debao-courses-empty {
+    padding: 36px 18px !important;
+    border-radius: 14px !important;
+  }
+
+  .debao-video-page {
+    min-height: 100dvh !important;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+    overflow-x: hidden;
+  }
+
+  .debao-video-breadcrumb {
+    position: sticky;
+    top: 0;
+    z-index: 35;
+    background: rgba(9,14,26,0.92) !important;
+    backdrop-filter: blur(14px);
+  }
+
+  .debao-video-breadcrumb > div {
+    max-width: none !important;
+    padding: 9px 12px !important;
+    font-size: 11px !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .debao-video-breadcrumb > div::-webkit-scrollbar {
+    display: none;
+  }
+
+  .debao-video-layout {
+    max-width: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 12px 12px 0 !important;
+  }
+
+  .debao-video-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .debao-video-mobile-picker {
+    display: block !important;
+    position: sticky;
+    top: 39px;
+    z-index: 45;
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .debao-video-mobile-picker-trigger {
+    width: min(100%, 360px);
+    min-height: 44px !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 11px;
+    border: 1px solid rgba(78,142,247,0.24);
+    border-radius: 14px;
+    background: rgba(10,16,32,0.96);
+    color: #c8d8ee;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.22);
+    backdrop-filter: blur(16px);
+  }
+
+  .debao-video-mobile-picker-trigger > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .debao-video-mobile-picker-trigger span {
+    font-size: 10px;
+    color: #4e8ef7;
+    font-weight: 800;
+  }
+
+  .debao-video-mobile-picker-trigger strong {
+    max-width: 100%;
+    font-size: 12px;
+    line-height: 1.3;
+    color: #dde4f0;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debao-video-mobile-picker-menu {
+    width: min(100%, 360px);
+    max-height: 42dvh;
+    margin-top: 8px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    background: rgba(8,13,25,0.98);
+    box-shadow: 0 20px 45px rgba(0,0,0,0.34);
+    padding: 8px;
+  }
+
+  .debao-video-mobile-picker-status,
+  .debao-video-mobile-picker-error {
+    padding: 8px 9px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .debao-video-mobile-picker-status {
+    color: #5a7898;
+  }
+
+  .debao-video-mobile-picker-error {
+    color: #f76e6e;
+  }
+
+  .debao-video-mobile-picker-chapter {
+    margin-bottom: 5px;
+  }
+
+  .debao-video-mobile-picker-chapter-button {
+    width: 100%;
+    min-height: 34px !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    color: #7a9abe;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .debao-video-mobile-picker-chapter-button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debao-video-mobile-picker-lessons {
+    padding: 5px 0 2px 6px;
+  }
+
+  .debao-video-mobile-picker-lesson {
+    width: 100%;
+    min-height: 42px !important;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #5a7898;
+    text-align: left;
+  }
+
+  .debao-video-mobile-picker-lesson.is-active {
+    background: rgba(78,142,247,0.16);
+    color: #4e8ef7;
+  }
+
+  .debao-video-mobile-picker-lesson-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    background: rgba(255,255,255,0.06);
+    color: currentColor;
+  }
+
+  .debao-video-mobile-picker-lesson-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .debao-video-mobile-picker-lesson-main span {
+    max-width: 100%;
+    font-size: 12px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debao-video-mobile-picker-lesson-main em {
+    font-style: normal;
+    font-size: 10px;
+    color: #2e4260;
+  }
+
+  .debao-video-player {
+    border-radius: 14px !important;
+    box-shadow: 0 14px 36px rgba(0,0,0,0.26);
+  }
+
+  .debao-video-player button[style*="width: 72px"] {
+    width: 54px !important;
+    height: 54px !important;
+  }
+
+  .debao-video-player div[style*="top: 20px"] {
+    top: 12px !important;
+    left: 14px !important;
+    right: 14px !important;
+  }
+
+  .debao-video-player div[style*="font-size: 16px"] {
+    font-size: 13px !important;
+    line-height: 1.35 !important;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .debao-video-player div[style*="bottom: 60px"] {
+    display: none !important;
+  }
+
+  .debao-video-player div[style*="padding: 28px 20px 14px"] {
+    padding: 22px 12px 10px !important;
+  }
+
+  .debao-video-player div[style*="gap: 14px"] {
+    gap: 10px !important;
+  }
+
+  .debao-video-player span[style*="1.0x"],
+  .debao-video-player svg[data-lucide="maximize-2"] {
+    display: none !important;
+  }
+
+  .debao-video-lesson-strip {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    margin-bottom: 12px !important;
+    padding: 13px 14px 14px !important;
+    border-radius: 0 0 14px 14px !important;
+  }
+
+  .debao-video-lesson-strip > div:first-child {
+    width: 100%;
+  }
+
+  .debao-video-lesson-strip > div:first-child > div:first-child {
+    font-size: 10px !important;
+  }
+
+  .debao-video-lesson-strip > div:first-child > div:nth-child(2) {
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+  }
+
+  .debao-video-lesson-actions {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+  }
+
+  .debao-video-lesson-actions button {
+    min-width: 0;
+    justify-content: center;
+    padding: 7px 6px !important;
+    border-radius: 9px !important;
+    font-size: 11px !important;
+    white-space: nowrap;
+  }
+
+  .debao-video-tabs {
+    gap: 6px !important;
+    margin-bottom: 12px !important;
+    border-bottom: 0 !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .debao-video-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .debao-video-tabs button {
+    flex: 0 0 auto;
+    min-height: 32px !important;
+    padding: 7px 12px !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 999px !important;
+    background: rgba(255,255,255,0.035) !important;
+    font-size: 12px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .debao-video-intro-stats {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .debao-video-intro-stats > div {
+    padding: 12px !important;
+    border-radius: 13px !important;
+  }
+
+  .debao-video-materials > div {
+    align-items: flex-start !important;
+    gap: 10px !important;
+    padding: 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .debao-video-materials button {
+    padding: 7px 10px !important;
+    font-size: 11px !important;
+  }
+
+  .debao-video-notes textarea {
+    min-height: 120px !important;
+    font-size: 13px !important;
+  }
+
+  .debao-video-sidebar {
+    display: none !important;
+  }
+
+  .debao-video-progress-card {
+    display: none !important;
+  }
+
+  .debao-video-chapter-card {
+    border-radius: 14px !important;
+    margin-bottom: 12px;
+  }
+
+  .debao-video-chapter-card > div:first-child {
+    padding: 11px 13px !important;
+  }
+
+  .debao-video-chapter-card > div:first-child span:first-of-type {
+    font-size: 13px !important;
+  }
+
+  .debao-video-chapter-card > div:nth-child(2) {
+    max-height: 34dvh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .debao-video-chapter-card button {
+    min-height: 0 !important;
+  }
+
+  .debao-video-chapter-card button[style*="padding: 13px 20px"] {
+    padding: 11px 13px !important;
+  }
+
+  .debao-video-chapter-card button[style*="padding: 9px 20px 9px 52px"] {
+    padding: 9px 12px 9px 42px !important;
+  }
+
+  .debao-video-chapter-card span {
+    font-size: 11px !important;
+  }
+
+  .debao-my-profile-page {
+    max-width: none !important;
+    padding: 16px 12px calc(92px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .debao-my-profile-header {
+    align-items: flex-start !important;
+    gap: 9px !important;
+    margin-bottom: 12px !important;
+    padding: 11px !important;
+    border-radius: 16px !important;
+    flex-wrap: wrap;
+  }
+
+  .debao-my-profile-header > div:first-child {
+    width: 42px !important;
+    height: 42px !important;
+    transform: none;
+    margin: 0;
+  }
+
+  .debao-my-profile-header > div:first-child > div:first-child {
+    width: 42px !important;
+    height: 42px !important;
+    font-size: 16px !important;
+    box-shadow: 0 0 0 2px rgba(29,201,164,0.22) !important;
+  }
+
+  .debao-my-profile-header > div:first-child > div:last-child {
+    width: 9px !important;
+    height: 9px !important;
+    right: 1px !important;
+    bottom: 1px !important;
+    border-width: 2px !important;
+  }
+
+  .debao-my-profile-info {
+    min-width: 0;
+    flex: 1 1 calc(100% - 52px) !important;
+  }
+
+  .debao-my-profile-info > div:first-child {
+    align-items: center !important;
+    flex-direction: row !important;
+    gap: 7px !important;
+    margin-bottom: 7px !important;
+  }
+
+  .debao-my-profile-info > div:first-child > span:first-child {
+    font-size: 15px !important;
+    line-height: 1.25 !important;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debao-my-profile-meta {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 5px 8px !important;
+  }
+
+  .debao-my-profile-meta span {
+    min-width: 0;
+    font-size: 10px !important;
+    color: #5a7898 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .debao-my-profile-actions {
+    flex: 1 1 100% !important;
+    justify-content: flex-end !important;
+    gap: 7px !important;
+    margin-top: -2px;
+  }
+
+  .debao-my-profile-actions button {
+    min-height: 29px !important;
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+    border-radius: 9px !important;
+  }
+
+  .debao-my-profile-tabs {
+    gap: 6px !important;
+    margin-bottom: 14px !important;
+    border-bottom: 0 !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .debao-my-profile-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .debao-my-profile-tabs > button {
+    flex: 0 0 auto;
+    min-height: 32px !important;
+    padding: 7px 12px !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 999px !important;
+    background: rgba(255,255,255,0.035) !important;
+    font-size: 12px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .debao-my-study-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  .debao-my-study-main {
+    display: contents;
+  }
+
+  .debao-my-study-sidebar {
+    display: contents !important;
+  }
+
+  .debao-my-study-stats {
+    order: 1;
+  }
+
+  .debao-my-announcements {
+    order: 2;
+  }
+
+  .debao-my-quick-links {
+    order: 3;
+  }
+
+  .debao-my-week-card {
+    order: 4;
+  }
+
+  .debao-my-activity-card {
+    order: 5;
+  }
+
+  .debao-my-announcements {
+    border-radius: 14px !important;
+  }
+
+  .debao-my-announcements > div:first-child {
+    padding: 12px 14px 10px !important;
+  }
+
+  .debao-my-announcement-list {
+    max-height: 156px !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .debao-my-announcement-list > div {
+    padding: 10px 14px !important;
+  }
+
+  .debao-my-heatmap-card {
+    display: none !important;
+  }
+
+  .debao-my-study-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .debao-my-study-stats > div {
+    min-width: 0;
+    padding: 12px 11px !important;
+    border-radius: 13px !important;
+  }
+
+  .debao-my-study-stats > div > div:first-child {
+    font-size: 10px !important;
+    margin-bottom: 5px !important;
+  }
+
+  .debao-my-study-stats > div span:first-child {
+    font-size: 20px !important;
+  }
+
+  .debao-my-week-card,
+  .debao-my-activity-card,
+  .debao-my-study-sidebar > div {
+    border-radius: 14px !important;
+    padding: 14px !important;
+  }
+
+  .debao-my-week-card {
+    margin-bottom: 12px !important;
+  }
+
+  .debao-my-week-card > div:nth-child(2) {
+    height: 74px !important;
+    gap: 5px !important;
+  }
+
+  .debao-my-activity-card > div:last-child > div {
+    gap: 10px !important;
+  }
+
+  .debao-my-courses-tab,
+  .debao-my-banks-tab,
+  .debao-my-exams-tab,
+  .debao-my-orders-tab {
+    min-width: 0;
+  }
+
+  .debao-my-course-list,
+  .debao-my-order-list {
+    gap: 10px !important;
+  }
+
+  .debao-my-course-row {
+    align-items: flex-start !important;
+    gap: 10px !important;
+    padding: 13px !important;
+    border-radius: 14px !important;
+    flex-wrap: wrap;
+  }
+
+  .debao-my-course-row > div:first-child {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 12px !important;
+    font-size: 16px !important;
+  }
+
+  .debao-my-course-row-main {
+    min-width: 0;
+    flex: 1 1 calc(100% - 52px) !important;
+  }
+
+  .debao-my-course-row-main > div:first-child {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+  }
+
+  .debao-my-course-row-main > div:first-child span:first-child {
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+  }
+
+  .debao-my-course-row-main > div:nth-child(2) {
+    gap: 7px !important;
+    flex-wrap: wrap;
+    margin-bottom: 9px !important;
+  }
+
+  .debao-my-course-row-main > div:nth-child(2) span {
+    font-size: 10px !important;
+  }
+
+  .debao-my-course-row-action {
+    margin-left: 52px;
+    min-height: 32px !important;
+    padding: 7px 14px !important;
+    font-size: 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .debao-my-banks-head {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .debao-my-banks-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .debao-my-bank-card {
+    border-radius: 13px !important;
+  }
+
+  .debao-my-bank-card > div:first-child {
+    padding: 12px 11px 10px !important;
+  }
+
+  .debao-my-bank-card > div:first-child div[style*="font-size: 14px"] {
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+  }
+
+  .debao-my-bank-card > div:last-child {
+    padding: 10px 11px 12px !important;
+  }
+
+  .debao-my-bank-card button {
+    min-height: 31px !important;
+    padding: 7px !important;
+    font-size: 11px !important;
+    border-radius: 9px !important;
+  }
+
+  .debao-my-exams-head {
+    gap: 12px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .debao-my-exams-head > div:first-child {
+    width: 100%;
+  }
+
+  .debao-my-exams-head > div:first-child > div:first-child {
+    font-size: 18px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .debao-my-exams-head > button {
+    min-height: 34px !important;
+    padding: 8px 13px !important;
+    font-size: 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .debao-my-exam-type-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .debao-my-exam-type-tabs > button {
+    width: auto !important;
+    min-width: 0;
+    padding: 10px !important;
+    border-radius: 12px !important;
+  }
+
+  .debao-my-exam-type-tabs > button span:first-child {
+    font-size: 12px !important;
+  }
+
+  .debao-my-exam-type-tabs > button span:last-child {
+    font-size: 10px !important;
+  }
+
+  .debao-my-exam-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .debao-my-exam-stats > div {
+    padding: 10px 11px !important;
+    border-radius: 12px !important;
+  }
+
+  .debao-my-exam-stats > div > div:first-child {
+    font-size: 10px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .debao-my-exam-stats > div > div:last-child {
+    font-size: 20px !important;
+  }
+
+  .debao-my-subjective-filters {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .debao-my-subjective-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .debao-my-subjective-filters > button {
+    flex: 0 0 auto;
+    min-height: 30px !important;
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+  }
+
+  .debao-my-exam-record {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+  }
+
+  .debao-my-exam-record > div:first-child > div:nth-child(2) {
+    font-size: 13px !important;
+    white-space: normal !important;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .debao-my-exam-record > div:first-child > div:nth-child(3) {
+    gap: 7px !important;
+  }
+
+  .debao-my-exam-record > div:first-child > div:nth-child(3) span {
+    font-size: 10px !important;
+  }
+
+  .debao-my-exam-record > div:last-child {
+    width: 100%;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .debao-my-exam-record > div:last-child > div:first-child {
+    min-width: 0 !important;
+    text-align: left !important;
+  }
+
+  .debao-my-exam-record > div:last-child > span {
+    min-width: 0 !important;
+    padding: 7px 10px !important;
+    font-size: 11px !important;
+    white-space: nowrap;
+  }
+
+  .debao-my-order-row {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 14px !important;
+    border-radius: 14px !important;
+  }
+
+  .debao-my-order-row > div:first-child,
+  .debao-my-order-row > div:last-child {
+    width: 100%;
+  }
+
+  .debao-my-order-row > div:first-child > div:first-child,
+  .debao-my-order-row > div:first-child > div:last-child {
+    align-items: flex-start !important;
+    flex-wrap: wrap;
+    gap: 7px !important;
+  }
+
+  .debao-my-order-row > div:first-child > div:first-child span:first-child {
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+  }
+
+  .debao-my-order-row > div:first-child > div:last-child span {
+    font-size: 10px !important;
+  }
+
+  .debao-my-order-row > div:last-child {
+    justify-content: space-between !important;
+    gap: 12px !important;
+  }
+
+  .debao-audio-page {
+    padding-bottom: calc(194px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .debao-audio-layout {
+    padding: 0 12px !important;
+    gap: 12px !important;
+  }
+
+  .debao-audio-breadcrumb {
+    position: sticky;
+    top: 0;
+    z-index: 35;
+    backdrop-filter: blur(14px);
+    background: rgba(9,14,26,0.92) !important;
+  }
+
+  .debao-audio-main {
+    gap: 12px !important;
+  }
+
+  .debao-audio-now-card {
+    position: relative;
+    top: auto;
+    z-index: 1;
+    background: rgba(15,24,38,0.96) !important;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.22);
+  }
+
+  .debao-audio-meta > div:first-child {
+    font-size: 9px !important;
+  }
+
+  .debao-audio-meta > div:nth-child(2) {
+    font-size: 13px !important;
+    line-height: 1.35 !important;
+  }
+
+  .debao-audio-meta > div:nth-child(3) {
+    font-size: 10px !important;
+    line-height: 1.5 !important;
+  }
+
+  .debao-audio-transcript {
+    height: 42dvh !important;
+    min-height: 260px !important;
+  }
+
+  .debao-audio-transcript p {
+    font-size: 13px !important;
+    line-height: 1.9 !important;
+  }
+
+  .debao-audio-sidebar {
+    display: none !important;
+  }
+
+  .debao-audio-sidebar > div:first-child {
+    display: none !important;
+  }
+
+  .debao-audio-player-bar {
+    padding: 10px 12px 12px !important;
+  }
+
+  .debao-audio-player-inner {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+
+  .debao-audio-track-info > div:first-child {
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 9px !important;
+    font-size: 14px !important;
+  }
+
+  .debao-audio-controls > div:first-child {
+    gap: 14px !important;
+  }
+
+  .debao-audio-controls > div:first-child button:nth-child(2) {
+    width: 40px !important;
+    height: 40px !important;
   }
 }
 

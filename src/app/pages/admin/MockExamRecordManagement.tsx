@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import { Download, Eye, Loader2, RefreshCw, Save, Search, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "../../components/ui/badge";
@@ -14,6 +13,7 @@ import {
   AdminExamRecordDetail,
   AdminExamRecordScorePage,
   AdminExamRecordSummary,
+  type AdminExamRecordExportScope,
   adminOperationsService,
 } from "../../services/adminOperationsService";
 
@@ -53,39 +53,18 @@ const formatDuration = (seconds: number) => {
   return `${remainSeconds}秒`;
 };
 
-const exportRecords = (records: AdminExamRecord[], fileName: string) => {
-  if (records.length === 0) {
-    toast.error("当前没有可导出的考试记录");
-    return;
-  }
-
-  const sheet = XLSX.utils.json_to_sheet(
-    records.map((record) => ({
-      记录ID: record.id,
-      手机号: record.userPhone,
-      昵称: record.userNickname,
-      试卷: record.paperTitle,
-      套卷: record.seriesName,
-      类型: record.paperTypeLabel,
-      状态: record.statusLabel,
-      批改状态: record.reviewWorkflowStatusLabel,
-      次数: record.attemptNo,
-      得分: record.score,
-      满分: record.paperTotalScore,
-      正确数: record.correctCount,
-      已答: record.answeredCount,
-      题量: record.questionCount,
-      用时: formatDuration(record.consumedSeconds),
-      手动排名: record.manualRank ?? "",
-      开考时间: record.startedAt,
-      交卷时间: record.submittedAt,
-      发布时间: record.publishedAt,
-    })),
-  );
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, "考试记录");
-  XLSX.writeFile(workbook, fileName);
+const triggerBlobDownload = (blob: Blob, filename: string) => {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
 };
+
+const sanitizeFileName = (value: string, fallback: string) => value.replace(/[\\/:*?"<>|]+/g, "_").trim() || fallback;
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
@@ -103,6 +82,7 @@ export function MockExamRecordManagement() {
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState("");
   const [paperId, setPaperId] = useState("all");
+  const [seriesId, setSeriesId] = useState("all");
   const [paperType, setPaperType] = useState("all");
   const [status, setStatus] = useState("all");
   const [reviewStatus, setReviewStatus] = useState("all");
@@ -113,14 +93,35 @@ export function MockExamRecordManagement() {
   const [scoreLoading, setScoreLoading] = useState(false);
   const [rankDrafts, setRankDrafts] = useState<Record<string, string>>({});
   const [savingRanks, setSavingRanks] = useState(false);
+  const [exportingScope, setExportingScope] = useState<AdminExamRecordExportScope | "score" | null>(null);
 
   const paperMap = useMemo(() => new Map(papers.map((paper) => [paper.id, paper])), [papers]);
+  const seriesOptions = useMemo(() => {
+    const optionMap = new Map<string, { id: string; name: string; count: number }>();
+    papers.forEach((paper) => {
+      const id = paper.seriesId || "__none__";
+      const name = paper.seriesName || "未分组试卷";
+      const current = optionMap.get(id);
+      optionMap.set(id, { id, name, count: (current?.count ?? 0) + 1 });
+    });
+    return Array.from(optionMap.values()).sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN"));
+  }, [papers]);
+  const visiblePaperOptions = useMemo(
+    () =>
+      papers.filter((paper) => {
+        if (paperType !== "all" && paper.paperType !== paperType) return false;
+        if (seriesId === "__none__") return !paper.seriesId;
+        if (seriesId !== "all" && paper.seriesId !== seriesId) return false;
+        return true;
+      }),
+    [paperType, papers, seriesId],
+  );
 
   const loadReferenceData = async () => {
     try {
       const [summaryPayload, paperPayload] = await Promise.all([
         adminOperationsService.getExamRecordSummary(),
-        adminOperationsService.getExamPapers({ paperType }),
+        adminOperationsService.getExamPapers({ paperType: "all" }),
       ]);
       setSummary(summaryPayload);
       setPapers(paperPayload);
@@ -137,6 +138,7 @@ export function MockExamRecordManagement() {
         pageSize: PAGE_SIZE,
         keyword: keyword.trim(),
         paperId,
+        seriesId,
         paperType,
         status,
         reviewWorkflowStatus: reviewStatus,
@@ -149,6 +151,12 @@ export function MockExamRecordManagement() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (paperId !== "all" && !visiblePaperOptions.some((paper) => paper.id === paperId)) {
+      setPaperId("all");
+    }
+  }, [paperId, visiblePaperOptions]);
 
   const refresh = async (nextPage = 1) => {
     await Promise.all([loadReferenceData(), loadRecords(nextPage)]);
@@ -212,6 +220,59 @@ export function MockExamRecordManagement() {
   };
 
   const selectedPaper = paperId === "all" ? null : paperMap.get(paperId) ?? null;
+  const selectedSeries = seriesId === "all" ? null : seriesOptions.find((series) => series.id === seriesId) ?? null;
+  const exportSeries =
+    selectedSeries ??
+    (selectedPaper
+      ? {
+          id: selectedPaper.seriesId || "__none__",
+          name: selectedPaper.seriesName || "未分组试卷",
+          count: 0,
+        }
+      : null);
+
+  const exportExamRecords = async (scope: AdminExamRecordExportScope, targetPaper?: AdminExamPaperOption) => {
+    const paperForExport = targetPaper ?? selectedPaper;
+    if (scope === "paper" && !paperForExport) {
+      toast.error("请先选择要导出的试卷");
+      return;
+    }
+    if (scope === "series" && !exportSeries) {
+      toast.error("请先选择要导出的试卷分组");
+      return;
+    }
+
+    setExportingScope(targetPaper ? "score" : scope);
+    try {
+      const blob = await adminOperationsService.exportExamRecords({
+        scope,
+        paperId: scope === "paper" ? paperForExport?.id : undefined,
+        seriesId: scope === "series" ? exportSeries?.id : undefined,
+        ...(scope === "filtered"
+          ? {
+              keyword: keyword.trim(),
+              paperId,
+              seriesId,
+              paperType,
+              status,
+              reviewWorkflowStatus: reviewStatus,
+            }
+          : {}),
+      });
+      const fileName =
+        scope === "paper"
+          ? `${sanitizeFileName(paperForExport?.title ?? "", "当前试卷")}-全部考试记录.xlsx`
+          : scope === "series"
+            ? `${sanitizeFileName(exportSeries?.name ?? "", "当前分组")}-全部考试记录.xlsx`
+            : "全部试卷考试记录.xlsx";
+      triggerBlobDownload(blob, fileName);
+      toast.success("考试记录已导出");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "导出考试记录失败");
+    } finally {
+      setExportingScope(null);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -237,9 +298,17 @@ export function MockExamRecordManagement() {
                 {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                 刷新
               </Button>
-              <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" onClick={() => exportRecords(records, "学员考试记录.xlsx")}>
+              <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={exportingScope !== null} onClick={() => void exportExamRecords("all")}>
                 <Download className="size-4" />
-                导出当前页
+                {exportingScope === "all" ? "导出中..." : "导出全部试卷"}
+              </Button>
+              <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={!exportSeries || exportingScope !== null} onClick={() => void exportExamRecords("series")}>
+                <Download className="size-4" />
+                {exportingScope === "series" ? "导出中..." : "导出当前分组"}
+              </Button>
+              <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={!selectedPaper || exportingScope !== null} onClick={() => void exportExamRecords("paper")}>
+                <Download className="size-4" />
+                {exportingScope === "paper" ? "导出中..." : "导出当前试卷"}
               </Button>
               <Button className="bg-blue-600 text-white hover:bg-blue-700" disabled={!selectedPaper} onClick={() => void openScores(paperId, 1)}>
                 <Trophy className="size-4" />
@@ -249,7 +318,7 @@ export function MockExamRecordManagement() {
           </div>
         </div>
 
-        <div className="grid gap-3 border-b border-slate-100 px-5 py-4 lg:grid-cols-[minmax(260px,1fr)_220px_160px_160px_180px_auto]">
+        <div className="grid gap-3 border-b border-slate-100 px-5 py-4 lg:grid-cols-[minmax(260px,1fr)_200px_220px_150px_150px_170px_auto]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
@@ -260,13 +329,26 @@ export function MockExamRecordManagement() {
               placeholder="搜索手机号、昵称、试卷、记录ID"
             />
           </div>
+          <Select value={seriesId} onValueChange={setSeriesId}>
+            <SelectTrigger className="border-slate-200 bg-white text-slate-800">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-80 border-slate-200 bg-white text-slate-900">
+              <SelectItem value="all">全部试卷分组</SelectItem>
+              {seriesOptions.map((series) => (
+                <SelectItem key={series.id} value={series.id}>
+                  {series.name} ({series.count})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={paperId} onValueChange={setPaperId}>
             <SelectTrigger className="border-slate-200 bg-white text-slate-800">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="max-h-80 border-slate-200 bg-white text-slate-900">
               <SelectItem value="all">全部试卷</SelectItem>
-              {papers.map((paper) => (
+              {visiblePaperOptions.map((paper) => (
                 <SelectItem key={paper.id} value={paper.id}>
                   {paper.title}
                 </SelectItem>
@@ -431,9 +513,9 @@ export function MockExamRecordManagement() {
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-slate-500">{scorePage.paper.seriesName || "未分套卷"} · {scorePage.paper.paperTypeLabel}</div>
-                <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" onClick={() => exportRecords(scorePage.items, `${scorePage.paper.title}-成绩.xlsx`)}>
+                <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={exportingScope !== null} onClick={() => void exportExamRecords("paper", scorePage.paper)}>
                   <Download className="size-4" />
-                  导出成绩
+                  {exportingScope === "score" ? "导出中..." : "导出本试卷全部成绩"}
                 </Button>
               </div>
               <div className="overflow-x-auto rounded-lg border border-slate-200">

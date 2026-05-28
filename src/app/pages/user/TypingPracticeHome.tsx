@@ -30,8 +30,7 @@ import {
   pickNextTypingPracticeText,
   typingPracticeModeMeta,
 } from "./typingPracticeShared";
-import { useMockExamDesktopGuard } from "./mockExamDesktopGuard";
-import { TypingPracticeDeviceNotice } from "./TypingPracticeDeviceNotice";
+import { DesktopOnlyNotice, useMockExamDesktopGuard } from "./mockExamDesktopGuard";
 
 const EMPTY_HOME: TypingPracticeHomePayload = {
   homeConfig: {
@@ -346,7 +345,7 @@ export function TypingPracticeHome() {
   const thiefPosition = 82;
 
   if (isMobileBlocked) {
-    return <TypingPracticeDeviceNotice />;
+    return <DesktopOnlyNotice feature="typingPractice" backLabel="返回首页" onBack={() => navigate("/user/courses")} />;
   }
 
   const cycleText = (direction: "next" | "prev") => {

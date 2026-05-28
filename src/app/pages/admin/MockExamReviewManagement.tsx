@@ -347,6 +347,8 @@ function PaperCard({ paper, onOpen }: { paper: AdminMockExamReviewPaper; onOpen:
 
 function RecordRow({ record, onOpen, onClaim }: { record: AdminMockExamReviewRecord; onOpen: (record: AdminMockExamReviewRecord) => void; onClaim: (record: AdminMockExamReviewRecord) => void }) {
   const status = statusMeta[record.reviewWorkflowStatus] ?? statusMeta.all;
+  const claimLabel = record.lock.ownedByMe ? "继续批改" : record.reviewWorkflowStatus === "published" ? "重新修改" : "领取";
+  const publishedCount = Number(record.publishedSubjectiveCount ?? 0);
   return (
     <tr className="group hover:bg-slate-50">
       <td className="px-5 py-4">
@@ -361,6 +363,7 @@ function RecordRow({ record, onOpen, onClaim }: { record: AdminMockExamReviewRec
       <td className="px-5 py-4 text-slate-600">
         <p>{record.reviewedSubjectiveCount}/{record.subjectiveQuestionCount} 题已批</p>
         <p className="mt-1 text-xs text-slate-500">作答 {record.answeredSubjectiveCount}/{record.subjectiveQuestionCount} · 得分 {record.totalScore}</p>
+        {publishedCount > 0 && record.reviewWorkflowStatus !== "published" ? <p className="mt-1 text-xs text-emerald-700">学生端仍显示上一版批改</p> : null}
       </td>
       <td className="px-5 py-4 text-slate-600">
         <p>第 {record.attemptNo} 次</p>
@@ -372,10 +375,10 @@ function RecordRow({ record, onOpen, onClaim }: { record: AdminMockExamReviewRec
       </td>
       <td className="sticky right-0 bg-white px-5 py-4 shadow-[-8px_0_16px_rgba(15,23,42,0.04)] group-hover:bg-slate-50">
         <div className="flex flex-wrap justify-end gap-2">
-          {record.reviewWorkflowStatus !== "published" && record.lock.canClaim ? (
+          {record.lock.canClaim ? (
             <Button variant="outline" size="sm" className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" onClick={() => onClaim(record)}>
               <UserCheck className="size-4" />
-              {record.lock.ownedByMe ? "继续批改" : "领取"}
+              {claimLabel}
             </Button>
           ) : null}
           <Button variant="outline" size="sm" onClick={() => onOpen(record)}>
@@ -847,7 +850,7 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
 
   const totalDraftScore = useMemo(() => reviewForm.reduce((sum, question) => sum + getQuestionTotalScore(question), 0), [reviewForm]);
   const detailReturnTo = useMemo(() => normalizeAdminReturnTo(returnTo), [returnTo]);
-  const canEdit = Boolean(detail?.record.lock.canEdit && detail.record.reviewWorkflowStatus !== "published");
+  const canEdit = Boolean(detail?.record.lock.canEdit);
   const hasUnsavedChanges = canEdit && Boolean(savedFormSnapshot) && serializeReviewForm(reviewForm) !== savedFormSnapshot;
 
   const loadPapers = async (page = papersPage.page) => {
@@ -993,13 +996,14 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
   const claimRecord = async (record: AdminMockExamReviewRecord) => {
     setActionLoading(true);
     try {
+      const wasPublished = record.reviewWorkflowStatus === "published";
       const payload = await adminMockExamReviewService.claimRecord(record.id);
       setDetail(payload);
       const nextForm = toReviewForm(payload);
       setReviewForm(nextForm);
       setSavedFormSnapshot(serializeReviewForm(nextForm));
       setViewMode("detail");
-      toast.success("已领取批改记录");
+      toast.success(wasPublished ? "已进入二次修改" : "已领取批改记录");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "领取失败");
     } finally {
@@ -1044,6 +1048,10 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
 
   const saveDraft = async () => {
     if (!detail) return;
+    if (detail.record.hasPublishedReview && !hasUnsavedChanges) {
+      toast.info("当前没有新的修改，不需要保存草稿");
+      return;
+    }
     setActionLoading(true);
     try {
       const payload = await adminMockExamReviewService.saveDraft(detail.record.id, buildSavePayload(detail, reviewForm));
@@ -1062,7 +1070,12 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
   const rerunAiReview = async () => {
     if (!detail) return;
     if (hasUnsavedChanges && !window.confirm("当前批改内容还没有保存，AI重批会覆盖当前本地修改，确认继续吗？")) return;
-    if (!window.confirm(`确认让 AI 重新批改这份试卷吗？\n考生：${detail.record.userLabel}\n试卷：${detail.paper.title}`)) return;
+    if (detail.record.hasPublishedReview && !detail.record.lock.ownedByMe) {
+      toast.error("已发送的试卷请先点击“重新修改”领取后，再进行 AI 重批");
+      return;
+    }
+    const publishedNotice = detail.record.hasPublishedReview ? "\n学生端会继续显示上一版批改，重新发送后才会替换为新版。" : "";
+    if (!window.confirm(`确认让 AI 重新批改这份试卷吗？\n考生：${detail.record.userLabel}\n试卷：${detail.paper.title}${publishedNotice}`)) return;
 
     setAiReviewLoading(true);
     try {
@@ -1082,11 +1095,12 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
 
   const publishReview = async () => {
     if (!detail) return;
+    const isRepublish = Boolean(detail.record.hasPublishedReview || detail.record.publishedAt);
     if (hasMissingComment(reviewForm)) {
       toast.error("还有小问没有填写老师点评，不能发送给学生");
       return;
     }
-    if (!window.confirm(`确认把这份批改发送给学生？\n考生：${detail.record.userLabel}\n试卷：${detail.paper.title}\n当前总分：${totalDraftScore}/${detail.paper.totalScore}`)) return;
+    if (!window.confirm(`确认把这份批改${isRepublish ? "重新发送" : "发送"}给学生？\n考生：${detail.record.userLabel}\n试卷：${detail.paper.title}\n当前总分：${totalDraftScore}/${detail.paper.totalScore}`)) return;
 
     setActionLoading(true);
     try {
@@ -1095,7 +1109,7 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
       const nextForm = toReviewForm(payload);
       setReviewForm(nextForm);
       setSavedFormSnapshot(serializeReviewForm(nextForm));
-      toast.success("批改结果已发送给学生");
+      toast.success(isRepublish ? "批改结果已重新发送给学生" : "批改结果已发送给学生");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "发送失败");
     } finally {
@@ -1127,6 +1141,10 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
 
   if (viewMode === "detail" && detail) {
     const status = statusMeta[detail.record.reviewWorkflowStatus] ?? statusMeta.all;
+    const isRepublishDetail = Boolean(detail.record.hasPublishedReview || detail.record.publishedAt);
+    const isRevisingPublishedReview = isRepublishDetail && detail.record.lock.ownedByMe;
+    const detailClaimLabel = isRepublishDetail ? "重新修改" : "领取批改";
+    const sendReviewLabel = isRepublishDetail ? "重新发送给学生" : "发送给学生";
     return (
       <div className="mx-auto max-w-[1600px] space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1135,13 +1153,13 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
             返回队列
           </Button>
           <div className="flex flex-wrap gap-2">
-            {!canEdit && detail.record.reviewWorkflowStatus !== "published" ? (
+            {!canEdit && detail.record.lock.canClaim ? (
               <Button className="bg-blue-600 text-white hover:bg-blue-700" disabled={actionLoading || aiReviewLoading} onClick={() => void claimRecord(detail.record)}>
                 <UserCheck className="size-4" />
-                领取批改
+                {detailClaimLabel}
               </Button>
             ) : null}
-            <Button variant="outline" disabled={actionLoading || aiReviewLoading || detail.record.reviewWorkflowStatus === "published" || !detail.record.lock.canClaim} onClick={() => void rerunAiReview()}>
+            <Button variant="outline" disabled={actionLoading || aiReviewLoading || !detail.record.lock.canClaim || (isRepublishDetail && !detail.record.lock.ownedByMe)} onClick={() => void rerunAiReview()}>
               <RefreshCw className={`size-4 ${aiReviewLoading ? "animate-spin" : ""}`} />
               {aiReviewLoading ? "AI重批中..." : "AI重批"}
             </Button>
@@ -1152,11 +1170,11 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
                 </Button>
                 <Button variant="outline" disabled={actionLoading || aiReviewLoading} onClick={() => void saveDraft()}>
                   <Save className="size-4" />
-                  保存草稿
+                  {isRepublishDetail ? "保存二次修改草稿" : "保存草稿"}
                 </Button>
                 <Button className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={actionLoading || aiReviewLoading} onClick={() => void publishReview()}>
                   <Send className="size-4" />
-                  发送给学生
+                  {sendReviewLabel}
                 </Button>
               </>
             ) : null}
@@ -1170,6 +1188,7 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
                 <Badge variant="outline" className={status.className}>{status.label}</Badge>
                 <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">{detail.paper.code}</Badge>
                 {detail.record.lock.active ? <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-800">锁定至 {detail.record.lock.expiresAt}</Badge> : null}
+                {isRevisingPublishedReview ? <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">二次修改中，学生端仍显示上一版</Badge> : null}
                 {hasUnsavedChanges ? <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">有未保存修改</Badge> : null}
               </div>
               <h2 className="mt-3 break-words text-2xl font-semibold text-slate-950">{detail.paper.title}</h2>
@@ -1236,17 +1255,17 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
               {hasUnsavedChanges ? <span className="ml-3 text-amber-700">有未保存修改</span> : <span className="ml-3 text-emerald-700">已保存</span>}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" disabled={actionLoading || aiReviewLoading || detail.record.reviewWorkflowStatus === "published" || !detail.record.lock.canClaim} onClick={() => void rerunAiReview()}>
+              <Button variant="outline" disabled={actionLoading || aiReviewLoading || !detail.record.lock.canClaim || (isRepublishDetail && !detail.record.lock.ownedByMe)} onClick={() => void rerunAiReview()}>
                 <RefreshCw className={`size-4 ${aiReviewLoading ? "animate-spin" : ""}`} />
                 {aiReviewLoading ? "AI重批中..." : "重新批改"}
               </Button>
               <Button variant="outline" disabled={actionLoading || aiReviewLoading} onClick={() => void saveDraft()}>
                 <Save className="size-4" />
-                保存草稿
+                {isRepublishDetail ? "保存二次修改草稿" : "保存草稿"}
               </Button>
               <Button className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={actionLoading || aiReviewLoading} onClick={() => void publishReview()}>
                 <Send className="size-4" />
-                发送给学生
+                {sendReviewLabel}
               </Button>
             </div>
           </div>

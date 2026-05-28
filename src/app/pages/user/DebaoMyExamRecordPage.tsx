@@ -874,7 +874,7 @@ export function DebaoMyExamRecordPage({
   };
 
   return (
-    <main className="min-h-[calc(100vh-72px)] bg-[radial-gradient(circle_at_top,#ffffff_0%,#f7f7f8_58%,#f2f2f3_100%)] px-4 py-6 text-[#18181b] md:px-6 md:py-8">
+    <main className="debao-my-exam-record-page min-h-[calc(100vh-72px)] bg-[radial-gradient(circle_at_top,#ffffff_0%,#f7f7f8_58%,#f2f2f3_100%)] px-4 py-6 text-[#18181b] md:px-6 md:py-8">
       <div className="mx-auto max-w-[1440px]">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">

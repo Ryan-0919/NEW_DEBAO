@@ -9,7 +9,7 @@ import {
   ChevronDown, PlayCircle, Volume2, Maximize2, SkipForward,
   SkipBack, AlignLeft, Paperclip, ListVideo,
   Bookmark, Flag, RotateCcw, CheckCheck, X, Shuffle, Trash2,
-  ListFilter, Circle,
+  ListFilter, Circle, Menu, House, UserRound, Moon, Sun,
 } from "lucide-react";
 import { ApiRequestError, USER_SESSION_EXPIRED_EVENT } from "./services/apiClient";
 import { courseService } from "./services/courseService";
@@ -32,6 +32,7 @@ import { LegacyMockExamRouter } from "./pages/user/LegacyMockExamRouter";
 import { DebaoMyExamRecordPage, getMyExamRecordRouteFromPath } from "./pages/user/DebaoMyExamRecordPage";
 import { DebaoLawSearchPage } from "./pages/user/DebaoLawSearchPage";
 import { TypingPracticeRouter } from "./pages/user/TypingPracticeRouter";
+import { DesktopOnlyNotice, type DesktopOnlyFeature, useMockExamDesktopGuard } from "./pages/user/mockExamDesktopGuard";
 import { AdminRouter } from "./pages/admin/AdminRouter";
 import { ReviewRouter } from "./pages/review/ReviewRouter";
 import mockExamOfficialCss from "../styles/mock-exam-official.css?raw";
@@ -46,18 +47,28 @@ import {
 import { userService } from "./services/userService";
 import type { LegacyUser, UserStudySummary } from "./services/userService";
 import { mockApi, type UserHomeConfig } from "./lib/mockData";
+import { AppLogo } from "./components/branding/AppLogo";
 
 /* ══════════════════════ SHARED DATA ══════════════════════ */
 
 const navItems = ["首页", "课程中心", "题库", "我的"];
+const navIcons = [House, PlayCircle, BookOpen, UserRound];
+type DebaoThemeMode = "dark" | "light";
+const DEBAO_THEME_STORAGE_KEY = "debao:theme-mode";
+
+const getInitialDebaoTheme = (): DebaoThemeMode => {
+  if (typeof window === "undefined") return "dark";
+  const saved = window.localStorage.getItem(DEBAO_THEME_STORAGE_KEY);
+  return saved === "light" ? "light" : "dark";
+};
 
 const modules = [
   { id: 1, title: "课程学习", sub: "名师精讲 · 系统备考", icon: Play, color: "#c9973e", glow: "rgba(201,151,62,0.2)", page: "courses" },
   { id: 2, title: "题库", sub: "海量真题 · 专项练习", icon: BookOpen, color: "#4e8ef7", glow: "rgba(78,142,247,0.2)", hot: true },
-  { id: 3, title: "进入主观批改", sub: "AI评分 · 要点解析", icon: FileText, color: "#1dc9a4", glow: "rgba(29,201,164,0.2)" },
-  { id: 4, title: "客观题模考", sub: "全真仿真 · 限时测验", icon: Target, color: "#c97ef5", glow: "rgba(201,126,245,0.2)" },
+  { id: 3, title: "进入主观批改", sub: "AI评分 · 要点解析", icon: FileText, color: "#1dc9a4", glow: "rgba(29,201,164,0.2)", desktopOnly: true },
+  { id: 4, title: "客观题模考", sub: "全真仿真 · 限时测验", icon: Target, color: "#c97ef5", glow: "rgba(201,126,245,0.2)", desktopOnly: true },
   { id: 5, title: "主观法条检索", sub: "全库法条 · 快速定位", icon: Scale, color: "#f7a94e", glow: "rgba(247,169,78,0.2)" },
-  { id: 6, title: "打字练习", sub: "法律术语 · 答题提速", icon: Swords, color: "#f76e6e", glow: "rgba(247,110,110,0.2)" },
+  { id: 6, title: "打字练习", sub: "法律术语 · 答题提速", icon: Swords, color: "#f76e6e", glow: "rgba(247,110,110,0.2)", desktopOnly: true },
 ];
 
 /* ══════════════════════ COURSES PAGE DATA ══════════════════════ */
@@ -569,15 +580,120 @@ const OFFICIAL_EXAM_EXTRA_CSS = `
 [data-v-6e05b77a] .debao-resize-edge-right{position:absolute;top:0;right:0;width:7px;height:100%;cursor:ew-resize;z-index:220}
 [data-v-6e05b77a] .debao-resize-edge-bottom{position:absolute;left:0;bottom:0;width:100%;height:7px;cursor:ns-resize;z-index:220}
 [data-v-6e05b77a] .debao-resize-grip{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;z-index:230;background:linear-gradient(135deg, transparent 0 48%, rgba(64,64,64,.32) 48% 55%, transparent 55% 65%, rgba(64,64,64,.32) 65% 72%, transparent 72%)}
+[data-v-6e05b77a] .mock-stem-highlight{background:#fff59d;color:inherit}
 `;
 type OfficialThemeId = 1 | 2 | 3 | 4 | 5;
 type OfficialSubjectivePanelHeight = "300px" | "100%";
 type OfficialAnswerPanelHeight = "340px" | "100%";
 type OfficialDialogRect = { left: number; top: number; width: number; height: number };
+type OfficialHighlightBlock = "prompt" | "subjective-block";
+type OfficialHighlightSelection = { block: OfficialHighlightBlock; key: string; start: number; end: number };
 const OFFICIAL_THEME_BG: Record<OfficialThemeId, string> = { 1: "#ddebf6", 2: "#cae0e0", 3: "#f5e9dc", 4: "#f5dce4", 5: "#deddf6" };
 const OFFICIAL_SECTION_ORDERS = ["一、", "二、", "三、", "四、", "五、", "六、"];
+const OFFICIAL_STEM_HIGHLIGHT_CLASS = "mock-stem-highlight";
 const officialOrderText = (index: number) => OFFICIAL_SECTION_ORDERS[index] ?? `${index + 1}. `;
 const officialToHtml = (text: string) => (!text ? "" : text.includes("<") ? text : text.replace(/\n/g, "<br />"));
+const getOfficialSelectionFromNode = (node?: Node | null) => {
+  const root = node?.getRootNode?.();
+  const rootSelection =
+    root && "getSelection" in root
+      ? (root as ShadowRoot & { getSelection?: () => Selection | null }).getSelection?.() ?? null
+      : null;
+  return rootSelection ?? window.getSelection?.() ?? null;
+};
+const getOfficialTextOffsetWithin = (root: Node, container: Node, offset: number) => {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let current = walker.nextNode();
+  let total = 0;
+
+  while (current) {
+    const textLength = current.textContent?.length ?? 0;
+    if (current === container) return total + Math.min(offset, textLength);
+    total += textLength;
+    current = walker.nextNode();
+  }
+
+  return total;
+};
+const locateOfficialTextBoundary = (root: HTMLElement, targetOffset: number) => {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let current = walker.nextNode() as Text | null;
+  let remaining = Math.max(0, targetOffset);
+  let lastTextNode: Text | null = null;
+
+  while (current) {
+    const textLength = current.textContent?.length ?? 0;
+    lastTextNode = current;
+    if (remaining <= textLength) return { node: current, offset: remaining };
+    remaining -= textLength;
+    current = walker.nextNode() as Text | null;
+  }
+
+  return lastTextNode ? { node: lastTextNode, offset: lastTextNode.textContent?.length ?? 0 } : null;
+};
+const unwrapOfficialHighlightElement = (element: Element) => {
+  const parent = element.parentNode;
+  if (!parent) return;
+  while (element.firstChild) parent.insertBefore(element.firstChild, element);
+  parent.removeChild(element);
+  parent.normalize();
+};
+const cleanupOfficialHighlightContainer = (container: HTMLElement) => {
+  Array.from(container.querySelectorAll(`span.${OFFICIAL_STEM_HIGHLIGHT_CLASS}`)).forEach((element) => {
+    if (!element.textContent) element.remove();
+  });
+  container.normalize();
+};
+const applyOfficialHighlightToHtml = (html: string, start: number, end: number) => {
+  if (start >= end) return html;
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  const startBoundary = locateOfficialTextBoundary(container, start);
+  const endBoundary = locateOfficialTextBoundary(container, end);
+  if (!startBoundary || !endBoundary) return html;
+
+  const range = document.createRange();
+  range.setStart(startBoundary.node, startBoundary.offset);
+  range.setEnd(endBoundary.node, endBoundary.offset);
+  if (range.collapsed) return html;
+
+  const highlight = document.createElement("span");
+  highlight.className = OFFICIAL_STEM_HIGHLIGHT_CLASS;
+  highlight.setAttribute("style", "background:#fff59d;");
+  highlight.appendChild(range.extractContents());
+  range.insertNode(highlight);
+  cleanupOfficialHighlightContainer(container);
+  return container.innerHTML;
+};
+const clearOfficialHighlightInHtml = (html: string, start?: number, end?: number) => {
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  const highlightElements = Array.from(container.querySelectorAll(`span.${OFFICIAL_STEM_HIGHLIGHT_CLASS}`));
+  if (highlightElements.length === 0) return html;
+
+  if (typeof start !== "number" || typeof end !== "number" || start >= end) {
+    highlightElements.forEach((element) => unwrapOfficialHighlightElement(element));
+    cleanupOfficialHighlightContainer(container);
+    return container.innerHTML;
+  }
+
+  const startBoundary = locateOfficialTextBoundary(container, start);
+  const endBoundary = locateOfficialTextBoundary(container, end);
+  if (!startBoundary || !endBoundary) {
+    highlightElements.forEach((element) => unwrapOfficialHighlightElement(element));
+    cleanupOfficialHighlightContainer(container);
+    return container.innerHTML;
+  }
+
+  const range = document.createRange();
+  range.setStart(startBoundary.node, startBoundary.offset);
+  range.setEnd(endBoundary.node, endBoundary.offset);
+  highlightElements.forEach((element) => {
+    if (range.intersectsNode(element)) unwrapOfficialHighlightElement(element);
+  });
+  cleanupOfficialHighlightContainer(container);
+  return container.innerHTML;
+};
 const createOfficialDialogRect = (): OfficialDialogRect => {
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
@@ -586,6 +702,17 @@ const createOfficialDialogRect = (): OfficialDialogRect => {
     top: Math.round(viewportHeight * 0.15),
     width: Math.round(viewportWidth * 0.5),
     height: Math.round(viewportHeight * 0.7),
+  };
+};
+
+const createOfficialLawDialogMaxRect = (): OfficialDialogRect => {
+  const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
+  return {
+    left: 0,
+    top: 0,
+    width: viewportWidth,
+    height: viewportHeight,
   };
 };
 
@@ -700,6 +827,24 @@ const getRouteMockExamMode = (): MockExamMode => {
   if (pathname.startsWith("/user/objective-mock-exams")) return "objective";
   const mode = new URLSearchParams(window.location.search).get("mode");
   return mode === "subjective" ? "subjective" : "objective";
+};
+
+const getDesktopOnlyFeatureForPage = (
+  page: string,
+  pathname: string,
+  questionTarget?: QuestionPracticeTarget,
+  mockMode?: MockExamMode,
+): DesktopOnlyFeature | null => {
+  if (page === "typingPractice" || pathname.startsWith("/user/typing-practice")) return "typingPractice";
+  if (page === "myQuestionBank" || pathname.startsWith("/question-bank/my")) return "myQuestionBank";
+  if (page === "questionBank" || pathname.startsWith("/question-bank/practice")) {
+    if (questionTarget?.source === "my" || questionTarget?.layout === "officialSubjective") return "myQuestionBank";
+    return null;
+  }
+  if (page === "subjectiveGrading" || pathname.startsWith("/user/mock-exams")) return "subjectiveReview";
+  if (page === "mockExamHome" || pathname.startsWith("/user/objective-mock-exams")) return "objectiveMock";
+  if (page === "mockExamRoom") return mockMode === "subjective" ? "subjectiveReview" : "objectiveMock";
+  return null;
 };
 
 const buildMockExamRoomPath = (target: MockExamSessionTarget) => {
@@ -896,15 +1041,18 @@ function makeCourseDetail(course: AppCourse) {
 
 /* ══════════════════════ NAV (shared) ══════════════════════ */
 
-function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary }: {
+function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, themeMode, onToggleTheme }: {
   activeNav: number;
   setActiveNav: (i: number) => void;
   setPage: (p: string) => void;
   currentUser: LegacyUser | null;
   studySummary: UserStudySummary;
+  themeMode: DebaoThemeMode;
+  onToggleTheme: () => void;
 }) {
   const displayName = getDisplayName(currentUser);
   const studyStreak = getStudyStreak(studySummary.heatmapDays);
+  const isLightTheme = themeMode === "light";
 
   return (
     <header className="debao-nav-shell" style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(7,12,24,0.96)", backdropFilter: "blur(24px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
@@ -914,18 +1062,30 @@ function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary }: {
           style={{ display: "flex", alignItems: "center", gap: 11, flexShrink: 0, cursor: "pointer" }}
           onClick={() => { setActiveNav(0); setPage("home"); }}
         >
-          <div style={{ width: 34, height: 34, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(145deg,#c9973e,#e8c46a)", fontFamily: "'Noto Serif SC',serif", fontWeight: 700, fontSize: 16, color: "#080d18", boxShadow: "0 2px 12px rgba(201,151,62,0.4)" }}>律</div>
-          <div>
-            <div style={{ fontFamily: "'Noto Serif SC',serif", fontWeight: 600, fontSize: 15, color: "#f0e6d0", letterSpacing: "0.05em", lineHeight: 1.2 }}>得宝</div>
-            <div style={{ fontSize: 10, color: "#4a6a88", letterSpacing: "0.1em" }}>得恩法考 · LAW EXAM</div>
-          </div>
+          <AppLogo compact className="debao-nav-logo" />
         </div>
         <nav className="debao-nav-tabs" style={{ display: "flex", gap: 2 }}>
-          {navItems.map((item, i) => (
-            <button key={item} onClick={() => { setActiveNav(i); setPage(i === 1 ? "courses" : i === 2 ? "questionBankHome" : i === 3 ? "myProfile" : "home"); }} style={{ padding: "7px 18px", borderRadius: 9, fontSize: 13, border: "none", cursor: "pointer", background: activeNav === i ? "rgba(201,151,62,0.1)" : "transparent", color: activeNav === i ? "#c9973e" : "#5a7898", fontWeight: activeNav === i ? 600 : 400, transition: "all 0.15s" }}>{item}</button>
-          ))}
+          {navItems.map((item, i) => {
+            const NavIcon = navIcons[i] ?? Circle;
+            return (
+              <button key={item} onClick={() => { setActiveNav(i); setPage(i === 1 ? "courses" : i === 2 ? "questionBankHome" : i === 3 ? "myProfile" : "home"); }} style={{ padding: "7px 18px", borderRadius: 9, fontSize: 13, border: "none", cursor: "pointer", background: activeNav === i ? "rgba(201,151,62,0.1)" : "transparent", color: activeNav === i ? "#c9973e" : "#5a7898", fontWeight: activeNav === i ? 600 : 400, transition: "all 0.15s" }}>
+                <span className="debao-nav-tab-icon"><NavIcon size={20} /></span>
+                <span className="debao-nav-tab-label">{item}</span>
+              </button>
+            );
+          })}
         </nav>
         <div className="debao-nav-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
+          <button
+            type="button"
+            className="debao-theme-toggle"
+            aria-label={isLightTheme ? "切换到黑夜模式" : "切换到白天模式"}
+            title={isLightTheme ? "切换到黑夜模式" : "切换到白天模式"}
+            onClick={onToggleTheme}
+          >
+            {isLightTheme ? <Moon size={15} /> : <Sun size={15} />}
+            <span>{isLightTheme ? "黑夜" : "白天"}</span>
+          </button>
           <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 13px", borderRadius: 20, background: "rgba(247,110,110,0.08)", border: "1px solid rgba(247,110,110,0.18)" }}>
             <Flame size={13} color="#f76e6e" />
             <span style={{ fontSize: 12, color: "#f76e6e", fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{studyStreak}天连续</span>
@@ -1008,7 +1168,7 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: "radial-gradient(circle at 20% 15%,rgba(78,142,247,0.16),transparent 28%),radial-gradient(circle at 80% 20%,rgba(29,201,164,0.12),transparent 26%),#090e1a" }}>
+    <div className="debao-auth-page debao-themed-page" style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: "radial-gradient(circle at 20% 15%,rgba(78,142,247,0.16),transparent 28%),radial-gradient(circle at 80% 20%,rgba(29,201,164,0.12),transparent 26%),#090e1a" }}>
       <div style={{ width: "100%", maxWidth: 430, background: "#0f1826", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: "28px 30px", boxShadow: "0 22px 70px rgba(0,0,0,0.35)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 26 }}>
           <div style={{ width: 42, height: 42, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(145deg,#c9973e,#e8c46a)", fontFamily: "'Noto Serif SC',serif", fontWeight: 700, fontSize: 18, color: "#080d18" }}>律</div>
@@ -1118,20 +1278,6 @@ function HomePage({
   const activeBannerIndex = Math.min(bannerIdx, Math.max(visibleMemberBanners.length - 1, 0));
   const memberHero = visibleMemberBanners[activeBannerIndex] || visibleMemberBanners[0];
   const memberBannerImageUrl = memberHero?.imageUrl || "/portal/home-hero-banner.png";
-  const announcementConfig = homeConfig.memberHome.announcement;
-  const learningAnnouncements = (announcementConfig.items || [])
-    .filter((item) => item.isVisible !== false && (item.title || item.description))
-    .sort((left, right) => Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0))
-    .slice(0, 8)
-    .map((item, index) => ({
-      id: `${index}-${item.title || item.description}`,
-      tag: item.tag || announcementConfig.badge || "公告",
-      color: item.color || "#4e8ef7",
-      text: item.description || item.title,
-      title: item.title,
-      time: item.time || "",
-      link: item.link || "",
-    }));
   const homeStats = [
     { label: "累计练题", value: formatCount(studySummary.stats.totalPracticeCount), unit: "题", icon: Target, color: "#4e8ef7" },
     { label: "答题正确率", value: studySummary.stats.accuracyRate === null ? "-" : `${studySummary.stats.accuracyRate}`, unit: studySummary.stats.accuracyRate === null ? "" : "%", icon: TrendingUp, color: "#1dc9a4" },
@@ -1153,19 +1299,6 @@ function HomePage({
     const nextPath = target.startsWith("/") ? target : `/${target}`;
     window.history.pushState({ page: pathToPage(nextPath) }, "", nextPath);
     setPage(pathToPage(nextPath));
-  };
-  const openAnnouncement = (link: string) => {
-    if (!link) return;
-    if (/^https?:\/\//i.test(link)) {
-      window.open(link, "_blank", "noopener,noreferrer");
-      return;
-    }
-    if (link.startsWith("/")) {
-      window.history.pushState({ page: pathToPage(link) }, "", link);
-      setPage(pathToPage(link));
-      return;
-    }
-    notify(link, "info");
   };
   const openCustomerService = () => {
     if (!customerServiceUrl) {
@@ -1196,9 +1329,15 @@ function HomePage({
   }, [visibleMemberBanners.length]);
 
   return (
-    <div className="debao-page debao-home-page" style={{ maxWidth: 1340, margin: "0 auto", padding: "28px 36px 0" }}>
-      {/* Banner + Announcements */}
-      <div className="debao-home-hero-grid" style={{ display: "grid", gridTemplateColumns: "1fr 308px", gap: 18, alignItems: "stretch" }}>
+    <div className="debao-page debao-home-page debao-themed-page" style={{ maxWidth: 1340, margin: "0 auto", padding: "28px 36px 0" }}>
+      <div className="debao-mobile-home-head">
+        <div className="debao-mobile-home-titlebar">
+          <AppLogo compact className="debao-mobile-home-logo" />
+        </div>
+      </div>
+
+      {/* Banner */}
+      <div className="debao-home-hero-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 18, alignItems: "stretch" }}>
         <div className="debao-home-hero" style={{ position: "relative", borderRadius: 20, overflow: "hidden", minHeight: 330, background: "#101828" }}>
           <img key={memberBannerImageUrl} src={memberBannerImageUrl} alt={memberHero.title || "得宝学习首页"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(105deg,rgba(4,8,20,0.95) 0%,rgba(4,8,20,0.8) 45%,rgba(4,8,20,0.15) 100%)" }} />
@@ -1224,51 +1363,21 @@ function HomePage({
           {visibleMemberBanners.length > 1 ? (
             <>
               {([{ dir: -1 as const, Icon: ChevronLeft, pos: { left: 16 } }, { dir: 1 as const, Icon: ChevronRight, pos: { right: 16 } }]).map(({ dir, Icon, pos }) => (
-                <button key={dir} onClick={() => setBannerIdx((activeBannerIndex + dir + visibleMemberBanners.length) % visibleMemberBanners.length)} style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", zIndex: 3, width: 38, height: 38, borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff", backdropFilter: "blur(8px)", ...pos }}><Icon size={17} /></button>
+                <button key={dir} className="debao-home-hero-arrow" onClick={() => setBannerIdx((activeBannerIndex + dir + visibleMemberBanners.length) % visibleMemberBanners.length)} style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", zIndex: 3, width: 38, height: 38, borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff", backdropFilter: "blur(8px)", ...pos }}><Icon size={17} /></button>
               ))}
-              <div style={{ position: "absolute", bottom: 20, left: 44, display: "flex", gap: 7, zIndex: 3 }}>
+              <div className="debao-home-hero-dots" style={{ position: "absolute", bottom: 20, left: 44, display: "flex", gap: 7, zIndex: 3 }}>
                 {visibleMemberBanners.map((_, i) => (
-                  <button key={i} onClick={() => setBannerIdx(i)} style={{ width: i === activeBannerIndex ? 24 : 6, height: 6, borderRadius: 3, border: "none", cursor: "pointer", background: i === activeBannerIndex ? "#c9973e" : "rgba(255,255,255,0.25)", transition: "all 0.3s ease", padding: 0 }} />
+                  <button key={i} className="debao-home-hero-dot" onClick={() => setBannerIdx(i)} style={{ width: i === activeBannerIndex ? 24 : 6, height: 6, borderRadius: 3, border: "none", cursor: "pointer", background: i === activeBannerIndex ? "#c9973e" : "rgba(255,255,255,0.25)", transition: "all 0.3s ease", padding: 0 }} />
                 ))}
               </div>
             </>
           ) : null}
         </div>
 
-        {/* Announcements */}
-        <div className="debao-home-announcements" style={{ background: "#0f1826", borderRadius: 20, border: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 3, height: 14, borderRadius: 2, background: "linear-gradient(to bottom,#c9973e,#e8c46a)" }} />
-              <span style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 14, fontWeight: 600, color: "#dde4f0" }}>{announcementConfig.title || "学习公告"}</span>
-            </div>
-            <button onClick={() => notify(`当前展示 ${learningAnnouncements.length} 条学习公告`, "info")} style={{ fontSize: 11, color: "#4e8ef7", background: "none", border: "none", cursor: "pointer", opacity: 0.8 }}>全部 →</button>
-          </div>
-          <div style={{ flex: 1, overflowY: "auto" }}>
-            {learningAnnouncements.length === 0 ? (
-              <div style={{ padding: "24px 22px", color: "#4a6888", fontSize: 12, lineHeight: 1.8 }}>
-                暂无学习公告。发布后会自动显示在这里。
-              </div>
-            ) : learningAnnouncements.map((a, i) => (
-              <div key={a.id} onClick={() => openAnnouncement(a.link)} style={{ padding: "14px 22px", cursor: a.link ? "pointer" : "default", display: "flex", gap: 12, borderBottom: i < learningAnnouncements.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none", transition: "background 0.12s" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
-                <div style={{ width: 3, borderRadius: 2, background: a.color, flexShrink: 0, alignSelf: "stretch", opacity: 0.7 }} />
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: `${a.color}18`, color: a.color, letterSpacing: "0.05em" }}>{a.tag}</span>
-                    <span style={{ fontSize: 10, color: "#2e4260", marginLeft: "auto" }}>{a.time}</span>
-                  </div>
-                  <p style={{ fontSize: 12, color: "#7a9abe", lineHeight: 1.7, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{a.text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Modules */}
-      <div style={{ marginTop: 22 }}>
+      <div className="debao-home-modules-section" style={{ marginTop: 22 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
           <div style={{ width: 3, height: 14, borderRadius: 2, background: "linear-gradient(to bottom,#c9973e,#e8c46a)" }} />
           <span style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 14, fontWeight: 600, color: "#8fa3be" }}>快速入口</span>
@@ -1283,11 +1392,12 @@ function HomePage({
                 onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = `${m.color}45`; el.style.background = `linear-gradient(145deg,${m.glow},rgba(255,255,255,0.03))`; el.style.transform = "translateY(-3px)"; el.style.boxShadow = `0 8px 24px ${m.glow}`; }}
                 onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "rgba(255,255,255,0.06)"; el.style.background = "rgba(255,255,255,0.03)"; el.style.transform = "translateY(0)"; el.style.boxShadow = "none"; }}>
                 {m.hot && <span style={{ position: "absolute", top: 11, right: 11, fontSize: 8, fontWeight: 700, color: "#f76e6e", background: "rgba(247,110,110,0.15)", padding: "2px 6px", borderRadius: 7, letterSpacing: "0.05em" }}>HOT</span>}
-                <div style={{ width: 44, height: 44, borderRadius: 13, background: `${m.color}14`, border: `1px solid ${m.color}25`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+                {m.desktopOnly && <span className="debao-module-desktop-badge" style={{ position: "absolute", top: 11, right: 11, fontSize: 9, fontWeight: 800, color: m.color, background: `${m.color}18`, border: `1px solid ${m.color}26`, padding: "2px 7px", borderRadius: 7, letterSpacing: "0.04em" }}>电脑端</span>}
+                <div className="debao-module-card-icon" style={{ width: 44, height: 44, borderRadius: 13, background: `${m.color}14`, border: `1px solid ${m.color}25`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
                   <Icon size={21} color={m.color} />
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#dde4f0", marginBottom: 4 }}>{m.title}</div>
-                <div style={{ fontSize: 11, color: "#3a5570" }}>{m.sub}</div>
+                <div className="debao-module-card-title" style={{ fontSize: 13, fontWeight: 600, color: "#dde4f0", marginBottom: 4 }}>{m.title}</div>
+                <div className="debao-module-card-subtitle" style={{ fontSize: 11, color: "#3a5570" }}>{m.sub}</div>
               </button>
             );
           })}
@@ -1296,7 +1406,7 @@ function HomePage({
 
       {/* Main content */}
       <div className="debao-home-content-grid" style={{ marginTop: 28, paddingBottom: 56, display: "grid", gridTemplateColumns: "1fr 308px", gap: 22 }}>
-        <div>
+        <div className="debao-home-study-column">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 3, height: 14, borderRadius: 2, background: "linear-gradient(to bottom,#c9973e,#e8c46a)" }} />
@@ -1312,17 +1422,17 @@ function HomePage({
                 当前账号暂无可继续学习的课程。课程开通后，这里会显示最近学习入口。
               </div>
             ) : activeHomeCourses.map(c => (
-              <div key={c.id} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "stretch", background: "#0f1826", borderRadius: 17, border: "1px solid rgba(255,255,255,0.06)", cursor: "pointer", overflow: "hidden", transition: "border-color 0.15s,box-shadow 0.15s" }}
+              <div key={c.id} className="debao-continue-card" style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "stretch", background: "#0f1826", borderRadius: 17, border: "1px solid rgba(255,255,255,0.06)", cursor: "pointer", overflow: "hidden", transition: "border-color 0.15s,box-shadow 0.15s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.13)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(0,0,0,0.3)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.06)"; (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}>
                 <div style={{ width: 4, background: `linear-gradient(to bottom,${c.color},${c.color}44)` }} />
-                <div style={{ padding: "18px 22px" }}>
+                <div className="debao-continue-card-body" style={{ padding: "18px 22px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 9px", borderRadius: 6, background: `${c.color}15`, color: c.color }}>{c.tag}</span>
                     <span style={{ fontSize: 11, color: "#2e4260", marginLeft: "auto" }}>已学 {c.progress}%</span>
                   </div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0", marginBottom: 5 }}>{c.title}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <div className="debao-continue-card-title" style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0", marginBottom: 5 }}>{c.title}</div>
+                  <div className="debao-continue-card-meta" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                     <div style={{ width: 20, height: 20, borderRadius: "50%", background: `${c.color}20`, border: `1px solid ${c.color}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: c.color }}>{c.initials}</div>
                     <span style={{ fontSize: 12, color: "#3a5570" }}>{c.teacher} 主讲 · 共 {c.total} 讲</span>
                   </div>
@@ -1330,7 +1440,7 @@ function HomePage({
                     <div style={{ height: "100%", width: `${c.progress}%`, background: `linear-gradient(90deg,${c.color},${c.color}88)`, borderRadius: 4 }} />
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", padding: "0 22px" }}>
+                <div className="debao-continue-card-action" style={{ display: "flex", alignItems: "center", padding: "0 22px" }}>
                   <button onClick={() => {
                     const targetCourse = activeCourses.find(course => course.id === c.id);
                     if (targetCourse) goToCourse(targetCourse);
@@ -1341,14 +1451,14 @@ function HomePage({
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 14, padding: "15px 22px", borderRadius: 15, background: "linear-gradient(120deg,rgba(78,142,247,0.07),rgba(29,201,164,0.05))", border: "1px solid rgba(78,142,247,0.15)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <div className="debao-diagnosis-card" style={{ marginTop: 14, padding: "15px 22px", borderRadius: 15, background: "linear-gradient(120deg,rgba(78,142,247,0.07),rgba(29,201,164,0.05))", border: "1px solid rgba(78,142,247,0.15)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(78,142,247,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Zap size={15} color="#4e8ef7" /></div>
               <div><div style={{ fontSize: 12, color: "#dde4f0", fontWeight: 600, marginBottom: 2 }}>学情复盘</div><div style={{ fontSize: 12, color: "#4a6888" }}>{diagnosisText}</div></div>
             </div>
             <button onClick={goQuestionBank} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#4e8ef7", background: "rgba(78,142,247,0.1)", border: "1px solid rgba(78,142,247,0.2)", borderRadius: 8, padding: "7px 14px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>专项练习 <ChevronRight size={12} /></button>
           </div>
-          <div style={{ marginTop: 12, padding: "15px 22px", borderRadius: 15, background: "linear-gradient(120deg,rgba(201,151,62,0.11),rgba(247,169,78,0.06))", border: "1px solid rgba(201,151,62,0.18)", display: "flex", alignItems: "center", gap: 13 }}>
+          <div className="debao-learning-rank-card" style={{ marginTop: 12, padding: "15px 22px", borderRadius: 15, background: "linear-gradient(120deg,rgba(201,151,62,0.11),rgba(247,169,78,0.06))", border: "1px solid rgba(201,151,62,0.18)", display: "flex", alignItems: "center", gap: 13 }}>
             <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(201,151,62,0.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Trophy size={15} color="#e8c46a" /></div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12, color: "#dde4f0", fontWeight: 700, marginBottom: 2 }}>你的学习时长超越了 {loadingStudySummary ? "..." : `${studySummary.stats.learningHoursBeatPercent ?? 0}%`} 的学员</div>
@@ -1356,7 +1466,7 @@ function HomePage({
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="debao-home-side-column" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ background: "#0f1826", borderRadius: 17, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden" }}>
             <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 3, height: 14, borderRadius: 2, background: "linear-gradient(to bottom,#c9973e,#e8c46a)" }} />
@@ -1420,22 +1530,22 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
   const totalProgress = enrolledCourses.length > 0 ? Math.round(enrolledCourses.reduce((s, c) => s + c.progress, 0) / enrolledCourses.length) : 0;
 
   return (
-    <div style={{ maxWidth: 1340, margin: "0 auto", padding: "32px 36px 56px" }}>
+    <div className="debao-courses-page debao-themed-page" style={{ maxWidth: 1340, margin: "0 auto", padding: "32px 36px 56px" }}>
 
       {/* Page header */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#3a5570", marginBottom: 14 }}>
+      <div className="debao-courses-header" style={{ marginBottom: 28 }}>
+        <div className="debao-courses-breadcrumb" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#3a5570", marginBottom: 14 }}>
           <span style={{ cursor: "pointer", color: "#4e8ef7" }}>首页</span>
           <ChevronRight size={12} />
           <span>课程中心</span>
         </div>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+        <div className="debao-courses-title-row" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
           <div>
             <h1 style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 26, fontWeight: 700, color: "#dde4f0", marginBottom: 6 }}>课程学习</h1>
             <p style={{ fontSize: 13, color: "#3a5570" }}>系统备考 · 名师精讲 · 配套题库 · 随时回看</p>
           </div>
           {/* Search */}
-          <div style={{ position: "relative" }}>
+          <div className="debao-courses-search" style={{ position: "relative" }}>
             <Search size={14} color="#3a5570" style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)" }} />
             <input
               value={searchVal}
@@ -1448,7 +1558,7 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
       </div>
 
       {/* My progress strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 28 }}>
+      <div className="debao-courses-summary" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 28 }}>
         {[
           { label: "学习中课程", value: `${enrolledCourses.length} 门`, icon: BookOpen, color: "#c9973e" },
           { label: "综合学习进度", value: `${totalProgress}%`, icon: TrendingUp, color: "#1dc9a4" },
@@ -1457,7 +1567,7 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
         ].map(s => {
           const Icon = s.icon;
           return (
-            <div key={s.label} style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", padding: "16px 20px", display: "flex", alignItems: "center", gap: 14 }}>
+            <div className="debao-courses-summary-card" key={s.label} style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", padding: "16px 20px", display: "flex", alignItems: "center", gap: 14 }}>
               <div style={{ width: 40, height: 40, borderRadius: 12, background: `${s.color}14`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <Icon size={18} color={s.color} />
               </div>
@@ -1471,15 +1581,15 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
       </div>
 
       {/* Filters row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", color: "#5a7898", fontSize: 12 }}>
+      <div className="debao-courses-filters" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div className="debao-courses-opened-count" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", color: "#5a7898", fontSize: 12 }}>
           <CheckCircle2 size={14} color="#1dc9a4" />
           已开通课程
           <span style={{ fontFamily: "'JetBrains Mono',monospace", color: "#c9973e", fontWeight: 700 }}>{enrolledCourses.length}</span>
         </div>
 
         {/* Category pills */}
-        <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+        <div className="debao-courses-tabs" style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
           {courseCategories.map(cat => (
             <button key={cat} onClick={() => setActiveCategory(cat)} style={{ padding: "6px 16px", borderRadius: 20, fontSize: 12, border: `1px solid ${activeCategory === cat ? "rgba(201,151,62,0.45)" : "rgba(255,255,255,0.07)"}`, cursor: "pointer", background: activeCategory === cat ? "rgba(201,151,62,0.1)" : "rgba(255,255,255,0.02)", color: activeCategory === cat ? "#c9973e" : "#3a5570", fontWeight: activeCategory === cat ? 600 : 400, transition: "all 0.15s" }}>{cat}</button>
           ))}
@@ -1487,38 +1597,38 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
       </div>
 
       {/* Results count */}
-      <div style={{ fontSize: 12, color: "#2e4260", marginBottom: 18, fontFamily: "'JetBrains Mono',monospace" }}>
+      <div className="debao-courses-result-count" style={{ fontSize: 12, color: "#2e4260", marginBottom: 18, fontFamily: "'JetBrains Mono',monospace" }}>
         {loadingCourses ? "正在读取课程..." : `共 ${filtered.length} 门已开通课程`}
       </div>
 
       {/* Course grid */}
       {loadingCourses ? (
-        <div style={{ textAlign: "center", padding: "82px 24px", color: "#2e4260", background: "#0f1826", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 }}>
+        <div className="debao-courses-empty" style={{ textAlign: "center", padding: "82px 24px", color: "#2e4260", background: "#0f1826", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 }}>
           <BookOpen size={42} color="#1e3050" style={{ margin: "0 auto 16px" }} />
           <div style={{ fontSize: 15, color: "#5a7898", marginBottom: 6 }}>正在读取课程</div>
           <div style={{ fontSize: 12, color: "#2e4260", lineHeight: 1.8 }}>正在读取课程权限和目录，请稍候。</div>
         </div>
       ) : sourceCourses.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "82px 24px", color: "#2e4260", background: "#0f1826", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 }}>
+        <div className="debao-courses-empty" style={{ textAlign: "center", padding: "82px 24px", color: "#2e4260", background: "#0f1826", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 }}>
           <BookOpen size={42} color="#1e3050" style={{ margin: "0 auto 16px" }} />
           <div style={{ fontSize: 15, color: "#5a7898", marginBottom: 6 }}>当前账号还没有开通课程</div>
           <div style={{ fontSize: 12, color: "#2e4260", lineHeight: 1.8 }}>给用户开通课程后，这里会自动显示可学习内容。</div>
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "80px 0", color: "#2e4260" }}>
+        <div className="debao-courses-empty" style={{ textAlign: "center", padding: "80px 0", color: "#2e4260" }}>
           <BookOpen size={40} color="#1e3050" style={{ margin: "0 auto 16px" }} />
           <div style={{ fontSize: 14 }}>暂无匹配课程</div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 18 }}>
+        <div className="debao-course-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 18 }}>
           {filtered.map(c => (
-            <div key={c.id}
+            <div className="debao-course-card" key={c.id}
               style={{ background: "#0f1826", borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden", cursor: "default", transition: "all 0.2s" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${c.color}35`; (e.currentTarget as HTMLElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 28px rgba(0,0,0,0.35)`; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
             >
               {/* Card cover */}
-              <div style={{ height: 110, position: "relative", background: categoryGrad[c.category] || "linear-gradient(135deg,#0f1826,#1a2a3a)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              <div className="debao-course-card-cover" style={{ height: 110, position: "relative", background: categoryGrad[c.category] || "linear-gradient(135deg,#0f1826,#1a2a3a)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                 {/* decorative glow */}
                 <div style={{ position: "absolute", right: -20, top: -20, width: 120, height: 120, borderRadius: "50%", background: `${c.color}15`, filter: "blur(30px)" }} />
                 <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 36, fontWeight: 700, color: `${c.color}18`, letterSpacing: "0.05em", userSelect: "none", textAlign: "center", padding: "0 16px" }}>{c.category}</div>
@@ -1539,17 +1649,17 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
               </div>
 
               {/* Card body */}
-              <div style={{ padding: "16px 18px 18px" }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0", lineHeight: 1.45, marginBottom: 10 }}>{c.title}</div>
+              <div className="debao-course-card-body" style={{ padding: "16px 18px 18px" }}>
+                <div className="debao-course-card-title" style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0", lineHeight: 1.45, marginBottom: 10 }}>{c.title}</div>
 
                 {/* Teacher */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <div className="debao-course-card-teacher" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <div style={{ width: 22, height: 22, borderRadius: "50%", background: `${c.color}20`, border: `1px solid ${c.color}35`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: c.color, flexShrink: 0 }}>{c.initials}</div>
                   <span style={{ fontSize: 12, color: "#3a5570" }}>{c.teacher} · {c.lessons} 讲</span>
                 </div>
 
                 {/* Meta */}
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <div className="debao-course-card-meta" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
                   {c.enrolled && (
                     <div style={{ display: "flex", alignItems: "center", gap: 5, flex: 1 }}>
                       <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 3, overflow: "hidden" }}>
@@ -1562,6 +1672,7 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
 
                 {/* CTA */}
                 <button
+                  className="debao-course-card-action"
                   onClick={() => {
                     if (!c.enrolled) {
                       notify("课程暂未开通，开通后可进入学习", "info");
@@ -1740,7 +1851,7 @@ function CourseSubjectPage({ setPage, course }: { setPage: (p: string) => void; 
   const targetPage = isAudio ? "audioDetail" : "courseDetail";
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 36px 80px" }}>
+    <div className="debao-course-subject-page debao-themed-page" style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 36px 80px" }}>
 
       {/* ── Compact header ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 24 }}>
@@ -1961,12 +2072,10 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
   const [volume, setVolume] = useState(80);
   const [speed, setSpeed] = useState("1.0");
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [showMobileLessonPicker, setShowMobileLessonPicker] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [syncingProgress, setSyncingProgress] = useState(false);
   const [detailError, setDetailError] = useState("");
-  const [noteText, setNoteText] = useState("");
-  const [noteLoading, setNoteLoading] = useState(false);
-  const [noteSaving, setNoteSaving] = useState(false);
   const [courseHandout, setCourseHandout] = useState<{ url?: string; name?: string; hasHandout?: boolean }>({});
   const transcriptText = currentLesson.script?.trim();
   const transcript = transcriptText
@@ -2073,6 +2182,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
     setChapters(prev => markCurrentLesson(prev, lesson.id));
     setProgress(calcLessonPercent(lesson));
     setIsPlaying(Boolean(lesson.mediaUrl));
+    setShowMobileLessonPicker(false);
 
     if (isLegacyCourse && lesson.source === "legacy") {
       courseService.getAudioDetail(c.id, lesson.id)
@@ -2143,52 +2253,6 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
 
     setIsPlaying(false);
     selectLesson(adjacent);
-  };
-
-  useEffect(() => {
-    let active = true;
-    setNoteText("");
-    if (!isLegacyCourse || currentLesson.source !== "legacy" || currentLesson.id === "__empty__") {
-      setNoteLoading(false);
-      return () => {
-        active = false;
-      };
-    }
-
-    setNoteLoading(true);
-    courseService.getCourseNote(c.id, "audio", currentLesson.id)
-      .then((note) => {
-        if (!active) return;
-        setNoteText(note?.content ?? "");
-      })
-      .catch(() => {
-        if (active) setNoteText("");
-      })
-      .finally(() => {
-        if (active) setNoteLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [c.id, currentLesson.id, currentLesson.source, isLegacyCourse]);
-
-  const saveCurrentNote = () => {
-    if (!isLegacyCourse || currentLesson.source !== "legacy" || currentLesson.id === "__empty__") {
-      notify("当前课程不支持保存笔记", "warning");
-      return;
-    }
-
-    setNoteSaving(true);
-    courseService.saveCourseNote(c.id, "audio", currentLesson.id, noteText)
-      .then((note) => {
-        setNoteText(note.content);
-        notify("学习笔记已保存", "success");
-      })
-      .catch((error) => {
-        notify(error instanceof Error ? `学习笔记保存失败：${error.message}` : "学习笔记保存失败", "warning");
-      })
-      .finally(() => setNoteSaving(false));
   };
 
   const toggleAudioPlayback = () => {
@@ -2279,7 +2343,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
 
 
   return (
-    <div style={{ minHeight: "100vh", background: "#090e1a", display: "flex", flexDirection: "column" }}>
+    <div className="debao-audio-page debao-themed-page" style={{ minHeight: "100vh", background: "#090e1a", display: "flex", flexDirection: "column" }}>
       {currentLesson.mediaUrl && (
         <audio
           ref={audioRef}
@@ -2309,8 +2373,8 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
       )}
 
       {/* ── Breadcrumb ── */}
-      <div style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.05)", flexShrink: 0 }}>
-        <div style={{ maxWidth: 1340, margin: "0 auto", padding: "10px 36px", display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#3a5570" }}>
+      <div className="debao-audio-breadcrumb" style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.05)", flexShrink: 0 }}>
+        <div className="debao-audio-breadcrumb-inner" style={{ maxWidth: 1340, margin: "0 auto", padding: "10px 36px", display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#3a5570" }}>
           <span style={{ cursor: "pointer", color: "#4e8ef7" }} onClick={() => setPage("courses")}>课程中心</span>
           <ChevronRight size={12} />
           <span style={{ color: "#5a7898" }}>{currentLesson.title}</span>
@@ -2318,10 +2382,10 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
       </div>
 
       {/* ── Main body: sidebar + content ── */}
-      <div style={{ flex: 1, display: "flex", maxWidth: 1340, margin: "0 auto", width: "100%", padding: "0 36px", gap: 0, alignItems: "flex-start" }}>
+      <div className="debao-audio-layout" style={{ flex: 1, display: "flex", maxWidth: 1340, margin: "0 auto", width: "100%", padding: "0 36px", gap: 0, alignItems: "flex-start" }}>
 
         {/* ─ Left sidebar: chapter list (sticky) ─ */}
-        <div style={{ width: 280, flexShrink: 0, borderRight: "1px solid rgba(255,255,255,0.05)", paddingTop: 20, paddingRight: 20, paddingBottom: 120, position: "sticky", top: 0, height: "calc(100vh - 96px)", overflowY: "auto" }}>
+        <div className="debao-audio-sidebar" style={{ width: 280, flexShrink: 0, borderRight: "1px solid rgba(255,255,255,0.05)", paddingTop: 20, paddingRight: 20, paddingBottom: 120, position: "sticky", top: 0, height: "calc(100vh - 96px)", overflowY: "auto" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#2e4260", letterSpacing: "0.06em", marginBottom: 14 }}>课程目录</div>
           {loadingDetail && <div style={{ fontSize: 12, color: "#3a5570", marginBottom: 10 }}>正在同步课程音频...</div>}
           {detailError && <div style={{ fontSize: 12, color: "#f76e6e", lineHeight: 1.6, marginBottom: 10 }}>{detailError}</div>}
@@ -2360,12 +2424,63 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
         </div>
 
         {/* ─ Main content: now-playing card + transcript ─ */}
-        <div style={{ flex: 1, paddingTop: 24, paddingLeft: 28, paddingBottom: 120, display: "flex", flexDirection: "column", gap: 20 }}>
+        <div className="debao-audio-main" style={{ flex: 1, paddingTop: 24, paddingLeft: 28, paddingBottom: 120, display: "flex", flexDirection: "column", gap: 20 }}>
+          <div className="debao-audio-mobile-picker" style={{ display: "none" }}>
+            <button
+              type="button"
+              className="debao-audio-mobile-picker-trigger"
+              onClick={() => setShowMobileLessonPicker((open) => !open)}
+            >
+              <div>
+                <span>当前音频</span>
+                <strong>{currentLesson.title}</strong>
+              </div>
+              <ChevronDown size={16} style={{ transform: showMobileLessonPicker ? "rotate(180deg)" : "none" }} />
+            </button>
+
+            {showMobileLessonPicker ? (
+              <div className="debao-audio-mobile-picker-menu">
+                {loadingDetail ? <div className="debao-audio-mobile-picker-status">正在同步课程音频...</div> : null}
+                {detailError ? <div className="debao-audio-mobile-picker-error">{detailError}</div> : null}
+                {chapters.map((ch) => (
+                  <div key={ch.id} className="debao-audio-mobile-picker-chapter">
+                    <button type="button" onClick={() => toggleChapter(ch.id)} className="debao-audio-mobile-picker-chapter-button">
+                      <span>{ch.title}</span>
+                      <ChevronDown size={14} style={{ transform: ch.expanded ? "rotate(180deg)" : "none" }} />
+                    </button>
+                    {ch.expanded ? (
+                      <div className="debao-audio-mobile-picker-lessons">
+                        {ch.lessons.map((lesson) => {
+                          const isActive = lesson.id === currentLesson.id;
+                          return (
+                            <button
+                              key={lesson.id}
+                              type="button"
+                              onClick={() => selectLesson(lesson)}
+                              className={`debao-audio-mobile-picker-lesson ${isActive ? "is-active" : ""}`}
+                            >
+                              <span className="debao-audio-mobile-picker-lesson-icon">
+                                {isActive ? <Volume2 size={11} /> : lesson.done ? <CheckCircle2 size={11} /> : <Circle size={11} />}
+                              </span>
+                              <span className="debao-audio-mobile-picker-lesson-main">
+                                <span>{lesson.title}</span>
+                                <em>{lesson.duration}</em>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
           {/* Now-playing visual */}
-          <div style={{ borderRadius: 16, background: `linear-gradient(135deg,${c.color}18,${c.color}06)`, border: `1px solid ${c.color}20`, padding: "14px 20px", display: "flex", gap: 16, alignItems: "center" }}>
+          <div className="debao-audio-now-card" style={{ borderRadius: 16, background: `linear-gradient(135deg,${c.color}18,${c.color}06)`, border: `1px solid ${c.color}20`, padding: "14px 20px", display: "flex", gap: 16, alignItems: "center" }}>
             {/* Album art */}
-            <div style={{ width: 56, height: 56, borderRadius: 12, flexShrink: 0, background: `linear-gradient(145deg,${c.color}60,${c.color}25)`, border: `1px solid ${c.color}35`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+            <div className="debao-audio-cover" style={{ width: 56, height: 56, borderRadius: 12, flexShrink: 0, background: `linear-gradient(145deg,${c.color}60,${c.color}25)`, border: `1px solid ${c.color}35`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
               <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 20, fontWeight: 900, color: c.color }}>{currentLesson.title.slice(0, 1)}</div>
               {isPlaying && (
                 <div style={{ position: "absolute", bottom: -6, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 2, alignItems: "flex-end", height: 10 }}>
@@ -2376,13 +2491,13 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
               )}
             </div>
             {/* Meta */}
-            <div style={{ minWidth: 0 }}>
+            <div className="debao-audio-meta" style={{ minWidth: 0 }}>
               <div style={{ fontSize: 10, color: `${c.color}99`, fontWeight: 600, marginBottom: 2, letterSpacing: "0.04em" }}>{c.title} · 得宝音频</div>
               <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 15, fontWeight: 700, color: "#dde4f0", marginBottom: 1 }}>{currentLesson.title}</div>
               <div style={{ fontSize: 11, color: "#3a5570" }}>主讲：{c.teacher} · 时长 {currentLesson.duration} · {currentLesson.mediaUrl ? "媒体已连接" : "等待媒体地址"}</div>
             </div>
             {/* Waveform */}
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+            <div className="debao-audio-waveform" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 1.5, height: 24 }}>
                 {Array.from({ length: 80 }, (_, i) => {
                   const filled = (i / 80) * 100 <= progress;
@@ -2398,7 +2513,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
           </div>
 
           {/* Transcript */}
-          <div style={{ background: "#0f1826", borderRadius: 20, border: "1px solid rgba(255,255,255,0.06)", padding: "24px 28px", height: 340, overflowY: "auto", boxSizing: "border-box" }}>
+          <div className="debao-audio-transcript" style={{ background: "#0f1826", borderRadius: 20, border: "1px solid rgba(255,255,255,0.06)", padding: "24px 28px", height: 340, overflowY: "auto", boxSizing: "border-box" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {transcript.paragraphs.length > 0 ? transcript.paragraphs.map((p, i) => (
                 <p key={i} style={{ margin: 0, fontSize: 14, lineHeight: 2, color: "#8fa3be" }}>{p.text}</p>
@@ -2408,39 +2523,15 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
             </div>
           </div>
 
-          <div style={{ background: "#0f1826", borderRadius: 20, border: "1px solid rgba(255,255,255,0.06)", padding: "20px 24px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 12 }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: "#dde4f0" }}>学习笔记</div>
-                <div style={{ fontSize: 11, color: "#3a5570", marginTop: 3 }}>
-                  {noteLoading ? "正在读取笔记..." : `当前课时 · ${currentLesson.title}`}
-                </div>
-              </div>
-              <button
-                type="button"
-                disabled={noteSaving || currentLesson.id === "__empty__"}
-                onClick={saveCurrentNote}
-                style={{ padding: "8px 16px", borderRadius: 10, border: `1px solid ${c.color}30`, background: noteSaving ? "rgba(255,255,255,0.04)" : `${c.color}14`, color: noteSaving ? "#3a5570" : c.color, fontSize: 12, fontWeight: 800, cursor: noteSaving || currentLesson.id === "__empty__" ? "not-allowed" : "pointer" }}
-              >
-                {noteSaving ? "保存中..." : "保存笔记"}
-              </button>
-            </div>
-            <textarea
-              value={noteText}
-              onChange={event => setNoteText(event.target.value)}
-              placeholder="记录本讲重点、疑问或复盘内容..."
-              style={{ width: "100%", minHeight: 130, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "14px 16px", fontSize: 13, color: "#dde4f0", resize: "vertical", outline: "none", fontFamily: "'Noto Sans SC',sans-serif", lineHeight: 1.8, boxSizing: "border-box" }}
-            />
-          </div>
         </div>
       </div>
 
       {/* ── Bottom player bar (sticky) ── */}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "rgba(7,12,24,0.97)", backdropFilter: "blur(24px)", borderTop: "1px solid rgba(255,255,255,0.07)", zIndex: 40, padding: "0 36px" }}>
-        <div style={{ maxWidth: 1340, margin: "0 auto", height: 72, display: "flex", alignItems: "center", gap: 24 }}>
+      <div className="debao-audio-player-bar" style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "rgba(7,12,24,0.97)", backdropFilter: "blur(24px)", borderTop: "1px solid rgba(255,255,255,0.07)", zIndex: 40, padding: "0 36px" }}>
+        <div className="debao-audio-player-inner" style={{ maxWidth: 1340, margin: "0 auto", height: 72, display: "flex", alignItems: "center", gap: 24 }}>
 
           {/* Track info */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, width: 240, flexShrink: 0 }}>
+          <div className="debao-audio-track-info" style={{ display: "flex", alignItems: "center", gap: 12, width: 240, flexShrink: 0 }}>
             <div style={{ width: 40, height: 40, borderRadius: 10, background: `linear-gradient(145deg,${c.color}50,${c.color}25)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif SC',serif", fontWeight: 700, color: c.color, fontSize: 16 }}>
               {currentLesson.title.slice(0, 1)}
             </div>
@@ -2451,7 +2542,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
           </div>
 
           {/* Controls */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="debao-audio-controls" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20 }}>
               <button onClick={() => setProgress(p => {
                 if (audioRef.current && currentLesson.mediaUrl) {
@@ -2510,20 +2601,20 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
           </div>
 
           {/* Right controls */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, width: 340, justifyContent: "flex-end", flexShrink: 0 }}>
+          <div className="debao-audio-right-controls" style={{ display: "flex", alignItems: "center", gap: 8, width: 340, justifyContent: "flex-end", flexShrink: 0 }}>
             {syncingProgress && <span style={{ fontSize: 10, color: "#2e4260", whiteSpace: "nowrap" }}>同步中</span>}
             {hasLessonHandout && (
-              <button onClick={downloadCurrentHandout} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, background: "rgba(201,151,62,0.18)", border: "1px solid rgba(201,151,62,0.38)", cursor: "pointer", color: "#e8c46a", display: "flex", alignItems: "center", gap: 5, fontWeight: 700 }}>
+              <button className="debao-audio-handout-button" onClick={downloadCurrentHandout} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, background: "rgba(201,151,62,0.18)", border: "1px solid rgba(201,151,62,0.38)", cursor: "pointer", color: "#e8c46a", display: "flex", alignItems: "center", gap: 5, fontWeight: 700 }}>
                 <Download size={13} /> 课时讲义
               </button>
             )}
             {hasCourseHandout && (
-              <button onClick={downloadCourseLevelHandout} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, background: "rgba(78,142,247,0.14)", border: "1px solid rgba(78,142,247,0.3)", cursor: "pointer", color: "#8ab4ff", display: "flex", alignItems: "center", gap: 5, fontWeight: 700 }}>
+              <button className="debao-audio-handout-button" onClick={downloadCourseLevelHandout} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, background: "rgba(78,142,247,0.14)", border: "1px solid rgba(78,142,247,0.3)", cursor: "pointer", color: "#8ab4ff", display: "flex", alignItems: "center", gap: 5, fontWeight: 700 }}>
                 <Download size={13} /> 课程讲义
               </button>
             )}
             {/* Volume */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="debao-audio-volume" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Volume2 size={15} color="#3a5570" />
               <div style={{ width: 72, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 2, cursor: "pointer" }}
                 onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setVolume(Math.round(((e.clientX - r.left) / r.width) * 100)); }}>
@@ -2574,6 +2665,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [savingVideoProgress, setSavingVideoProgress] = useState(false);
   const [detailError, setDetailError] = useState("");
+  const [showMobileVideoLessonPicker, setShowMobileVideoLessonPicker] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -2651,6 +2743,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     setCurrentLesson(lesson);
     setDetail(prev => ({ ...prev, chapters: markCurrentLesson(prev.chapters, lesson.id) }));
     setIsPlaying(false);
+    setShowMobileVideoLessonPicker(false);
 
     if (isLegacyCourse && lesson.source === "legacy") {
       courseService.getVideoDetail(appCourse.id, lesson.id)
@@ -2861,9 +2954,9 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   }, [isPlaying, currentLesson.mediaUrl]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#090e1a" }}>
+    <div className="debao-video-page debao-themed-page" style={{ minHeight: "100vh", background: "#090e1a" }}>
       {/* Breadcrumb bar */}
-      <div style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="debao-video-breadcrumb" style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
         <div style={{ maxWidth: 1340, margin: "0 auto", padding: "10px 36px", display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#3a5570" }}>
           <span style={{ cursor: "pointer", color: "#4e8ef7" }} onClick={() => { setPage("home"); setActiveNav(0); }}>首页</span>
           <ChevronRight size={12} />
@@ -2873,12 +2966,67 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
         </div>
       </div>
 
-      <div style={{ maxWidth: 1340, margin: "0 auto", padding: "24px 36px 56px", display: "grid", gridTemplateColumns: "1fr 340px", gap: 24, alignItems: "start" }}>
+      <div className="debao-video-layout" style={{ maxWidth: 1340, margin: "0 auto", padding: "24px 36px 56px", display: "grid", gridTemplateColumns: "1fr 340px", gap: 24, alignItems: "start" }}>
 
         {/* ── LEFT: Player + tabs ── */}
-        <div>
+        <div className="debao-video-main">
+          <div className="debao-video-mobile-picker" style={{ display: "none" }}>
+            <button
+              type="button"
+              className="debao-video-mobile-picker-trigger"
+              onClick={() => setShowMobileVideoLessonPicker((open) => !open)}
+            >
+              <div>
+                <span>当前视频</span>
+                <strong>{currentLesson.title}</strong>
+              </div>
+              <ChevronDown size={16} style={{ transform: showMobileVideoLessonPicker ? "rotate(180deg)" : "none" }} />
+            </button>
+
+            {showMobileVideoLessonPicker ? (
+              <div className="debao-video-mobile-picker-menu">
+                {loadingDetail ? <div className="debao-video-mobile-picker-status">正在同步课程视频...</div> : null}
+                {detailError ? <div className="debao-video-mobile-picker-error">{detailError}</div> : null}
+                {c.chapters.map((ch) => {
+                  const isOpen = expandedChapters.includes(ch.id);
+                  return (
+                    <div key={ch.id} className="debao-video-mobile-picker-chapter">
+                      <button type="button" onClick={() => toggleChapter(ch.id)} className="debao-video-mobile-picker-chapter-button">
+                        <span>{ch.title}</span>
+                        <ChevronDown size={14} style={{ transform: isOpen ? "rotate(180deg)" : "none" }} />
+                      </button>
+                      {isOpen ? (
+                        <div className="debao-video-mobile-picker-lessons">
+                          {ch.lessons.map((lesson) => {
+                            const isActive = lesson.id === currentLesson.id;
+                            return (
+                              <button
+                                key={lesson.id}
+                                type="button"
+                                onClick={() => selectLesson(lesson)}
+                                className={`debao-video-mobile-picker-lesson ${isActive ? "is-active" : ""}`}
+                              >
+                                <span className="debao-video-mobile-picker-lesson-icon">
+                                  {isActive ? <PlayCircle size={11} /> : lesson.done ? <CheckCircle2 size={11} /> : <Circle size={11} />}
+                                </span>
+                                <span className="debao-video-mobile-picker-lesson-main">
+                                  <span>{lesson.title}</span>
+                                  <em>{lesson.duration}</em>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+
           {/* Video player */}
-          <div style={{ borderRadius: 18, overflow: "hidden", background: "#000", aspectRatio: "16/9", position: "relative", marginBottom: 0 }}>
+          <div className="debao-video-player" style={{ borderRadius: 18, overflow: "hidden", background: "#000", aspectRatio: "16/9", position: "relative", marginBottom: 0 }}>
             {currentLesson.mediaUrl && (
               <video
                 ref={videoRef}
@@ -2978,12 +3126,12 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
           </div>
 
           {/* Lesson info strip */}
-          <div style={{ background: "#0f1826", borderRadius: "0 0 18px 18px", padding: "16px 24px 18px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+          <div className="debao-video-lesson-strip" style={{ background: "#0f1826", borderRadius: "0 0 18px 18px", padding: "16px 24px 18px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 11, color: "#3a5570", marginBottom: 3 }}>当前播放 · {currentLesson.tagName || c.category}{savingVideoProgress ? " · 同步中" : ""}{detailError ? ` · ${detailError}` : ""}</div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "#dde4f0" }}>{currentLesson.title}</div>
             </div>
-            <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+            <div className="debao-video-lesson-actions" style={{ display: "flex", gap: 10, flexShrink: 0 }}>
               <button onClick={() => moveVideoLesson("prev")} style={{ padding: "7px 16px", borderRadius: 9, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12, color: "#5a7898", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                 <SkipBack size={13} /> 上一讲
               </button>
@@ -2997,7 +3145,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
           </div>
 
           {/* Tabs */}
-          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.07)", marginBottom: 20 }}>
+          <div className="debao-video-tabs" style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.07)", marginBottom: 20 }}>
             {([
               { key: "intro",     label: "课程介绍", icon: AlignLeft },
               { key: "materials", label: "讲义资料", icon: Paperclip },
@@ -3015,7 +3163,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
           {activeTab === "intro" && (
             <div>
               <div style={{ fontSize: 13, color: "#5a7898", lineHeight: 1.9, marginBottom: 24 }}>{c.intro}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+              <div className="debao-video-intro-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
                 {[
                   { label: "课程总讲数", value: `${c.lessons} 讲`, icon: ListVideo, color: c.color },
                   { label: "内容来源",   value: "得宝课程", icon: Users, color: "#1dc9a4" },
@@ -3039,7 +3187,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
           )}
 
           {activeTab === "materials" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div className="debao-video-materials" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {c.materials.length === 0 ? (
                 <div style={{ background: "#0f1826", borderRadius: 13, padding: "18px", border: "1px solid rgba(255,255,255,0.06)", fontSize: 13, color: "#3a5570" }}>当前课程暂未配置讲义资料</div>
               ) : c.materials.map(m => (
@@ -3060,7 +3208,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
           )}
 
           {activeTab === "notes" && (
-            <div>
+            <div className="debao-video-notes">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 10 }}>
                 <div style={{ fontSize: 12, color: "#3a5570" }}>{noteLoading ? "正在读取笔记..." : `当前课时 · ${currentLesson.title}`}</div>
                 <button
@@ -3083,9 +3231,9 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
         </div>
 
         {/* ── RIGHT: Chapter list ── */}
-        <div style={{ position: "sticky", top: 78 }}>
+        <div className="debao-video-sidebar" style={{ position: "sticky", top: 78 }}>
           {/* Progress summary */}
-          <div style={{ background: "#0f1826", borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", padding: "18px 20px", marginBottom: 14 }}>
+          <div className="debao-video-progress-card" style={{ background: "#0f1826", borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", padding: "18px 20px", marginBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
               <div style={{ width: 36, height: 36, borderRadius: "50%", background: `${c.color}20`, border: `1px solid ${c.color}35`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: c.color, flexShrink: 0 }}>{c.initials}</div>
               <div style={{ minWidth: 0 }}>
@@ -3103,7 +3251,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
           </div>
 
           {/* Chapter accordion */}
-          <div style={{ background: "#0f1826", borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden" }}>
+          <div className="debao-video-chapter-card" style={{ background: "#0f1826", borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden" }}>
             <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 3, height: 14, borderRadius: 2, background: `linear-gradient(to bottom,${c.color},${c.color}55)` }} />
               <span style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 14, fontWeight: 600, color: "#dde4f0" }}>课程目录</span>
@@ -3230,7 +3378,7 @@ type Question = {
   options: QOption[]; answer: string[]; explanation: string;
 };
 type QuestionPracticeModeLabel = "顺序练习" | "随机练习" | "只看错题" | "收藏题目";
-type QuestionPracticeTarget = { bookId?: string; subjectId?: string; chapterId?: string; name: string; paperType?: "objective" | "subjective"; layout?: "officialSubjective" } | null;
+type QuestionPracticeTarget = { bookId?: string; subjectId?: string; chapterId?: string; name: string; paperType?: "objective" | "subjective"; layout?: "officialSubjective"; source?: "my" | "public" } | null;
 type QuestionPracticeRouteState = { mode: QuestionPracticeModeLabel; chapter: QuestionPracticeTarget; questionId?: string };
 
 const parseQuestionPracticeMode = (raw: string | null): QuestionPracticeModeLabel => {
@@ -3256,12 +3404,14 @@ const getRouteQuestionPracticeState = (): QuestionPracticeRouteState => {
   const paperType = paperTypeParam === "subjective" || paperTypeParam === "objective" ? paperTypeParam : undefined;
   const layoutParam = params.get("layout");
   const layout = layoutParam === "officialSubjective" ? layoutParam : undefined;
+  const sourceParam = params.get("source");
+  const source = sourceParam === "my" || sourceParam === "public" ? sourceParam : undefined;
   const bookId = params.get("bookId")?.trim() || undefined;
   const subjectId = params.get("subjectId")?.trim() || undefined;
   const chapterId = params.get("chapterId")?.trim() || undefined;
   const name = params.get("name")?.trim() || "";
   const questionId = params.get("questionId")?.trim() || undefined;
-  const hasTarget = Boolean(bookId || subjectId || chapterId || name || paperType || layout);
+  const hasTarget = Boolean(bookId || subjectId || chapterId || name || paperType || layout || source);
 
   return {
     mode,
@@ -3273,6 +3423,7 @@ const getRouteQuestionPracticeState = (): QuestionPracticeRouteState => {
         name: name || (paperType === "subjective" ? "主观题练习" : "客观题练习"),
         paperType,
         layout,
+        source,
       }
       : null,
     questionId,
@@ -3292,6 +3443,7 @@ const buildQuestionPracticePath = (
   if (chapter?.name) params.set("name", chapter.name);
   if (chapter?.paperType) params.set("paperType", chapter.paperType);
   if (chapter?.layout) params.set("layout", chapter.layout);
+  if (chapter?.source) params.set("source", chapter.source);
   if (questionId) params.set("questionId", questionId);
   return `/question-bank/practice?${params.toString()}`;
 };
@@ -3414,6 +3566,13 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   const [officialOpenAnalysisAfterSubmit, setOfficialOpenAnalysisAfterSubmit] = useState(false);
   const [officialLawDialogOpen, setOfficialLawDialogOpen] = useState(false);
   const [officialLawDialogRect, setOfficialLawDialogRect] = useState<OfficialDialogRect>(() => createOfficialDialogRect());
+  const [officialLawDialogMaximized, setOfficialLawDialogMaximized] = useState(false);
+  const [officialPromptHighlightHtmlMap, setOfficialPromptHighlightHtmlMap] = useState<Record<string, string>>({});
+  const [officialBlockPromptHighlightHtmlMap, setOfficialBlockPromptHighlightHtmlMap] = useState<Record<string, string>>({});
+  const officialPromptRef = useRef<HTMLDivElement | null>(null);
+  const officialBlockPromptRef = useRef<HTMLDivElement | null>(null);
+  const officialHighlightSelectionRef = useRef<OfficialHighlightSelection | null>(null);
+  const officialLawDialogRestoreRectRef = useRef<OfficialDialogRect | null>(null);
 
   const visiblePracticeBanks = initialChapter?.paperType ? banks.filter(book => book.paperType === initialChapter.paperType) : banks;
   const activeBook = visiblePracticeBanks.find(book => book.id === activeBookId) ?? visiblePracticeBanks[0] ?? banks[0] ?? null;
@@ -3454,6 +3613,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   const activeSubjectiveBlock = subjectiveAnswerBlocks.find(block => block.id === activeSubjectiveBlockId) ?? subjectiveAnswerBlocks[0] ?? null;
   const activeSubjectiveBlockIndex = activeSubjectiveBlock ? Math.max(0, subjectiveAnswerBlocks.findIndex(block => block.id === activeSubjectiveBlock.id)) : 0;
   const activeAnalysisKey = currentQuestionId && activeSubjectiveBlock ? `${currentQuestionId}:${activeSubjectiveBlock.id}` : "";
+  const officialActiveBlockPromptKey = currentQuestionId && activeSubjectiveBlock ? `${currentQuestionId}:${activeSubjectiveBlock.id}` : "";
   const isActiveAnalysisOpen = Boolean(activeAnalysisKey && expandedSubjectiveAnalysis[activeAnalysisKey]);
 
   const toggleSubject = (id: string) =>
@@ -3839,6 +3999,124 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
     void handleSubmit();
   };
 
+  const clearOfficialHighlightSelection = () => {
+    officialHighlightSelectionRef.current = null;
+    getOfficialSelectionFromNode(officialPromptRef.current ?? officialBlockPromptRef.current)?.removeAllRanges();
+  };
+
+  const buildOfficialHighlightSelection = (root: HTMLElement, range: Range, block: OfficialHighlightBlock, key: string) => {
+    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+    const start = getOfficialTextOffsetWithin(root, range.startContainer, range.startOffset);
+    const end = getOfficialTextOffsetWithin(root, range.endContainer, range.endOffset);
+    if (end <= start) return null;
+    return { block, key, start, end } satisfies OfficialHighlightSelection;
+  };
+
+  const setOfficialPromptHighlightHtml = (questionId: string, nextHtml: string, baseHtml: string) => {
+    setOfficialPromptHighlightHtmlMap((current) => {
+      const next = { ...current };
+      if (nextHtml === baseHtml) delete next[questionId];
+      else next[questionId] = nextHtml;
+      return next;
+    });
+  };
+
+  const setOfficialBlockPromptHighlightHtml = (key: string, nextHtml: string, baseHtml: string) => {
+    setOfficialBlockPromptHighlightHtmlMap((current) => {
+      const next = { ...current };
+      if (nextHtml === baseHtml) delete next[key];
+      else next[key] = nextHtml;
+      return next;
+    });
+  };
+
+  const readOfficialHighlightSelection = () => {
+    const selection = getOfficialSelectionFromNode(officialPromptRef.current ?? officialBlockPromptRef.current);
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const promptRoot = officialPromptRef.current;
+    if (promptRoot && currentQuestionId && promptRoot.contains(range.commonAncestorContainer)) {
+      return buildOfficialHighlightSelection(promptRoot, range, "prompt", currentQuestionId);
+    }
+
+    const blockRoot = officialBlockPromptRef.current;
+    if (blockRoot && officialActiveBlockPromptKey && blockRoot.contains(range.commonAncestorContainer)) {
+      return buildOfficialHighlightSelection(blockRoot, range, "subjective-block", officialActiveBlockPromptKey);
+    }
+  };
+
+  const handleOfficialQuestionMouseUp = () => {
+    officialHighlightSelectionRef.current = readOfficialHighlightSelection() ?? null;
+  };
+
+  const getOfficialActiveHighlightSelection = () => {
+    const liveSelection = readOfficialHighlightSelection();
+    if (liveSelection) {
+      officialHighlightSelectionRef.current = liveSelection;
+      return liveSelection;
+    }
+    return officialHighlightSelectionRef.current;
+  };
+
+  const handleOfficialStemMark = () => {
+    const selection = getOfficialActiveHighlightSelection();
+    if (!selection) {
+      notify("请先选中需要标识的题干内容", "warning");
+      return;
+    }
+
+    if (selection.block === "prompt" && q && selection.key === q.id) {
+      const normalizedHtml = clearOfficialHighlightInHtml(officialCurrentPromptDisplayHtml, selection.start, selection.end);
+      const nextHtml = applyOfficialHighlightToHtml(normalizedHtml, selection.start, selection.end);
+      setOfficialPromptHighlightHtml(q.id, nextHtml, officialCurrentPromptBaseHtml);
+      clearOfficialHighlightSelection();
+      return;
+    }
+
+    if (selection.block === "subjective-block" && activeSubjectiveBlock && officialActiveBlockPromptKey && selection.key === officialActiveBlockPromptKey) {
+      const normalizedHtml = clearOfficialHighlightInHtml(officialCurrentBlockPromptDisplayHtml, selection.start, selection.end);
+      const nextHtml = applyOfficialHighlightToHtml(normalizedHtml, selection.start, selection.end);
+      setOfficialBlockPromptHighlightHtml(officialActiveBlockPromptKey, nextHtml, officialCurrentBlockPromptBaseHtml);
+      clearOfficialHighlightSelection();
+      return;
+    }
+
+    notify("当前选中内容不支持题干标识", "warning");
+  };
+
+  const handleOfficialStemUnmark = () => {
+    const selection = getOfficialActiveHighlightSelection();
+
+    if (selection?.block === "prompt" && q && selection.key === q.id) {
+      const nextHtml = clearOfficialHighlightInHtml(officialCurrentPromptDisplayHtml, selection.start, selection.end);
+      setOfficialPromptHighlightHtml(q.id, nextHtml, officialCurrentPromptBaseHtml);
+      clearOfficialHighlightSelection();
+      return;
+    }
+
+    if (selection?.block === "subjective-block" && activeSubjectiveBlock && officialActiveBlockPromptKey && selection.key === officialActiveBlockPromptKey) {
+      const nextHtml = clearOfficialHighlightInHtml(officialCurrentBlockPromptDisplayHtml, selection.start, selection.end);
+      setOfficialBlockPromptHighlightHtml(officialActiveBlockPromptKey, nextHtml, officialCurrentBlockPromptBaseHtml);
+      clearOfficialHighlightSelection();
+      return;
+    }
+
+    if (q && officialCurrentPromptDisplayHtml !== officialCurrentPromptBaseHtml) {
+      setOfficialPromptHighlightHtml(q.id, clearOfficialHighlightInHtml(officialCurrentPromptDisplayHtml), officialCurrentPromptBaseHtml);
+    }
+    if (activeSubjectiveBlock && officialActiveBlockPromptKey && officialCurrentBlockPromptDisplayHtml !== officialCurrentBlockPromptBaseHtml) {
+      setOfficialBlockPromptHighlightHtml(
+        officialActiveBlockPromptKey,
+        clearOfficialHighlightInHtml(officialCurrentBlockPromptDisplayHtml),
+        officialCurrentBlockPromptBaseHtml,
+      );
+    }
+    clearOfficialHighlightSelection();
+  };
+
   useEffect(() => {
     if (!officialOpenAnalysisAfterSubmit || !useOfficialSubjectivePractice || !isSubjectiveQuestion || !isSubmitted) return;
     if (activeAnalysisKey) {
@@ -3849,6 +4127,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   }, [activeAnalysisKey, isSubmitted, isSubjectiveQuestion, officialOpenAnalysisAfterSubmit, useOfficialSubjectivePractice]);
 
   const startOfficialLawDialogDrag = (event: ReactMouseEvent<HTMLElement>) => {
+    if (officialLawDialogMaximized) return;
     event.preventDefault();
     const startX = event.clientX;
     const startY = event.clientY;
@@ -3873,6 +4152,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   };
 
   const startOfficialLawDialogResize = (event: ReactMouseEvent<HTMLElement>, mode: "right" | "bottom" | "corner") => {
+    if (officialLawDialogMaximized) return;
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
@@ -3900,6 +4180,17 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
     window.addEventListener("mouseup", handleEnd);
   };
 
+  const toggleOfficialLawDialogMaximize = () => {
+    if (officialLawDialogMaximized) {
+      setOfficialLawDialogRect(officialLawDialogRestoreRectRef.current ?? createOfficialDialogRect());
+      setOfficialLawDialogMaximized(false);
+      return;
+    }
+    officialLawDialogRestoreRectRef.current = officialLawDialogRect;
+    setOfficialLawDialogRect(createOfficialLawDialogMaxRect());
+    setOfficialLawDialogMaximized(true);
+  };
+
   const officialSubjectiveBlockDone = (blockId: string) => Boolean((currentSubjectiveDrafts[blockId] ?? "").trim());
   const officialSubjectiveQuestionDone = (item: QuestionBankItem) => {
     const draftMap = subjectiveDrafts[item.id] ?? item.state.subjectiveDrafts ?? {};
@@ -3907,13 +4198,18 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
     return item.state.hasViewedAnswer || item.state.isAnswered;
   };
   const officialCurrentQuestionMarked = q?.state.isRedoMarked ?? false;
-  const officialCurrentPromptHtml = q ? officialToHtml(q.material && q.stem ? `${q.material}\n\n${q.stem}` : q.material || q.stem) : "";
-  const officialCurrentBlockPromptHtml = officialToHtml(activeSubjectiveBlock?.prompt || "");
+  const officialCurrentPromptBaseHtml = q ? officialToHtml(q.material && q.stem ? `${q.material}\n\n${q.stem}` : q.material || q.stem) : "";
+  const officialCurrentPromptDisplayHtml = q ? officialPromptHighlightHtmlMap[q.id] ?? officialCurrentPromptBaseHtml : officialCurrentPromptBaseHtml;
+  const officialCurrentBlockPromptBaseHtml = officialToHtml(activeSubjectiveBlock?.prompt || "");
+  const officialCurrentBlockPromptDisplayHtml =
+    officialActiveBlockPromptKey
+      ? officialBlockPromptHighlightHtmlMap[officialActiveBlockPromptKey] ?? officialCurrentBlockPromptBaseHtml
+      : officialCurrentBlockPromptBaseHtml;
   const officialCurrentBlockAnswer = activeSubjectiveBlock ? currentSubjectiveDrafts[activeSubjectiveBlock.id] ?? "" : "";
 
   if (loadingQuestions && banks.length === 0) {
     return (
-      <div style={{ minHeight: "calc(100vh - 58px)", display: "grid", placeItems: "center", background: "#090e1a", color: "#5a7898", fontSize: 14 }}>
+      <div className="debao-question-practice-page debao-themed-page" style={{ minHeight: "calc(100vh - 58px)", display: "grid", placeItems: "center", background: "#090e1a", color: "#5a7898", fontSize: 14 }}>
         正在加载得宝题库...
       </div>
     );
@@ -3921,7 +4217,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
 
   if (questionError && banks.length === 0) {
     return (
-      <div style={{ minHeight: "calc(100vh - 58px)", display: "grid", placeItems: "center", background: "#090e1a", padding: 36 }}>
+      <div className="debao-question-practice-page debao-themed-page" style={{ minHeight: "calc(100vh - 58px)", display: "grid", placeItems: "center", background: "#090e1a", padding: 36 }}>
         <div style={{ maxWidth: 460, textAlign: "center" }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: "#dde4f0", marginBottom: 10 }}>题库暂时无法打开</div>
           <div style={{ fontSize: 13, color: "#5a7898", lineHeight: 1.8, marginBottom: 18 }}>{questionError}</div>
@@ -3933,7 +4229,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
 
   if (!q) {
     return (
-      <div style={{ minHeight: "calc(100vh - 58px)", display: "grid", placeItems: "center", background: "#090e1a", padding: 36 }}>
+      <div className="debao-question-practice-page debao-themed-page" style={{ minHeight: "calc(100vh - 58px)", display: "grid", placeItems: "center", background: "#090e1a", padding: 36 }}>
         <div style={{ maxWidth: 520, textAlign: "center" }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: "#dde4f0", marginBottom: 10 }}>
             {mode === "只看错题" ? "还没有错题" : mode === "收藏题目" ? "还没有收藏题目" : "当前题库暂无题目"}
@@ -4036,7 +4332,10 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                       {...OFFICIAL_EXAM_SCOPE}
                       type="button"
                       style={{ padding: "7px 12px", fontWeight: 600, fontSize: "14px", color: "black", background: "linear-gradient(#9bccf3, #478ec4)", border: "1px solid #5d8ab6", cursor: "pointer" }}
-                      onClick={() => setOfficialLawDialogOpen(true)}
+                      onClick={() => {
+                        setOfficialLawDialogMaximized(false);
+                        setOfficialLawDialogOpen(true);
+                      }}
                     >
                       法律法规汇编
                     </button>
@@ -4054,8 +4353,8 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                     <div {...OFFICIAL_EXAM_SCOPE} className="paperTitle">
                       <li {...OFFICIAL_EXAM_SCOPE} className="single">试卷</li>
                       <li {...OFFICIAL_EXAM_SCOPE}>
-                        <a {...OFFICIAL_EXAM_SCOPE} target="_self" id="mark" href="#!" onClick={(event) => event.preventDefault()}>标记题干</a>
-                        <a {...OFFICIAL_EXAM_SCOPE} target="_self" id="unmark" href="#!" onClick={(event) => event.preventDefault()}>取消标记</a>
+                        <a {...OFFICIAL_EXAM_SCOPE} target="_self" id="mark" href="#!" onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.preventDefault(); handleOfficialStemMark(); }}>标记题干</a>
+                        <a {...OFFICIAL_EXAM_SCOPE} target="_self" id="unmark" href="#!" onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.preventDefault(); handleOfficialStemUnmark(); }}>取消标记</a>
                       </li>
                       <li {...OFFICIAL_EXAM_SCOPE} id="themeLi" onMouseEnter={() => setOfficialThemeMenuOpen(true)} onMouseLeave={() => setOfficialThemeMenuOpen(false)}>
                         <a {...OFFICIAL_EXAM_SCOPE} id="themeP">切换风格</a>
@@ -4076,8 +4375,8 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                         <div {...OFFICIAL_EXAM_SCOPE} className="itemGroupTitle zhuguanTitle">
                           {officialOrderText(0)}{activeChapter?.name || q.subjectName || "主观题"}。(本题{q.score || 0}分)
                           <li {...OFFICIAL_EXAM_SCOPE} className="rightFloat">
-                            <a {...OFFICIAL_EXAM_SCOPE} target="_self" id="mark1" href="#!" onClick={(event) => event.preventDefault()}>题干标识</a>
-                            <a {...OFFICIAL_EXAM_SCOPE} target="_self" id="unmark1" href="#!" onClick={(event) => event.preventDefault()}>取消标识</a>
+                            <a {...OFFICIAL_EXAM_SCOPE} target="_self" id="mark1" href="#!" onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.preventDefault(); handleOfficialStemMark(); }}>题干标识</a>
+                            <a {...OFFICIAL_EXAM_SCOPE} target="_self" id="unmark1" href="#!" onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.preventDefault(); handleOfficialStemUnmark(); }}>取消标识</a>
                             {officialAnswerHeight === "340px" ? (
                               <a {...OFFICIAL_EXAM_SCOPE} target="_self" href="#!" onClick={(event) => { event.preventDefault(); setOfficialAnswerHeight("100%"); }}>放大窗口</a>
                             ) : (
@@ -4088,7 +4387,9 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                       ) : null}
                       {officialStemHeight === "300px" ? (
                         <div {...OFFICIAL_EXAM_SCOPE} className="zhuGuan" style={{ height: officialAnswerHeight }}>
-                          <div {...OFFICIAL_EXAM_SCOPE} className="itemContext"><span {...OFFICIAL_EXAM_SCOPE} style={{ fontSize: `${officialFontSize}px` }} dangerouslySetInnerHTML={{ __html: officialCurrentPromptHtml }} /></div>
+                          <div {...OFFICIAL_EXAM_SCOPE} className="itemContext" ref={officialPromptRef} onMouseUp={handleOfficialQuestionMouseUp}>
+                            <span {...OFFICIAL_EXAM_SCOPE} style={{ fontSize: `${officialFontSize}px` }} dangerouslySetInnerHTML={{ __html: officialCurrentPromptDisplayHtml }} />
+                          </div>
                         </div>
                       ) : null}
                       {officialAnswerHeight === "340px" ? (
@@ -4117,7 +4418,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                             {activeSubjectiveBlock ? (
                               <div {...OFFICIAL_EXAM_SCOPE} className="itemArea" id="B-1" itemcode="1">
                                 <div {...OFFICIAL_EXAM_SCOPE} id="msTitle">
-                                  <p {...OFFICIAL_EXAM_SCOPE} className="zhuguanProblem" dangerouslySetInnerHTML={{ __html: officialCurrentBlockPromptHtml }} />
+                                  <p {...OFFICIAL_EXAM_SCOPE} ref={officialBlockPromptRef} onMouseUp={handleOfficialQuestionMouseUp} className="zhuguanProblem" dangerouslySetInnerHTML={{ __html: officialCurrentBlockPromptDisplayHtml }} />
                                   <p {...OFFICIAL_EXAM_SCOPE} className="spanBold">请在下方答题区内答题! <span {...OFFICIAL_EXAM_SCOPE} style={{ color: "red" }} id="fontnum_3">已输入字数为：{officialCurrentBlockAnswer.length}</span></p>
                                 </div>
                                 <textarea
@@ -4179,11 +4480,20 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                 </button>
               </div>
               <div {...OFFICIAL_EXAM_SCOPE} style={{ position: "absolute", left: 0, right: 0, top: "41px", bottom: 0, background: "#fff", overflow: "hidden" }}>
-                <DebaoLawSearchPage setPage={() => setOfficialLawDialogOpen(false)} embedded onClose={() => setOfficialLawDialogOpen(false)} />
+                <DebaoLawSearchPage
+                  setPage={() => setOfficialLawDialogOpen(false)}
+                  embedded
+                  onClose={() => setOfficialLawDialogOpen(false)}
+                  fullscreenBridge={{ isFullscreen: officialLawDialogMaximized, toggleFullscreen: toggleOfficialLawDialogMaximize }}
+                />
               </div>
-              <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-right" onMouseDown={(event) => startOfficialLawDialogResize(event, "right")} />
-              <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-bottom" onMouseDown={(event) => startOfficialLawDialogResize(event, "bottom")} />
-              <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip" onMouseDown={(event) => startOfficialLawDialogResize(event, "corner")} />
+              {officialLawDialogMaximized ? null : (
+                <>
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-right" onMouseDown={(event) => startOfficialLawDialogResize(event, "right")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-bottom" onMouseDown={(event) => startOfficialLawDialogResize(event, "bottom")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip" onMouseDown={(event) => startOfficialLawDialogResize(event, "corner")} />
+                </>
+              )}
             </div>
           ) : null}
           {officialAnalysisDialogOpen ? (
@@ -4266,7 +4576,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#090e1a", display: "flex", flexDirection: "column" }}>
+    <div className="debao-question-practice-page debao-themed-page" style={{ minHeight: "100vh", background: "#090e1a", display: "flex", flexDirection: "column" }}>
       {/* Breadcrumb */}
       <div style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
         <div style={{ maxWidth: 1340, margin: "0 auto", padding: "10px 36px", display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#3a5570" }}>
@@ -4687,18 +4997,18 @@ function QuestionBankHomePage({
 
   const objQuickEntries = [
     { icon: BookOpen, label: "我的题库", sub: "客观题授权题库",     color: "#4e8ef7", glow: "rgba(78,142,247,0.12)", action: () => openMyQuestionBank("objective") },
-    { icon: Flag,     label: "错题本",   sub: `${wrongCount} 道待复习`, color: "#f76e6e", glow: "rgba(247,110,110,0.12)", action: () => startQuestionPractice("只看错题", activeBank ? { bookId: activeBank.id, name: "错题本", paperType: "objective" } : null) },
-    { icon: Zap,      label: "速记刷题", sub: "高频考点快速刷",     color: "#c9973e", glow: "rgba(201,151,62,0.12)", action: () => startQuestionPractice("顺序练习", activeBank ? { bookId: activeBank.id, name: activeBank.name, paperType: "objective" } : { name: "客观题练习", paperType: "objective" }) },
+    { icon: Flag,     label: "错题本",   sub: `${wrongCount} 道待复习`, color: "#f76e6e", glow: "rgba(247,110,110,0.12)", action: () => startQuestionPractice("只看错题", activeBank ? { bookId: activeBank.id, name: "错题本", paperType: "objective", source: "public" } : null) },
+    { icon: Zap,      label: "速记刷题", sub: "高频考点快速刷",     color: "#c9973e", glow: "rgba(201,151,62,0.12)", action: () => startQuestionPractice("顺序练习", activeBank ? { bookId: activeBank.id, name: activeBank.name, paperType: "objective", source: "public" } : { name: "客观题练习", paperType: "objective", source: "public" }) },
     { icon: Target,   label: "专项练习", sub: "暂未配置",           color: "#1dc9a4", glow: "rgba(29,201,164,0.12)", action: () => notify("专项练习暂未配置", "info") },
     { icon: PenLine,  label: "我的笔记", sub: "学习笔记整理",       color: "#c97ef5", glow: "rgba(201,126,245,0.12)", action: () => setPage("myNotes") },
-    { icon: Bookmark, label: "我的收藏", sub: `已收藏 ${favoriteCount} 道好题`, color: "#f7a94e", glow: "rgba(247,169,78,0.12)", action: () => startQuestionPractice("收藏题目", activeBank ? { bookId: activeBank.id, name: "我的收藏", paperType: "objective" } : null) },
+    { icon: Bookmark, label: "我的收藏", sub: `已收藏 ${favoriteCount} 道好题`, color: "#f7a94e", glow: "rgba(247,169,78,0.12)", action: () => startQuestionPractice("收藏题目", activeBank ? { bookId: activeBank.id, name: "我的收藏", paperType: "objective", source: "public" } : null) },
   ];
 
   const subQuickEntries = [
     { icon: BookOpen, label: "我的题库", sub: "主观题授权题库",     color: "#4e8ef7", glow: "rgba(78,142,247,0.12)", action: () => openMyQuestionBank("subjective") },
     { icon: Scale,    label: "法条检索", sub: "全库法条快速定位",   color: "#c9973e", glow: "rgba(201,151,62,0.12)", action: () => setPage("lawSearch") },
     { icon: PenLine,  label: "答题模板", sub: "高分答题框架整理",   color: "#c97ef5", glow: "rgba(201,126,245,0.12)", action: () => notify("答题模板会作为题库学习资料单独整理，不再跳转到主观批改入口", "info") },
-    { icon: Bookmark, label: "我的收藏", sub: `已收藏 ${favoriteCount} 道好题`, color: "#f7a94e", glow: "rgba(247,169,78,0.12)", action: () => startQuestionPractice("收藏题目", activeBank ? { bookId: activeBank.id, name: "我的收藏", paperType: "subjective" } : null) },
+    { icon: Bookmark, label: "我的收藏", sub: `已收藏 ${favoriteCount} 道好题`, color: "#f7a94e", glow: "rgba(247,169,78,0.12)", action: () => startQuestionPractice("收藏题目", activeBank ? { bookId: activeBank.id, name: "我的收藏", paperType: "subjective", source: "public" } : null) },
   ];
 
   const quickEntries = isObj ? objQuickEntries : subQuickEntries;
@@ -4779,11 +5089,11 @@ function QuestionBankHomePage({
   const getProficiency = (done: number, total: number) => total > 0 ? Math.round((done / total) * 5) : 0;
 
   return (
-    <div style={{ maxWidth: 1340, margin: "0 auto", padding: "32px 36px 64px" }}>
+    <div className="debao-question-bank-home debao-themed-page" style={{ maxWidth: 1340, margin: "0 auto", padding: "32px 36px 64px" }}>
 
       {/* ─── Exam type tabs + sub-nav ─── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 28 }}>
-        <div style={{ display: "flex", gap: 0, background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: 4, border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div className="debao-qb-topbar" style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 28 }}>
+        <div className="debao-qb-exam-switch" style={{ display: "flex", gap: 0, background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: 4, border: "1px solid rgba(255,255,255,0.08)" }}>
           {(["客观题", "主观题"] as const).map(tab => (
             <button key={tab} onClick={() => handleExamTabChange(tab)}
               style={{ padding: "9px 28px", borderRadius: 9, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer", transition: "all 0.18s",
@@ -4794,7 +5104,8 @@ function QuestionBankHomePage({
             </button>
           ))}
         </div>
-        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.08)" }} />
+        <div className="debao-qb-topbar-divider" style={{ width: 1, height: 20, background: "rgba(255,255,255,0.08)" }} />
+        <div className="debao-qb-subnav" style={{ display: "flex", alignItems: "center", gap: 0 }}>
         {(isObj ? ["章节练习", "错题本"] : ["章节练习"]).map(item => (
           <button key={item} onClick={() => setSubNav(item)}
             style={{ padding: "7px 14px 5px", borderRadius: 0, fontSize: 13, background: "none", border: "none", cursor: "pointer", transition: "all 0.14s",
@@ -4807,43 +5118,45 @@ function QuestionBankHomePage({
             {item}
           </button>
         ))}
+        </div>
       </div>
 
       {/* ══ 章节练习 ══ */}
       {subNav === "章节练习" && (<>
-        <div style={{ display: "grid", gridTemplateColumns: "248px 1fr", gap: 16, marginBottom: 36 }}>
-          <div style={{ borderRadius: 18, padding: "26px 28px 24px", background: cd.bg, border: `1px solid ${cd.border}`, position: "relative", overflow: "hidden", transition: "all 0.3s" }}>
+        <div className="debao-qb-quick-layout" style={{ display: "grid", gridTemplateColumns: "248px 1fr", gap: 16, marginBottom: 36 }}>
+          <div className="debao-qb-countdown-card" style={{ borderRadius: 18, padding: "26px 28px 24px", background: cd.bg, border: `1px solid ${cd.border}`, position: "relative", overflow: "hidden", transition: "all 0.3s" }}>
             <div style={{ position: "absolute", top: -24, right: -24, width: 110, height: 110, borderRadius: "50%", background: cd.orb }} />
             <div style={{ position: "absolute", bottom: -18, right: 10, width: 60, height: 60, borderRadius: "50%", background: cd.orb }} />
-            <div style={{ fontSize: 11, color: cd.accent, fontWeight: 700, letterSpacing: "0.1em", marginBottom: 6 }}>{cd.label}</div>
-            <div style={{ fontSize: 12, color: `${cd.accent}60`, marginBottom: 18, lineHeight: 1.6 }}>{cd.desc}</div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <div className="debao-qb-countdown-label" style={{ fontSize: 11, color: cd.accent, fontWeight: 700, letterSpacing: "0.1em", marginBottom: 6 }}>{cd.label}</div>
+            <div className="debao-qb-countdown-desc" style={{ fontSize: 12, color: `${cd.accent}60`, marginBottom: 18, lineHeight: 1.6 }}>{cd.desc}</div>
+            <div className="debao-qb-countdown-number" style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 52, fontWeight: 700, color: cd.num, lineHeight: 1 }}>{daysLeft}</span>
               <span style={{ fontSize: 20, color: cd.accent, fontWeight: 600 }}>天</span>
             </div>
-            <div style={{ marginTop: 20, height: 3, background: `${cd.accent}15`, borderRadius: 2, overflow: "hidden" }}>
+            <div className="debao-qb-countdown-progress" style={{ marginTop: 20, height: 3, background: `${cd.accent}15`, borderRadius: 2, overflow: "hidden" }}>
               <div style={{ height: "100%", width: `${yearProgress}%`, background: cd.bar, borderRadius: 2 }} />
             </div>
-            <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between" }}>
+            <div className="debao-qb-countdown-range" style={{ marginTop: 8, display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: 10, color: `${cd.accent}30` }}>备考开始</span>
               <span style={{ fontSize: 10, color: `${cd.accent}30` }}>考试当天</span>
             </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          <div className="debao-qb-quick-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
             {quickEntries.map(entry => {
               const Icon = entry.icon;
               return (
                 <button key={entry.label}
+                  className="debao-qb-quick-card"
                   onClick={entry.action}
                   style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 20px", borderRadius: 16, background: "#0f1826", border: "1px solid rgba(255,255,255,0.07)", cursor: "pointer", textAlign: "left", transition: "all 0.18s" }}
                   onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background = entry.glow; el.style.borderColor = `${entry.color}45`; el.style.transform = "translateY(-2px)"; el.style.boxShadow = "0 6px 20px rgba(0,0,0,0.3)"; }}
                   onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background = "#0f1826"; el.style.borderColor = "rgba(255,255,255,0.07)"; el.style.transform = "translateY(0)"; el.style.boxShadow = "none"; }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 13, background: `${entry.color}14`, border: `1px solid ${entry.color}28`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div className="debao-qb-quick-icon" style={{ width: 44, height: 44, borderRadius: 13, background: `${entry.color}14`, border: `1px solid ${entry.color}28`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <Icon size={19} color={entry.color} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0", marginBottom: 3 }}>{entry.label}</div>
-                    <div style={{ fontSize: 11, color: "#3a5570" }}>{entry.sub}</div>
+                    <div className="debao-qb-quick-title" style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0", marginBottom: 3 }}>{entry.label}</div>
+                    <div className="debao-qb-quick-sub" style={{ fontSize: 11, color: "#3a5570" }}>{entry.sub}</div>
                   </div>
                   <ChevronRight size={14} color="#2e4260" style={{ flexShrink: 0 }} />
                 </button>
@@ -4877,12 +5190,12 @@ function QuestionBankHomePage({
               当前暂无{isObj ? "客观题" : "主观题"}免费练习题库。发布后这里会显示可练习的科目和进度。
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+          <div className="debao-qb-subject-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
             {subjects.map(sub => {
               const proficiency = getProficiency(sub.done, sub.total);
               const pct = sub.total > 0 ? Math.round((sub.done / sub.total) * 100) : 0;
               return (
-                <button key={sub.id} onClick={() => startQuestionPractice("顺序练习", { bookId: sub.bookId ?? activeBank?.id, subjectId: sub.id, chapterId: sub.id, name: sub.name, paperType: sub.paperType ?? activeBank?.paperType })}
+                <button key={sub.id} className="debao-qb-subject-card" onClick={() => startQuestionPractice("顺序练习", { bookId: sub.bookId ?? activeBank?.id, subjectId: sub.id, chapterId: sub.id, name: sub.name, paperType: sub.paperType ?? activeBank?.paperType, source: "public" })}
                   style={{ display: "flex", flexDirection: "column", padding: "20px 22px 18px", borderRadius: 16, background: "#0f1826", border: "1px solid rgba(255,255,255,0.07)", cursor: "pointer", textAlign: "left", transition: "all 0.18s", position: "relative", overflow: "hidden" }}
                   onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = `${sub.color}45`; el.style.background = `linear-gradient(145deg,${sub.color}09,#0f1826)`; el.style.transform = "translateY(-2px)"; el.style.boxShadow = "0 6px 20px rgba(0,0,0,0.3)"; }}
                   onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "rgba(255,255,255,0.07)"; el.style.background = "#0f1826"; el.style.transform = "translateY(0)"; el.style.boxShadow = "none"; }}>
@@ -4891,7 +5204,7 @@ function QuestionBankHomePage({
                     <div style={{ fontSize: 15, fontWeight: 600, color: "#dde4f0", lineHeight: 1.3, paddingLeft: 2 }}>{sub.name}</div>
                     <ChevronRight size={14} color="#2e4260" style={{ flexShrink: 0, marginTop: 2 }} />
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 13 }}>
+                  <div className="debao-qb-subject-proficiency" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 13 }}>
                     <span style={{ fontSize: 11, color: "#3a5570" }}>熟练度</span>
                     <div style={{ display: "flex", gap: 4 }}>
                       {Array.from({ length: 5 }).map((_, i) => (
@@ -4918,8 +5231,8 @@ function QuestionBankHomePage({
 
       {/* ══ 错题本 ══ */}
       {subNav === "错题本" && (
-        <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
+        <div className="debao-qb-wrong-panel">
+          <div className="debao-qb-wrong-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
             {[
               { label: "错题总数", val: wrongCount, color: "#f76e6e", sub: "道待复习" },
               { label: "已掌握",   val: masteredCount, color: "#1dc9a4", sub: "道已攻克" },
@@ -4968,7 +5281,7 @@ function QuestionBankHomePage({
                   <p style={{ fontSize: 13, color: "#8fa3be", lineHeight: 1.6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{q.text}</p>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
-                  <button onClick={() => startQuestionPractice("只看错题", { bookId: q.bookId, subjectId: q.subjectId, chapterId: q.subjectId, name: q.subject, paperType: activeBank?.paperType })}
+                  <button onClick={() => startQuestionPractice("只看错题", { bookId: q.bookId, subjectId: q.subjectId, chapterId: q.subjectId, name: q.subject, paperType: activeBank?.paperType, source: "public" })}
                     style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", background: "rgba(247,110,110,0.12)", color: "#f76e6e" }}>
                     重做
                   </button>
@@ -5064,11 +5377,12 @@ function MyQuestionBankPage({
         name: targetSubject.name,
         paperType: "subjective",
         layout: "officialSubjective",
+        source: "my",
       });
       return;
     }
 
-    startQuestionPractice("顺序练习", { bookId: bank.id, name: bank.book, paperType: "objective" });
+    startQuestionPractice("顺序练习", { bookId: bank.id, name: bank.book, paperType: "objective", source: "my" });
   };
 
   const objectiveBanks = unlocked.filter(bank => bank.paperType === "objective");
@@ -5083,8 +5397,8 @@ function MyQuestionBankPage({
       : null;
 
     return (
-      <div key={b.id} style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
-        <div style={{ background: `linear-gradient(135deg,${b.color}22,rgba(15,24,38,0.96))`, borderBottom: `1px solid ${b.color}20`, padding: "20px 22px 16px", position: "relative" }}>
+      <div key={b.id} className="debao-my-qb-card" style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <div className="debao-my-qb-card-head" style={{ background: `linear-gradient(135deg,${b.color}22,rgba(15,24,38,0.96))`, borderBottom: `1px solid ${b.color}20`, padding: "20px 22px 16px", position: "relative" }}>
           <div style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: b.color, opacity: 0.75 }} />
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 10 }}>
             <div style={{ minWidth: 0, paddingLeft: 6 }}>
@@ -5092,9 +5406,9 @@ function MyQuestionBankPage({
                 <span style={{ fontSize: 11, color: `${b.color}dd`, fontWeight: 800 }}>{b.paperType === "subjective" ? "主观题库" : "客观题库"}</span>
                 <span style={{ fontSize: 11, color: "#3a5570" }}>{b.publisher}</span>
               </div>
-              <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 16, fontWeight: 700, color: "#dde4f0", lineHeight: 1.45, wordBreak: "break-word" }}>{b.book}</div>
+              <div className="debao-my-qb-card-title" style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 16, fontWeight: 700, color: "#dde4f0", lineHeight: 1.45, wordBreak: "break-word" }}>{b.book}</div>
             </div>
-            <div style={{ width: 42, height: 48, borderRadius: 8, background: `linear-gradient(145deg,${b.color}40,${b.color}18)`, border: `1px solid ${b.color}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <div className="debao-my-qb-card-icon" style={{ width: 42, height: 48, borderRadius: 8, background: `linear-gradient(145deg,${b.color}40,${b.color}18)`, border: `1px solid ${b.color}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <BookOpen size={18} color={b.color} />
             </div>
           </div>
@@ -5106,8 +5420,8 @@ function MyQuestionBankPage({
           </div>
         </div>
 
-        <div style={{ padding: "16px 22px 20px", display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "end" }}>
+        <div className="debao-my-qb-card-body" style={{ padding: "16px 22px 20px", display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
+          <div className="debao-my-qb-progress" style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "end" }}>
             <div>
               <div style={{ fontSize: 11, color: "#3a5570", marginBottom: 6 }}>练习进度</div>
               <div style={{ height: 5, background: "rgba(255,255,255,0.055)", borderRadius: 999, overflow: "hidden" }}>
@@ -5123,8 +5437,8 @@ function MyQuestionBankPage({
               {b.done > 0 ? "继续练习" : "开始练习"}
             </button>
           ) : (
-            <div style={{ display: "grid", gap: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div className="debao-my-qb-subject-picker" style={{ display: "grid", gap: 12 }}>
+              <div className="debao-my-qb-subject-picker-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 12, color: "#dde4f0", fontWeight: 800 }}>选择练习科目</div>
                   <div style={{ fontSize: 11, color: "#3a5570", marginTop: 3 }}>{b.subjects.length} 个科目，进入后使用真机模考排版</div>
@@ -5139,12 +5453,12 @@ function MyQuestionBankPage({
               {b.subjects.length === 0 ? (
                 <div style={{ color: "#5a7898", fontSize: 12, lineHeight: 1.7, padding: "12px", borderRadius: 10, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>当前题库还没有配置科目。</div>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
+                <div className="debao-my-qb-subject-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
                   {b.subjects.map(subject => {
                     const subjectPct = subject.progress.totalCount > 0 ? Math.round((subject.progress.answeredCount / subject.progress.totalCount) * 100) : 0;
                     const isLast = lastSubjectByBook[b.id] === subject.id;
                     return (
-                      <button key={subject.id} onClick={() => startBankPractice(b, subject)}
+                      <button key={subject.id} className="debao-my-qb-subject-card" onClick={() => startBankPractice(b, subject)}
                         style={{ padding: "10px 11px", borderRadius: 10, border: `1px solid ${isLast ? `${subject.color}66` : "rgba(255,255,255,0.07)"}`, background: isLast ? `${subject.color}16` : "rgba(255,255,255,0.025)", cursor: "pointer", textAlign: "left", minHeight: 78 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
                           <span style={{ width: 7, height: 7, borderRadius: "50%", background: subject.color, flexShrink: 0 }} />
@@ -5171,10 +5485,10 @@ function MyQuestionBankPage({
   };
 
   return (
-    <div style={{ maxWidth: 1340, margin: "0 auto", padding: "32px 36px 64px" }}>
+    <div className="debao-my-question-bank-page debao-themed-page" style={{ maxWidth: 1340, margin: "0 auto", padding: "32px 36px 64px" }}>
 
       {/* ─── Header ─── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
+      <div className="debao-my-qb-header" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
         <button onClick={() => setPage("questionBankHome")}
           style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 9, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", fontSize: 13, color: "#5a7898" }}>
           <ChevronLeft size={14} /> 题库
@@ -5192,7 +5506,7 @@ function MyQuestionBankPage({
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 28 }}>
+      <div className="debao-my-qb-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 28 }}>
         {[
           { label: "已开通题库", value: unlocked.length, color: "#4e8ef7" },
           { label: "主观题库", value: subjectiveBanks.length, color: "#1dc9a4" },
@@ -5205,33 +5519,33 @@ function MyQuestionBankPage({
         ))}
       </div>
 
-      <div style={{ marginBottom: 44 }}>
+      <div className="debao-my-qb-content" style={{ marginBottom: 44 }}>
         {!loadingBanks && unlocked.length === 0 && (
           <div style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", padding: "28px 24px", color: "#5a7898", fontSize: 13, marginBottom: 16 }}>
             当前账号还没有开通题库。开通权限后，这里会显示可练习的题库和进度。
           </div>
         )}
         {subjectiveBanks.length > 0 && (
-          <section style={{ marginBottom: 30 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <section className="debao-my-qb-section" style={{ marginBottom: 30 }}>
+            <div className="debao-my-qb-section-title" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
               <CheckCircle2 size={15} color="#1dc9a4" />
               <span style={{ fontSize: 14, fontWeight: 800, color: "#dde4f0" }}>主观题库</span>
               <span style={{ fontSize: 12, color: "#3a5570" }}>先选科目，再进入真机模考式练习</span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 16 }}>
+            <div className="debao-my-qb-grid debao-my-qb-grid-subjective" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 16 }}>
               {subjectiveBanks.map(renderBankCard)}
             </div>
           </section>
         )}
 
         {objectiveBanks.length > 0 && (
-          <section>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <section className="debao-my-qb-section">
+            <div className="debao-my-qb-section-title" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
               <CheckCircle2 size={15} color="#c9973e" />
               <span style={{ fontSize: 14, fontWeight: 800, color: "#dde4f0" }}>客观题库</span>
               <span style={{ fontSize: 12, color: "#3a5570" }}>按授权题库继续刷题</span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
+            <div className="debao-my-qb-grid debao-my-qb-grid-objective" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
               {objectiveBanks.map(renderBankCard)}
             </div>
           </section>
@@ -5307,7 +5621,7 @@ function MyNotesPage({
   ];
 
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 36px 72px" }}>
+    <div className="debao-my-notes-page debao-themed-page" style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 36px 72px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
         <button onClick={() => setPage("myProfile")}
           style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 9, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", fontSize: 13, color: "#5a7898" }}>
@@ -5435,6 +5749,8 @@ function MyProfilePage({
   courses,
   openMockExamRoom,
   navigateToPath,
+  homeConfig,
+  notify,
   studySummary,
   loadingStudySummary,
   initialTab = "study",
@@ -5445,6 +5761,8 @@ function MyProfilePage({
   courses: AppCourse[];
   openMockExamRoom: (target: MockExamSessionTarget) => void;
   navigateToPath: (path: string, state?: Record<string, unknown>) => void;
+  homeConfig: UserHomeConfig;
+  notify: Notify;
   studySummary: UserStudySummary;
   loadingStudySummary: boolean;
   initialTab?: "study" | "courses" | "banks" | "exams" | "orders";
@@ -5490,6 +5808,33 @@ function MyProfilePage({
 
   const sourceCourses = courses;
   const enrolledCourses = sourceCourses.filter(c => c.enrolled);
+  const announcementConfig = homeConfig.memberHome.announcement;
+  const learningAnnouncements = (announcementConfig.items || [])
+    .filter((item) => item.isVisible !== false && (item.title || item.description))
+    .sort((left, right) => Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0))
+    .slice(0, 8)
+    .map((item, index) => ({
+      id: `${index}-${item.title || item.description}`,
+      tag: item.tag || announcementConfig.badge || "公告",
+      color: item.color || "#4e8ef7",
+      text: item.description || item.title,
+      title: item.title,
+      time: item.time || "",
+      link: item.link || "",
+    }));
+
+  const openAnnouncement = (link: string) => {
+    if (!link) return;
+    if (/^https?:\/\//i.test(link)) {
+      window.open(link, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (link.startsWith("/")) {
+      navigateToPath(link, { page: pathToPage(link) });
+      return;
+    }
+    notify(link, "info");
+  };
 
   const studyStats = [
     { label: "累计练题", value: formatCount(studySummary.stats.totalPracticeCount), unit: "题", color: "#4e8ef7" },
@@ -5578,34 +5923,34 @@ function MyProfilePage({
   }, [recordType, tab]);
 
   return (
-    <div style={{ maxWidth: 1340, margin: "0 auto", padding: "36px 36px 72px" }}>
+    <div className="debao-my-profile-page debao-themed-page" style={{ maxWidth: 1340, margin: "0 auto", padding: "36px 36px 72px" }}>
 
       {/* ─── User header ─── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 32, padding: "28px 32px", background: "#0f1826", borderRadius: 20, border: "1px solid rgba(255,255,255,0.07)" }}>
+      <div className="debao-my-profile-header" style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 32, padding: "28px 32px", background: "#0f1826", borderRadius: 20, border: "1px solid rgba(255,255,255,0.07)" }}>
         <div style={{ position: "relative", flexShrink: 0 }}>
           <UserAvatar user={currentUser} size={72} fontSize={28} boxShadow="0 0 0 3px rgba(29,201,164,0.25)" />
           <div style={{ position: "absolute", bottom: 2, right: 2, width: 14, height: 14, borderRadius: "50%", background: "#1dc9a4", border: "2.5px solid #0f1826" }} />
         </div>
-        <div style={{ flex: 1 }}>
+        <div className="debao-my-profile-info" style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
             <span style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 20, fontWeight: 600, color: "#dde4f0" }}>{displayName}</span>
             <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 9px", borderRadius: 6, background: "rgba(201,151,62,0.15)", color: "#c9973e" }}>法考备考</span>
           </div>
-          <div style={{ display: "flex", gap: 20 }}>
+          <div className="debao-my-profile-meta" style={{ display: "flex", gap: 20 }}>
             <span style={{ fontSize: 12, color: "#3a5570" }}>注册 <span style={{ color: "#c9973e", fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>{getAccountDays(currentUser?.registeredAt)}</span> 天</span>
             <span style={{ fontSize: 12, color: "#3a5570" }}>已开通课程 <span style={{ color: "#f76e6e", fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>{currentUser?.coursePermissions?.length ?? 0}</span> 个</span>
             <span style={{ fontSize: 12, color: "#3a5570" }}>授权题库 <span style={{ color: "#c97ef5", fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>{studySummary.stats.authorizedQuestionBankCount}</span> 个</span>
             <span style={{ fontSize: 12, color: "#3a5570" }}>账号 <span style={{ color: "#4e8ef7", fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>{maskPhone(currentUser?.phone)}</span></span>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 12 }}>
+        <div className="debao-my-profile-actions" style={{ display: "flex", gap: 12 }}>
           <button onClick={() => setPage("settings")} style={{ padding: "9px 20px", borderRadius: 11, fontSize: 13, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", color: "#8fa3be" }}>设置</button>
           <button onClick={() => setPage("editProfile")} style={{ padding: "9px 20px", borderRadius: 11, fontSize: 13, fontWeight: 600, background: "linear-gradient(90deg,#c9973e,#e8c46a)", border: "none", cursor: "pointer", color: "#090e1a" }}>编辑资料</button>
         </div>
       </div>
 
       {/* ─── Tabs ─── */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 28, borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: 0 }}>
+      <div className="debao-my-profile-tabs" style={{ display: "flex", gap: 4, marginBottom: 28, borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: 0 }}>
         {profileTabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             style={{ padding: "10px 22px 12px", fontSize: 14, fontWeight: tab === t.key ? 600 : 400, border: "none", cursor: "pointer", background: "transparent", color: tab === t.key ? "#c9973e" : "#3a5570", borderBottom: tab === t.key ? "2px solid #c9973e" : "2px solid transparent", transition: "all 0.15s", marginBottom: -1 }}>
@@ -5616,10 +5961,10 @@ function MyProfilePage({
 
       {/* ═══════ 学习中心 ═══════ */}
       {tab === "study" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 24 }}>
-          <div>
+        <div className="debao-my-study-layout" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 24 }}>
+          <div className="debao-my-study-main">
             {/* Stat cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
+            <div className="debao-my-study-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
               {studyStats.map(s => (
                 <div key={s.label} style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "20px 18px" }}>
                   <div style={{ fontSize: 11, color: "#2e4260", marginBottom: 8 }}>{s.label}</div>
@@ -5632,7 +5977,7 @@ function MyProfilePage({
             </div>
 
             {/* Weekly bar chart */}
-            <div style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "22px 24px", marginBottom: 24 }}>
+            <div className="debao-my-week-card" style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "22px 24px", marginBottom: 24 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0", marginBottom: 20 }}>本周学习时长</div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 100 }}>
                 {weekData.map(d => (
@@ -5646,7 +5991,7 @@ function MyProfilePage({
             </div>
 
             {/* Recent activity */}
-            <div style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "22px 24px" }}>
+            <div className="debao-my-activity-card" style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "22px 24px" }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0", marginBottom: 18 }}>最近动态</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 {loadingStudySummary ? (
@@ -5672,7 +6017,36 @@ function MyProfilePage({
           </div>
 
           {/* Right sidebar */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="debao-my-study-sidebar" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div className="debao-my-announcements" style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <div style={{ padding: "16px 18px 13px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <div style={{ width: 3, height: 14, borderRadius: 2, background: "linear-gradient(to bottom,#c9973e,#e8c46a)", flexShrink: 0 }} />
+                  <span style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 14, fontWeight: 700, color: "#dde4f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{announcementConfig.title || "学习公告"}</span>
+                </div>
+                <button type="button" onClick={() => notify(`当前展示 ${learningAnnouncements.length} 条学习公告`, "info")} style={{ fontSize: 11, color: "#4e8ef7", background: "none", border: "none", cursor: "pointer", opacity: 0.9, whiteSpace: "nowrap" }}>全部</button>
+              </div>
+              <div className="debao-my-announcement-list" style={{ maxHeight: 280, overflowY: "auto" }}>
+                {learningAnnouncements.length === 0 ? (
+                  <div style={{ padding: "20px 18px", color: "#4a6888", fontSize: 12, lineHeight: 1.8 }}>
+                    暂无学习公告。发布后会自动显示在这里。
+                  </div>
+                ) : learningAnnouncements.map((a, i) => (
+                  <div key={a.id} onClick={() => openAnnouncement(a.link)} style={{ padding: "13px 18px", cursor: a.link ? "pointer" : "default", display: "flex", gap: 11, borderBottom: i < learningAnnouncements.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none", transition: "background 0.12s" }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+                    <div style={{ width: 3, borderRadius: 2, background: a.color, flexShrink: 0, alignSelf: "stretch", opacity: 0.75 }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
+                        <span style={{ fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 4, background: `${a.color}18`, color: a.color, letterSpacing: "0.05em" }}>{a.tag}</span>
+                        <span style={{ fontSize: 10, color: "#2e4260", marginLeft: "auto", whiteSpace: "nowrap" }}>{a.time}</span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12, color: "#7a9abe", lineHeight: 1.7, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{a.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
             {/* Streak heatmap */}
             <div style={{ background: "linear-gradient(135deg,rgba(201,151,62,0.12),rgba(247,169,78,0.05))", borderRadius: 16, border: "1px solid rgba(201,151,62,0.16)", padding: "20px 20px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
@@ -5689,7 +6063,7 @@ function MyProfilePage({
               </div>
               <div style={{ marginTop: 8, fontSize: 12, color: "#8fa3be" }}>你的学习时长超越了以上比例的学员</div>
             </div>
-            <div style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "20px 20px" }}>
+            <div className="debao-my-heatmap-card" style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "20px 20px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: "#dde4f0" }}>练题热力图</span>
                 <span style={{ fontSize: 11, color: "#2e4260" }}>最近35天</span>
@@ -5709,7 +6083,7 @@ function MyProfilePage({
             </div>
 
             {/* Quick links */}
-            <div style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "20px 20px" }}>
+            <div className="debao-my-quick-links" style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "20px 20px" }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#dde4f0", marginBottom: 14 }}>快捷入口</div>
               {[
                 { icon: BookOpen, label: "去刷题", color: "#4e8ef7", page: "questionBankHome" },
@@ -5732,14 +6106,14 @@ function MyProfilePage({
 
       {/* ═══════ 我的课程 ═══════ */}
       {tab === "courses" && (
-        <div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="debao-my-courses-tab">
+          <div className="debao-my-course-list" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {enrolledCourses.map(c => (
-              <div key={c.id} style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", padding: "22px 24px", display: "flex", gap: 20, alignItems: "center" }}>
+              <div className="debao-my-course-row" key={c.id} style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", padding: "22px 24px", display: "flex", gap: 20, alignItems: "center" }}>
                 <div style={{ width: 56, height: 56, borderRadius: 14, background: `linear-gradient(145deg,${c.color}40,${c.color}20)`, border: `1px solid ${c.color}30`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif SC',serif", fontWeight: 700, fontSize: 20, color: c.color, flexShrink: 0 }}>
                   {c.initials}
                 </div>
-                <div style={{ flex: 1 }}>
+                <div className="debao-my-course-row-main" style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                     <span style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 16, fontWeight: 600, color: "#dde4f0" }}>{c.title}</span>
                     <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 5, background: `${c.color}15`, color: c.color }}>{c.tag || c.category}</span>
@@ -5756,7 +6130,7 @@ function MyProfilePage({
                     <span style={{ fontSize: 11, color: "#3a5570", fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{c.progress}%</span>
                   </div>
                 </div>
-                <button onClick={() => goToCourse(c)}
+                <button className="debao-my-course-row-action" onClick={() => goToCourse(c)}
                   style={{ padding: "10px 22px", borderRadius: 11, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: `linear-gradient(90deg,${c.color}dd,${c.color})`, color: "#fff", flexShrink: 0 }}>
                   继续学习
                 </button>
@@ -5768,8 +6142,8 @@ function MyProfilePage({
 
       {/* ═══════ 我的题库 ═══════ */}
       {tab === "banks" && (
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        <div className="debao-my-banks-tab">
+          <div className="debao-my-banks-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0" }}>
               {loadingProfileQuestionBanks ? "题库加载中" : `已开通题库 ${unlocked.length} 个`}
             </span>
@@ -5788,11 +6162,11 @@ function MyProfilePage({
               当前账号还没有开通授权题库。开通后，这里会显示可练习的题库和进度。
             </div>
           ) : null}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+          <div className="debao-my-banks-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
             {unlocked.map(b => {
               const pct = b.total > 0 ? Math.round((b.done / b.total) * 100) : 0;
               return (
-                <div key={b.id} style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden" }}>
+                <div className="debao-my-bank-card" key={b.id} style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden" }}>
                   <div style={{ background: `linear-gradient(135deg,${b.color}22,${b.color}08)`, borderBottom: `1px solid ${b.color}20`, padding: "18px 20px 14px", position: "relative" }}>
                     <div style={{ position: "absolute", top: 0, left: 0, width: 3, height: "100%", background: b.color, opacity: 0.7 }} />
                     <div style={{ paddingLeft: 5 }}>
@@ -5900,11 +6274,11 @@ function MyProfilePage({
         };
 
         return (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, marginBottom: 22, flexWrap: "wrap" }}>
+          <div className="debao-my-exams-tab">
+            <div className="debao-my-exams-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, marginBottom: 22, flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 22, fontWeight: 700, color: "#dde4f0", marginBottom: 8 }}>我的考试列表</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div className="debao-my-exam-type-tabs" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {([
                     ["obj", "客观题记录", "模考成绩 / 答案解析"],
                     ["sub", "主观题批改", "批改状态 / 批改详情"],
@@ -5937,7 +6311,7 @@ function MyProfilePage({
               </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 18 }}>
+            <div className="debao-my-exam-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 18 }}>
               {[
                 { label: "全部记录", value: activeRecords.length, color: "#4e8ef7" },
                 { label: "已交卷", value: submittedRecords.length, color: "#1dc9a4" },
@@ -5964,7 +6338,7 @@ function MyProfilePage({
             )}
 
             {recordType === "sub" && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+              <div className="debao-my-subjective-filters" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
                 {([
                   ["all", "全部", activeRecords.length],
                   ["pending", "待批改", pendingReviewRecords.length],
@@ -5993,7 +6367,7 @@ function MyProfilePage({
             )}
 
             {!loadingMockExamHistory && !mockExamHistoryError && visibleRecords.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div className="debao-my-exam-records" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {visibleRecords.map(record => {
                   const total = record.paper.totalScore || 100;
                   const accuracy = record.questionCount > 0 ? Math.round((record.correctCount / record.questionCount) * 100) : 0;
@@ -6003,6 +6377,7 @@ function MyProfilePage({
                   const scoreColor = record.totalScore >= total * 0.75 ? "#1dc9a4" : record.totalScore >= total * 0.6 ? "#c9973e" : "#f76e6e";
                   return (
                     <button
+                      className="debao-my-exam-record"
                       key={record.id}
                       type="button"
                       onClick={() => openRecord(record)}
@@ -6089,7 +6464,7 @@ function MyProfilePage({
 
       {/* ═══════ 订单记录 ═══════ */}
       {tab === "orders" && (
-        <div>
+        <div className="debao-my-orders-tab">
           {loadingStudySummary ? (
             <div style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "24px", color: "#5a7898", fontSize: 13 }}>
               正在读取订单记录...
@@ -6099,9 +6474,9 @@ function MyProfilePage({
               暂无订单记录。购买课程、题库或资料后，订单会显示在这里。
             </div>
           ) : null}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="debao-my-order-list" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {orders.map(o => (
-              <div key={o.id} style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "20px 24px", display: "flex", alignItems: "center", gap: 20 }}>
+              <div className="debao-my-order-row" key={o.id} style={{ background: "#0f1826", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: "20px 24px", display: "flex", alignItems: "center", gap: 20 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                     <span style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 15, fontWeight: 600, color: "#dde4f0" }}>{o.name}</span>
@@ -6208,7 +6583,7 @@ function EditProfilePage({ setPage, currentUser, onUserUpdated, notify }: { setP
   const labelStyle = { fontSize: 12, color: "#3a5570", marginBottom: 7, display: "block", fontWeight: 600, letterSpacing: "0.03em" };
 
   return (
-    <div style={{ maxWidth: 840, margin: "0 auto", padding: "36px 36px 72px" }}>
+    <div className="debao-edit-profile-page debao-themed-page" style={{ maxWidth: 840, margin: "0 auto", padding: "36px 36px 72px" }}>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
@@ -6615,7 +6990,7 @@ function DebaoMockExamListPage({
   };
 
   return (
-    <div style={{ maxWidth: 1340, margin: "0 auto", padding: "34px 36px 72px" }}>
+    <div className="debao-mock-exam-list-page debao-themed-page" style={{ maxWidth: 1340, margin: "0 auto", padding: "34px 36px 72px" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 24, marginBottom: 26 }}>
         <div style={{ maxWidth: 680 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
@@ -7471,7 +7846,7 @@ function SettingsPage({ setPage, notify, onLogout, currentUser }: { setPage: (p:
   };
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto", padding: "36px 36px 72px" }}>
+    <div className="debao-settings-page debao-themed-page" style={{ maxWidth: 760, margin: "0 auto", padding: "36px 36px 72px" }}>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
@@ -7549,7 +7924,7 @@ function CourseRouteState({ loading, routeCourseId, accessState, setPage }: { lo
     : accessState.message || `当前账号没有找到该课程${routeCourseId ? `（ID: ${routeCourseId}）` : ""}，可能未开通、已下架或链接不正确。`;
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto", padding: "92px 32px", textAlign: "center" }}>
+    <div className="debao-course-route-state debao-themed-page" style={{ maxWidth: 760, margin: "0 auto", padding: "92px 32px", textAlign: "center" }}>
       <div style={{ width: 56, height: 56, borderRadius: 16, margin: "0 auto 18px", background: "rgba(78,142,247,0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <BookOpen size={24} color="#4e8ef7" />
       </div>
@@ -7599,11 +7974,20 @@ function DebaoAppShell() {
   const [homeConfig, setHomeConfig] = useState<UserHomeConfig>(EMPTY_USER_HOME_CONFIG);
   const [studySummary, setStudySummary] = useState<UserStudySummary>(EMPTY_STUDY_SUMMARY);
   const [loadingStudySummary, setLoadingStudySummary] = useState(false);
+  const [themeMode, setThemeMode] = useState<DebaoThemeMode>(() => getInitialDebaoTheme());
+  const isMobileDesktopOnlyBlocked = useMockExamDesktopGuard();
   const routeCourseId = typeof window !== "undefined" ? getRouteCourseIdFromPath(window.location.pathname) : null;
+  const desktopOnlyFeature = isMobileDesktopOnlyBlocked
+    ? getDesktopOnlyFeatureForPage(page, locationPath, selectedQuestionChapter, mockExamMode)
+    : null;
 
   const notify: Notify = (text, type = "info") => {
     setToast({ text, type });
     window.setTimeout(() => setToast(null), 2200);
+  };
+
+  const toggleThemeMode = () => {
+    setThemeMode(current => current === "light" ? "dark" : "light");
   };
 
   const setPage = (nextPage: string) => {
@@ -7684,6 +8068,12 @@ function DebaoAppShell() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [courses]);
+
+  useEffect(() => {
+    document.documentElement.dataset.debaoTheme = themeMode;
+    document.documentElement.style.colorScheme = themeMode;
+    window.localStorage.setItem(DEBAO_THEME_STORAGE_KEY, themeMode);
+  }, [themeMode]);
 
   useEffect(() => {
     const handleSessionExpired = () => {
@@ -7916,7 +8306,7 @@ function DebaoAppShell() {
   };
 
   return (
-    <div className="debao-app-shell" style={{ minHeight: "100vh", background: "#090e1a", fontFamily: "'Noto Sans SC',sans-serif", color: "#dde4f0" }}>
+    <div className={`debao-app-shell debao-theme-${themeMode}`} data-theme={themeMode} style={{ minHeight: "100vh", background: "#090e1a", fontFamily: "'Noto Sans SC',sans-serif", color: "#dde4f0" }}>
       <Toast toast={toast} />
       {checkingAuth ? (
         <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#5a7898", fontSize: 14 }}>正在校验得宝登录态...</div>
@@ -7924,8 +8314,10 @@ function DebaoAppShell() {
         <AuthPage onAuthenticated={handleAuthenticated} notify={notify} />
       ) : (
       <div className="debao-app-content">
-      {page !== "mockExamRoom" && page !== "typingPractice" && !(page === "questionBank" && selectedQuestionChapter?.layout === "officialSubjective") && <Nav activeNav={activeNav} setActiveNav={setActiveNav} setPage={setPage} currentUser={currentUser} studySummary={studySummary} />}
-      {myExamRecordRoute
+      {page !== "mockExamRoom" && page !== "typingPractice" && !(page === "questionBank" && selectedQuestionChapter?.layout === "officialSubjective") && <Nav activeNav={activeNav} setActiveNav={setActiveNav} setPage={setPage} currentUser={currentUser} studySummary={studySummary} themeMode={themeMode} onToggleTheme={toggleThemeMode} />}
+      {desktopOnlyFeature
+        ? <DesktopOnlyNotice feature={desktopOnlyFeature} backLabel="返回首页" onBack={() => setPage("home")} />
+        : myExamRecordRoute
         ? <DebaoMyExamRecordPage
             recordId={myExamRecordRoute.recordId}
             view={myExamRecordRoute.view}
@@ -7962,7 +8354,7 @@ function DebaoAppShell() {
         : page === "mockExamRoom"
         ? <LegacyMockExamRouter />
 : page === "myProfile"
-        ? <MyProfilePage setPage={setPage} goToCourse={goToCourse} currentUser={currentUser} courses={courses} openMockExamRoom={openMockExamRoom} navigateToPath={navigateToPath} studySummary={studySummary} loadingStudySummary={loadingStudySummary} initialTab={typeof window !== "undefined" && window.location.pathname.startsWith("/user/my-exams") ? "exams" : "study"} />
+        ? <MyProfilePage setPage={setPage} goToCourse={goToCourse} currentUser={currentUser} courses={courses} openMockExamRoom={openMockExamRoom} navigateToPath={navigateToPath} homeConfig={homeConfig} notify={notify} studySummary={studySummary} loadingStudySummary={loadingStudySummary} initialTab={typeof window !== "undefined" && window.location.pathname.startsWith("/user/my-exams") ? "exams" : "study"} />
         : page === "editProfile"
         ? <EditProfilePage setPage={setPage} currentUser={currentUser} onUserUpdated={setCurrentUser} notify={notify} />
         : page === "subjectiveGrading"

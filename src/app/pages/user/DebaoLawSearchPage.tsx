@@ -6,6 +6,10 @@ type DebaoLawSearchPageProps = {
   setPage: (page: string) => void;
   embedded?: boolean;
   onClose?: () => void;
+  fullscreenBridge?: {
+    isFullscreen: boolean;
+    toggleFullscreen: () => void;
+  };
 };
 
 type LawTreeStateNode = LawTreeNode & {
@@ -22,6 +26,8 @@ const LEFT_WIDTH_MIN = 240;
 const LEFT_WIDTH_MAX = 680;
 const LEFT_COLLAPSE_THRESHOLD = 72;
 const LEFT_REOPEN_DEFAULT_WIDTH = 320;
+const MAX_ICON_URL = "https://oss.zhumavip.com/images/lawPage/ic-fangda.png";
+const RESTORE_ICON_URL = "https://oss.zhumavip.com/images/lawPage/ic-zuixiaohua.png";
 
 const lawStyles = `
 .debao-law-page{box-sizing:border-box;width:100%;height:100%;min-height:100vh;background:#f5f5f5;color:#404040;font-family:"PingFang SC","Microsoft YaHei",sans-serif}
@@ -29,9 +35,13 @@ const lawStyles = `
 .debao-law-outer{display:flex;justify-content:center;min-height:100vh;padding:0 16px 40px}
 .debao-law-outer.embedded{min-height:100%;height:100%;padding:0;background:#f5f5f5}
 .debao-law-box{display:flex;flex-direction:column;color:#404040;background:#fff;box-shadow:0 0 10px rgba(0,0,0,.1);border-radius:5px;overflow:hidden;user-select:none;width:1200px;height:calc(100vh - 80px);min-height:540px;margin-top:40px;margin-bottom:40px}
+.debao-law-box.fullscreen{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;min-height:0!important;margin:0!important;border-radius:0!important;z-index:1000}
 .debao-law-outer.embedded .debao-law-box{width:100%;height:100%;min-height:0;margin:0;border-radius:0;box-shadow:none}
 .debao-law-top{flex-shrink:0;height:40px;width:100%;padding:0 15px;font-size:14px;line-height:40px;color:#41485d;overflow:hidden}
 .debao-law-title{float:left;color:#333;font-family:"Songti SC","STSong",serif}
+.debao-law-top-actions{float:right;display:flex;align-items:center;height:40px;gap:8px}
+.debao-law-fullscreen{display:block;width:12px;height:12px;margin:0;padding:14px 10px;border:0;background:transparent;cursor:pointer;box-sizing:content-box}
+.debao-law-fullscreen img{display:block;width:12px;height:12px}
 .debao-law-close{float:right;margin-top:9px;height:22px;border:1px solid #dfdfdf;border-radius:4px;background:#fafafa;color:#41485d;font-size:12px;line-height:20px;cursor:pointer}
 .debao-law-body{display:flex;position:relative;height:calc(100% - 40px);border-top:1px solid #dfdfdf}
 .debao-law-left{flex-shrink:0;height:100%;border-right:1px solid #dfdfdf;overflow:hidden;background:#fff}
@@ -59,8 +69,14 @@ const lawStyles = `
 .debao-law-row-inner{display:flex;align-items:center}
 .debao-law-icon{flex-shrink:0;height:18px;width:18px;background-image:url("https://osscdn2.zhongheschool.com/common/defaultType/202503/202503171558340059.png")}
 .debao-law-icon-folder-closed{background-position:-74px -18px}
+.debao-law-icon-folder-closed-first{background-position:-74px 0}
+.debao-law-icon-folder-closed-last{background-position:-74px -36px}
 .debao-law-icon-folder-open{background-position:-92px -18px}
+.debao-law-icon-folder-open-first{background-position:-92px 0}
+.debao-law-icon-folder-open-last{background-position:-92px -36px}
 .debao-law-icon-file{background-position:-56px -18px}
+.debao-law-icon-file-first{background-position:-56px 0}
+.debao-law-icon-file-last{background-position:-56px -36px}
 .debao-law-selected-folder{padding:0 4px 0 0;background:#f2d493!important;z-index:3}
 .debao-law-selected-file{margin-left:-1px;padding:0 4px 0 0;background:#f2d493!important;z-index:3}
 .debao-law-movebar{flex-shrink:0;margin:0;width:12px;height:100%;cursor:col-resize;position:relative;z-index:2;background:linear-gradient(90deg,transparent 0,transparent 5px,#d7dbe5 5px,#d7dbe5 7px,transparent 7px,transparent 100%)}
@@ -70,7 +86,7 @@ const lawStyles = `
 .debao-law-section h4{text-align:center;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-weight:800}
 .debao-law-placeholder{padding:0!important;display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:#fff;font-size:46px;font-family:"Songti SC","STSong",serif;font-weight:700;text-align:left;color:#454545;line-height:46px}
 @media (max-width:1240px){.debao-law-outer:not(.embedded){padding:8px}.debao-law-outer:not(.embedded) .debao-law-box{width:calc(100vw - 16px);height:calc(100vh - 16px);margin-top:8px;margin-bottom:8px}}
-@media (max-width:768px){.debao-law-outer{padding:0}.debao-law-box{width:100%!important;height:100vh!important;min-height:0!important;margin:0!important;border-radius:0!important;box-shadow:none!important}.debao-law-top{height:48px;line-height:48px;padding:0 14px;font-size:15px}.debao-law-body{flex-direction:column;height:calc(100% - 48px)}.debao-law-left{width:100%!important;height:min(42vh,360px)!important;border-right:0;border-bottom:1px solid #dfdfdf}.debao-law-movebar,.debao-law-left-collapsed{display:none}.debao-law-searchbar{flex-wrap:wrap;gap:10px;height:auto;padding:10px 12px}.debao-law-searchbox{flex:1 1 100%;min-width:0;margin:0}.debao-law-searchbox input{width:100%}.debao-law-search-button{margin-left:12px}.debao-law-search-right{margin-left:0;width:auto;height:auto;padding-right:0;gap:8px}.debao-law-list-area{height:calc(100% - 86px);padding:8px}.debao-law-right{flex:1;min-height:0}.debao-law-section{padding:16px 14px;line-height:26px;font-size:15px}.debao-law-placeholder{padding:24px!important;font-size:32px;line-height:38px}}
+@media (max-width:768px){.debao-law-outer{padding:0}.debao-law-box,.debao-law-box.fullscreen{position:relative!important;inset:auto!important;width:100%!important;height:100vh!important;min-height:0!important;margin:0!important;border-radius:0!important;box-shadow:none!important;z-index:auto}.debao-law-top{height:48px;line-height:48px;padding:0 14px;font-size:15px}.debao-law-top-actions{height:48px}.debao-law-fullscreen{display:none}.debao-law-body{flex-direction:column;height:calc(100% - 48px)}.debao-law-left{width:100%!important;height:min(42vh,360px)!important;border-right:0;border-bottom:1px solid #dfdfdf}.debao-law-movebar,.debao-law-left-collapsed{display:none}.debao-law-searchbar{flex-wrap:wrap;gap:10px;height:auto;padding:10px 12px}.debao-law-searchbox{flex:1 1 100%;min-width:0;margin:0}.debao-law-searchbox input{width:100%}.debao-law-search-button{margin-left:12px}.debao-law-search-right{margin-left:0;width:auto;height:auto;padding-right:0;gap:8px}.debao-law-list-area{height:calc(100% - 86px);padding:8px}.debao-law-right{flex:1;min-height:0}.debao-law-section{padding:16px 14px;line-height:26px;font-size:15px}.debao-law-placeholder{padding:24px!important;font-size:32px;line-height:38px}}
 `;
 
 const cloneTree = (nodes: LawTreeNode[], parentId = ""): LawTreeStateNode[] =>
@@ -95,6 +111,16 @@ const buildNodeMap = (nodes: LawTreeStateNode[]) => {
 
 const hasChildren = (node: LawTreeStateNode) => Boolean(node.children?.length);
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const getLawNodeIconClass = (node: LawTreeStateNode, index: number, total: number) => {
+  const first = index === 0 && !node.parentId;
+  const last = index === total - 1;
+  if (hasChildren(node)) {
+    if (node.isOpen) return first ? "debao-law-icon-folder-open-first" : last ? "debao-law-icon-folder-open-last" : "debao-law-icon-folder-open";
+    return first ? "debao-law-icon-folder-closed-first" : last ? "debao-law-icon-folder-closed-last" : "debao-law-icon-folder-closed";
+  }
+  return first ? "debao-law-icon-file-first" : last ? "debao-law-icon-file-last" : "debao-law-icon-file";
+};
 
 function ChevronIcon({ direction }: { direction: "left" | "right" }) {
   return (
@@ -129,17 +155,18 @@ function LawTreeRows({
 }) {
   return (
     <>
-      {nodes.map((node) => {
+      {nodes.map((node, index) => {
         const childNodes = node.children ?? [];
         const folder = hasChildren(node);
         const active = node.id === activeNodeId;
+        const iconClass = getLawNodeIconClass(node, index, nodes.length);
         return (
           <div key={node.id}>
             <div
               className={`debao-law-row ${folder && active ? "debao-law-selected-folder" : ""}`}
               title={node.title}
               data-law-node-id={node.id}
-              onClick={() => onSelect(node, !folder)}
+              onClick={() => onSelect(node, true)}
               onDoubleClick={() => {
                 if (folder) onToggle(node);
                 onSelect(node, true);
@@ -147,7 +174,7 @@ function LawTreeRows({
             >
               <div className="debao-law-row-inner">
                 <div
-                  className={`debao-law-icon ${folder ? (node.isOpen ? "debao-law-icon-folder-open" : "debao-law-icon-folder-closed") : "debao-law-icon-file"}`}
+                  className={`debao-law-icon ${iconClass}`}
                   onClick={(event) => {
                     if (!folder) return;
                     event.stopPropagation();
@@ -179,10 +206,11 @@ function LawContent({ item }: { item: LawContentItem }) {
   );
 }
 
-export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: DebaoLawSearchPageProps) {
+export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscreenBridge }: DebaoLawSearchPageProps) {
   const [overview, setOverview] = useState<LawOverview | null>(null);
   const [tree, setTree] = useState<LawTreeStateNode[]>([]);
   const [activeNodeId, setActiveNodeId] = useState("");
+  const [contentNodeId, setContentNodeId] = useState("");
   const [content, setContent] = useState<LawContentPayload | null>(null);
   const [keyword, setKeyword] = useState("");
   const [matches, setMatches] = useState<SearchMatch[]>([]);
@@ -192,12 +220,17 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
   const [error, setError] = useState("");
   const [leftWidth, setLeftWidth] = useState(390);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [internalFullscreen, setInternalFullscreen] = useState(false);
   const dragRef = useRef<{ x: number; width: number } | null>(null);
   const treeRef = useRef<HTMLDivElement | null>(null);
+  const rightRef = useRef<HTMLDivElement | null>(null);
+  const matchIndexRef = useRef(0);
   const contentCacheRef = useRef<Map<string, LawContentPayload>>(new Map());
 
   const nodeMap = useMemo(() => buildNodeMap(tree), [tree]);
   const displayItems = content?.items ?? [];
+  const isFullscreen = fullscreenBridge ? Boolean(fullscreenBridge.isFullscreen) : internalFullscreen;
+  const canToggleFullscreen = true;
 
   useEffect(() => {
     let active = true;
@@ -213,6 +246,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
         setTree(nextTree);
         const initialId = data.initialNodeId || nextTree[0]?.id || "";
         setActiveNodeId(initialId);
+        setContentNodeId(initialId);
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "法条目录加载失败");
       } finally {
@@ -227,7 +261,32 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
   }, []);
 
   useEffect(() => {
-    if (!activeNodeId) {
+    if (!embedded || !isFullscreen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      toggleFullscreen();
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [embedded, isFullscreen, fullscreenBridge]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncMobileLayoutState = () => {
+      if (window.matchMedia("(max-width: 768px)").matches) {
+        setLeftCollapsed(false);
+        setInternalFullscreen(false);
+      }
+    };
+    syncMobileLayoutState();
+    window.addEventListener("resize", syncMobileLayoutState);
+    return () => window.removeEventListener("resize", syncMobileLayoutState);
+  }, []);
+
+  useEffect(() => {
+    if (!contentNodeId) {
       setContent(null);
       return;
     }
@@ -238,9 +297,9 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
       setLoadingContent(true);
       setError("");
       try {
-        const cached = contentCacheRef.current.get(activeNodeId);
-        const data = cached ?? (await lawService.getContent(activeNodeId));
-        if (!cached) contentCacheRef.current.set(activeNodeId, data);
+        const cached = contentCacheRef.current.get(contentNodeId);
+        const data = cached ?? (await lawService.getContent(contentNodeId));
+        if (!cached) contentCacheRef.current.set(contentNodeId, data);
         if (active) setContent(data);
       } catch (err) {
         if (active) {
@@ -256,7 +315,15 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
     return () => {
       active = false;
     };
-  }, [activeNodeId]);
+  }, [contentNodeId]);
+
+  useEffect(() => {
+    rightRef.current?.scrollTo({ top: 0 });
+  }, [contentNodeId]);
+
+  useEffect(() => {
+    matchIndexRef.current = matchIndex;
+  }, [matchIndex]);
 
   useEffect(() => {
     const stopDrag = () => {
@@ -304,7 +371,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
 
   const expandAncestors = (node: LawTreeStateNode) => {
     const ancestorIds = new Set<string>();
-    let current = node.parentId ? nodeMap.get(node.parentId) : null;
+    let current: LawTreeStateNode | null = node;
     while (current) {
       ancestorIds.add(current.id);
       current = current.parentId ? nodeMap.get(current.parentId) : null;
@@ -322,7 +389,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
 
   const selectNode = (node: LawTreeStateNode, loadContent = true) => {
     setActiveNodeId(node.id);
-    if (hasChildren(node) && !loadContent) return;
+    if (loadContent) setContentNodeId(node.id);
   };
 
   const toggleNode = (node: LawTreeStateNode) => {
@@ -334,25 +401,32 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
     setKeyword(query);
     if (!query) {
       setMatches([]);
+      matchIndexRef.current = 0;
       setMatchIndex(0);
       return;
     }
 
     const nextMatches: SearchMatch[] = [];
+    const seenIds = new Set<string>();
     const terms = query.split(/\s+/).filter(Boolean);
     const matchedAncestorIds = new Set<string>();
 
-    nodeMap.forEach((node) => {
-      const compactTitle = node.title.replace(/\s*/g, "");
-      if (terms.some((term) => compactTitle.includes(term))) {
-        nextMatches.push({ id: node.id });
-        let current = node.parentId ? nodeMap.get(node.parentId) : null;
-        while (current) {
-          matchedAncestorIds.add(current.id);
-          current = current.parentId ? nodeMap.get(current.parentId) : null;
+    const searchNodes = (nodes: LawTreeStateNode[]) => {
+      nodes.forEach((node) => {
+        const compactTitle = node.title.replace(/\s*/g, "");
+        if (terms.some((term) => compactTitle.includes(term)) && !seenIds.has(node.id)) {
+          seenIds.add(node.id);
+          nextMatches.push({ id: node.id });
+          let current = node.parentId ? nodeMap.get(node.parentId) : null;
+          while (current) {
+            matchedAncestorIds.add(current.id);
+            current = current.parentId ? nodeMap.get(current.parentId) : null;
+          }
         }
-      }
-    });
+        if (node.children?.length) searchNodes(node.children);
+      });
+    };
+    searchNodes(tree);
 
     const walk = (nodes: LawTreeStateNode[]): LawTreeStateNode[] =>
       nodes.map((node) => ({
@@ -362,28 +436,44 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
       }));
     setTree((current) => walk(current));
     setMatches(nextMatches);
+    matchIndexRef.current = 0;
     setMatchIndex(0);
     if (nextMatches[0]) {
       const first = nodeMap.get(nextMatches[0].id);
       if (first) {
         expandAncestors(first);
         setActiveNodeId(first.id);
+        setContentNodeId(first.id);
+        requestAnimationFrame(() => {
+          treeRef.current?.querySelector(`[data-law-node-id="${CSS.escape(first.id)}"]`)?.scrollIntoView({ block: "nearest" });
+        });
       }
     }
   };
 
   const jumpMatch = (step: number) => {
     if (matches.length === 0) return;
-    const nextIndex = step < 0 ? (matchIndex - 1 + matches.length) % matches.length : (matchIndex + 1) % matches.length;
+    const currentIndex = matchIndexRef.current;
+    const nextIndex = step < 0 ? (currentIndex - 1 + matches.length) % matches.length : (currentIndex + 1) % matches.length;
+    matchIndexRef.current = nextIndex;
     setMatchIndex(nextIndex);
     const match = matches[nextIndex];
     const node = nodeMap.get(match.id);
     if (!node) return;
     expandAncestors(node);
     setActiveNodeId(node.id);
+    setContentNodeId(node.id);
     requestAnimationFrame(() => {
       treeRef.current?.querySelector(`[data-law-node-id="${CSS.escape(node.id)}"]`)?.scrollIntoView({ block: "nearest" });
     });
+  };
+
+  const toggleFullscreen = () => {
+    if (fullscreenBridge) {
+      fullscreenBridge.toggleFullscreen();
+      return;
+    }
+    setInternalFullscreen((current) => !current);
   };
 
   const startDrag = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -406,21 +496,28 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
     <div className="debao-law-page">
       <style>{lawStyles}</style>
       <div className={`debao-law-outer${embedded ? " embedded" : ""}`}>
-        <div className="debao-law-box">
+        <div className={`debao-law-box${isFullscreen ? " fullscreen" : ""}`}>
           <div className="debao-law-top">
             <div className="debao-law-title" title="法律法规汇编">
               法律法规汇编
             </div>
-            {!embedded ? (
-              <button type="button" className="debao-law-close" onClick={handleExit}>
-                返回主页
-              </button>
-            ) : null}
+            <div className="debao-law-top-actions">
+              {canToggleFullscreen ? (
+                <button type="button" className="debao-law-fullscreen" aria-label={isFullscreen ? "还原" : "放大"} onClick={toggleFullscreen}>
+                  <img src={isFullscreen ? RESTORE_ICON_URL : MAX_ICON_URL} alt="" />
+                </button>
+              ) : null}
+              {!embedded ? (
+                <button type="button" className="debao-law-close" onClick={handleExit}>
+                  返回主页
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="debao-law-body">
             {!leftCollapsed ? (
               <>
-                <div className="debao-law-left" style={{ width: embedded ? Math.min(leftWidth, 390) : leftWidth }}>
+                <div className="debao-law-left" style={{ width: embedded ? Math.min(leftWidth, 320) : leftWidth }}>
                   <div className="debao-law-nav">
                     <div>章节导航</div>
                     <button type="button" className="debao-law-nav-button" aria-label="收起导航" onClick={() => setLeftCollapsed(true)}>
@@ -484,7 +581,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose }: Debao
               </div>
             )}
 
-            <div className="debao-law-right">
+            <div className="debao-law-right" ref={rightRef}>
               {loadingContent ? (
                 <div className="debao-law-placeholder">加载中</div>
               ) : displayItems.length > 0 ? (

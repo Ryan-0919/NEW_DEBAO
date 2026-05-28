@@ -16,6 +16,7 @@ import { adminMockExamReviewRouter } from "./routes/admin-mock-exam-review.js";
 import { adminQuestionLibraryRouter } from "./routes/admin-question-library.js";
 import { adminQuestionBankRouter } from "./routes/admin-question-bank.js";
 import { startMockExamAiReviewQueue } from "./lib/mock-exam-ai-review-queue.js";
+import { resumePendingMediaProcessingJobs } from "./lib/media-processing.js";
 import { lawUserRouter } from "./routes/law-user.js";
 import { lawAdminRouter } from "./routes/law-admin.js";
 import { typingPracticeAdminRouter } from "./routes/typing-practice-admin.js";
@@ -126,6 +127,7 @@ const start = async () => {
     } else {
       console.warn("Mock exam AI review queue disabled by MOCK_EXAM_AI_DISABLE_QUEUE");
     }
+    await resumePendingMediaProcessingJobs();
     app.listen(config.port, () => {
       console.log(`New Debao API listening on http://localhost:${config.port}`);
     });
