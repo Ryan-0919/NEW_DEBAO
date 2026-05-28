@@ -116,12 +116,12 @@ const normalizeRubricPoints = (value = []) =>
   (Array.isArray(value) ? value : [])
     .map((item, index) => ({
       id: `${item?.id ?? `rubric_${index + 1}`}`.trim(),
-      title: `${item?.title ?? item?.label ?? ""}`.trim(),
+      title: `${item?.title ?? item?.label ?? item?.point ?? ""}`.trim(),
       description: `${item?.description ?? item?.comment ?? ""}`.trim(),
-      score: Number(item?.score ?? item?.awardedScore ?? 0) || 0,
-      maxScore: Number(item?.maxScore ?? item?.score ?? 0) || 0,
-      awardedScore: Number(item?.awardedScore ?? item?.score ?? 0) || 0,
-      hit: Boolean(item?.hit ?? item?.matched ?? false),
+      score: Number(item?.score ?? item?.awardedScore ?? item?.awarded_score ?? 0) || 0,
+      maxScore: Number(item?.maxScore ?? item?.max_score ?? item?.score ?? 0) || 0,
+      awardedScore: Number(item?.awardedScore ?? item?.awarded_score ?? (item?.achieved === true || item?.matched === true || item?.hit === true ? item?.score : 0) ?? 0) || 0,
+      hit: Boolean(item?.hit ?? item?.matched ?? item?.achieved ?? false),
       comment: `${item?.comment ?? item?.description ?? ""}`.trim(),
     }))
     .filter((item) => item.id && (item.title || item.comment || item.description));
@@ -130,11 +130,11 @@ const normalizeMissedPoints = (value = []) =>
   (Array.isArray(value) ? value : [])
     .map((item, index) => ({
       id: `${item?.id ?? `missed_${index + 1}`}`.trim(),
-      title: `${item?.title ?? item?.label ?? ""}`.trim(),
-      description: `${item?.description ?? ""}`.trim(),
-      score: Number(item?.score ?? 0) || 0,
-      comment: `${item?.comment ?? ""}`.trim(),
-      suggestion: `${item?.suggestion ?? item?.advice ?? ""}`.trim(),
+      title: typeof item === "string" ? item.trim() : `${item?.title ?? item?.label ?? ""}`.trim(),
+      description: typeof item === "string" ? "" : `${item?.description ?? ""}`.trim(),
+      score: typeof item === "string" ? 0 : Number(item?.score ?? 0) || 0,
+      comment: typeof item === "string" ? item.trim() : `${item?.comment ?? ""}`.trim(),
+      suggestion: typeof item === "string" ? "" : `${item?.suggestion ?? item?.advice ?? ""}`.trim(),
     }))
     .filter((item) => item.id && (item.title || item.comment || item.description || item.suggestion));
 
@@ -1035,6 +1035,38 @@ const normalizeAndValidateAiAnswerMarks = ({ rawAnswerMarks, answerText, answerS
   );
 };
 
+const normalizeAiAnswerMarksLoose = ({ rawAnswerMarks, answerText, answerSegments }) => {
+  if (!Array.isArray(rawAnswerMarks)) return [];
+
+  const answerSegmentMap = buildAnswerSegmentMap({ answerSegments, answerText });
+  return dedupeAnswerMarks(
+    rawAnswerMarks
+      .map((mark, index) => {
+        const status = normalizeAiAnswerMarkStatus(mark?.status ?? mark?.type) || "neutral";
+        const rawScore = Number(getAiAnswerMarkScore(mark));
+        const segmentId = getAiAnswerMarkSegmentId(mark);
+        const range = resolveAiAnswerMarkRange({
+          mark,
+          answerText,
+          highlight: mark?.highlight ?? mark?.selectedText ?? mark?.selected_text ?? mark?.text ?? "",
+          answerSegmentMap,
+        });
+        if (!range) return null;
+        return {
+          id: `${mark?.id ?? mark?.markId ?? mark?.mark_id ?? `mark_${index + 1}`}`.trim(),
+          highlight: range.highlight,
+          comment: `${mark?.comment ?? mark?.reviewComment ?? mark?.review_comment ?? mark?.remark ?? ""}`.trim(),
+          status,
+          score: (status === "score" || status === "correct") && Number.isFinite(rawScore) ? rawScore : undefined,
+          start: range.start,
+          end: range.end,
+          segmentId: range.segmentId ?? segmentId ?? undefined,
+        };
+      })
+      .filter(Boolean),
+  );
+};
+
 const normalizeAiRubricPointsWithFallback = ({ rawRubricPoints, fallbackRubricPoints }) => {
   const fallbackPoints = normalizeRubricPoints(fallbackRubricPoints);
   const returnedPoints = normalizeRubricPoints(rawRubricPoints);
@@ -1114,6 +1146,7 @@ const syncPositiveAnswerMarkScoresWithRubricPoints = ({ answerMarks, rubricPoint
 
 const normalizeReturnedAiSubQuestion = ({ item, fallback, index, runtimeConfig }) => {
   const maxScore = Number(fallback.maxScore ?? 0) || 0;
+  const strictValidation = runtimeConfig?.strictAnswerMarkValidation !== false;
   const returnedRubricPoints = Array.isArray(item?.rubricPoints) ? item.rubricPoints : Array.isArray(item?.rubric_points) ? item.rubric_points : null;
   const rawRubricPoints = returnedRubricPoints ?? [];
   const rawMissedPoints = Array.isArray(item?.missedPoints) ? item.missedPoints : Array.isArray(item?.missed_points) ? item.missed_points : [];
@@ -1123,17 +1156,23 @@ const normalizeReturnedAiSubQuestion = ({ item, fallback, index, runtimeConfig }
     throw createHttpError(`批改返回的小问分数不合法：${fallback.title || fallback.id || "unknown"}`, 502);
   }
   const score = clampScore(rawScore, 0, maxScore);
-  const answerMarks = normalizeAndValidateAiAnswerMarks({
-    rawAnswerMarks,
-    answerText: fallback.answer,
-    answerSegments: fallback.answerSegments,
-    title: fallback.title || fallback.id,
-  });
+  const answerMarks = strictValidation
+    ? normalizeAndValidateAiAnswerMarks({
+        rawAnswerMarks,
+        answerText: fallback.answer,
+        answerSegments: fallback.answerSegments,
+        title: fallback.title || fallback.id,
+      })
+    : normalizeAiAnswerMarksLoose({
+        rawAnswerMarks,
+        answerText: fallback.answer,
+        answerSegments: fallback.answerSegments,
+      });
   const fallbackRubricPointCount = normalizeRubricPoints(fallback.rubricPoints).length;
-  if (fallbackRubricPointCount > 0 && (!Array.isArray(returnedRubricPoints) || returnedRubricPoints.length === 0)) {
+  if (strictValidation && fallbackRubricPointCount > 0 && (!Array.isArray(returnedRubricPoints) || returnedRubricPoints.length === 0)) {
     throw createHttpError(`AI批改返回缺少采分点 rubricPoints：${fallback.title || fallback.id || "unknown"}`, 502);
   }
-  if (fallbackRubricPointCount > 0 && returnedRubricPoints.length < fallbackRubricPointCount) {
+  if (strictValidation && fallbackRubricPointCount > 0 && returnedRubricPoints.length < fallbackRubricPointCount) {
     throw createHttpError(
       `AI批改返回的采分点数量不足：${fallback.title || fallback.id || "unknown"}，应返回 ${fallbackRubricPointCount} 个，实际返回 ${returnedRubricPoints.length} 个`,
       502,
@@ -1141,11 +1180,13 @@ const normalizeReturnedAiSubQuestion = ({ item, fallback, index, runtimeConfig }
   }
   const rubricPoints = normalizeAiRubricPointsWithFallback({ rawRubricPoints, fallbackRubricPoints: fallback.rubricPoints });
   const missedPoints = normalizeMissedPoints(rawMissedPoints);
-  assertAiMissedPointsReturned({
-    rubricPoints,
-    missedPoints,
-    title: fallback.title || fallback.id,
-  });
+  if (strictValidation) {
+    assertAiMissedPointsReturned({
+      rubricPoints,
+      missedPoints,
+      title: fallback.title || fallback.id,
+    });
+  }
   const rubricAwardedScore = sumRubricAwardedScores(rubricPoints);
   const normalizedScore = clampScore(rubricPoints.length > 0 ? rubricAwardedScore : score, 0, maxScore);
   const syncedAnswerMarks = syncPositiveAnswerMarkScoresWithRubricPoints({

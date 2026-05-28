@@ -5,6 +5,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { Switch } from "../../components/ui/switch";
 import { Textarea } from "../../components/ui/textarea";
 import { AdminMockExamAiReviewConfig, adminOperationsService } from "../../services/adminOperationsService";
 
@@ -211,6 +212,15 @@ export function MockExamAiReviewConfigManagement() {
               <Field label="Temperature">
                 <Input className={inputClass} type="number" min={0} max={2} step={0.1} value={config.temperature} onChange={(event) => patchConfig({ temperature: Math.min(2, Math.max(0, numberValue(event.target.value, 0.2))) })} />
               </Field>
+              <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <Label>严格校验</Label>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">关闭后只保留 JSON 和分数基础校验，放宽划线、采分点和遗漏点结构校验。</p>
+                  </div>
+                  <Switch checked={config.strictAnswerMarkValidation} onCheckedChange={(checked) => patchConfig({ strictAnswerMarkValidation: checked })} />
+                </div>
+              </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-500">
                 AI 队列并发、失败重试和轮询间隔沿用旧得宝后台的内部规则，不再作为日常配置项展示。
               </div>
