@@ -163,6 +163,16 @@ export const DEFAULT_PORTAL_CONFIG = {
         sortOrder: 0,
       },
     ],
+    joinGroup: {
+      title: "进群",
+      statusText: "可加入",
+      description: "扫码加入26法考资料分享群，获取备考资料、考点汇总和学习交流。",
+      buttonText: "扫码进群",
+      modalTitle: "扫码加入26法考资料分享群",
+      modalHint: "长按或截图后使用微信扫码加入",
+      qrImageUrl: "",
+      qrImageObjectKey: "",
+    },
     announcement: {
       title: "学习公告",
       subtitle: "Announcement",
@@ -464,6 +474,10 @@ export const normalizePortalConfig = (value, options = {}) => {
     memberHomeSource.operations && typeof memberHomeSource.operations === "object"
       ? memberHomeSource.operations
       : {};
+  const memberHomeJoinGroupSource =
+    memberHomeSource.joinGroup && typeof memberHomeSource.joinGroup === "object"
+      ? memberHomeSource.joinGroup
+      : {};
   const legacyMemberBannerItems = [
     {
       badge: toTrimmedString(memberHomeHeroSource.badge, fallback.memberHome.hero.badge),
@@ -546,6 +560,16 @@ export const normalizePortalConfig = (value, options = {}) => {
       Array.isArray(memberHomeSource.banners) ? memberHomeSource.banners : legacyMemberBannerItems,
       fallback.memberHome.banners,
     ),
+    joinGroup: {
+      title: toTrimmedString(memberHomeJoinGroupSource.title, fallback.memberHome.joinGroup.title),
+      statusText: toTrimmedString(memberHomeJoinGroupSource.statusText, fallback.memberHome.joinGroup.statusText),
+      description: toTrimmedString(memberHomeJoinGroupSource.description, fallback.memberHome.joinGroup.description),
+      buttonText: toTrimmedString(memberHomeJoinGroupSource.buttonText, fallback.memberHome.joinGroup.buttonText),
+      modalTitle: toTrimmedString(memberHomeJoinGroupSource.modalTitle, fallback.memberHome.joinGroup.modalTitle),
+      modalHint: toTrimmedString(memberHomeJoinGroupSource.modalHint, fallback.memberHome.joinGroup.modalHint),
+      qrImageUrl: toOptionalTrimmedString(memberHomeJoinGroupSource.qrImageUrl, fallback.memberHome.joinGroup.qrImageUrl),
+      qrImageObjectKey: toOptionalTrimmedString(memberHomeJoinGroupSource.qrImageObjectKey, fallback.memberHome.joinGroup.qrImageObjectKey),
+    },
     announcement: {
       title: toTrimmedString(memberHomeAnnouncementSource.title, fallback.memberHome.announcement.title),
       subtitle: toTrimmedString(memberHomeAnnouncementSource.subtitle, fallback.memberHome.announcement.subtitle),

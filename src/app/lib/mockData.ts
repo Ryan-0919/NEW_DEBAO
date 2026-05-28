@@ -66,6 +66,16 @@ export interface PortalMemberHomeConfig {
     isVisible?: boolean;
     sortOrder?: number;
   }>;
+  joinGroup: {
+    title: string;
+    statusText: string;
+    description: string;
+    buttonText: string;
+    modalTitle: string;
+    modalHint: string;
+    qrImageUrl: string;
+    qrImageObjectKey: string;
+  };
   announcement: {
     title: string;
     subtitle: string;

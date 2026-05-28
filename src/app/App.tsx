@@ -9,7 +9,7 @@ import {
   ChevronDown, PlayCircle, Volume2, Maximize2, SkipForward,
   SkipBack, AlignLeft, Paperclip, ListVideo,
   Bookmark, Flag, RotateCcw, CheckCheck, X, Shuffle, Trash2,
-  ListFilter, Circle, Menu, House, UserRound, Moon, Sun,
+  ListFilter, Circle, Menu, House, UserRound, Moon, Sun, QrCode,
 } from "lucide-react";
 import { ApiRequestError, USER_SESSION_EXPIRED_EVENT } from "./services/apiClient";
 import { courseService } from "./services/courseService";
@@ -163,6 +163,16 @@ const EMPTY_USER_HOME_CONFIG: UserHomeConfig = {
     },
     bannerImageUrl: "",
     bannerImageObjectKey: "",
+    joinGroup: {
+      title: "进群",
+      statusText: "可加入",
+      description: "扫码加入26法考资料分享群，获取备考资料、考点汇总和学习交流。",
+      buttonText: "扫码进群",
+      modalTitle: "扫码加入26法考资料分享群",
+      modalHint: "长按或截图后使用微信扫码加入",
+      qrImageUrl: "",
+      qrImageObjectKey: "",
+    },
     announcement: {
       title: "学习公告",
       subtitle: "Announcement",
@@ -1255,6 +1265,8 @@ function HomePage({
   loadingStudySummary: boolean;
 }) {
   const [bannerIdx, setBannerIdx] = useState(0);
+  const [joinGroupOpen, setJoinGroupOpen] = useState(false);
+  const [joinGroupQrLoadFailed, setJoinGroupQrLoadFailed] = useState(false);
   const activeCourses = courses;
   const activeHomeCourses = activeCourses.slice(0, 3).map(mapHomeCourse);
   const memberBanners = (homeConfig.memberHome.banners || [])
@@ -1278,6 +1290,8 @@ function HomePage({
   const activeBannerIndex = Math.min(bannerIdx, Math.max(visibleMemberBanners.length - 1, 0));
   const memberHero = visibleMemberBanners[activeBannerIndex] || visibleMemberBanners[0];
   const memberBannerImageUrl = memberHero?.imageUrl || "/portal/home-hero-banner.png";
+  const joinGroupConfig = homeConfig.memberHome.joinGroup;
+  const joinGroupQrImageUrl = joinGroupConfig?.qrImageUrl?.trim() || "";
   const homeStats = [
     { label: "累计练题", value: formatCount(studySummary.stats.totalPracticeCount), unit: "题", icon: Target, color: "#4e8ef7" },
     { label: "答题正确率", value: studySummary.stats.accuracyRate === null ? "-" : `${studySummary.stats.accuracyRate}`, unit: studySummary.stats.accuracyRate === null ? "" : "%", icon: TrendingUp, color: "#1dc9a4" },
@@ -1287,7 +1301,6 @@ function HomePage({
   const diagnosisText = studySummary.stats.totalPracticeCount > 0
     ? `已完成 ${formatCount(studySummary.stats.totalPracticeCount)} 题，错题 ${formatCount(studySummary.stats.wrongCount)} 道，收藏 ${formatCount(studySummary.stats.bookmarkedCount)} 道。`
     : "完成练习后，这里会根据练习记录提示错题和收藏复习重点。";
-  const customerServiceUrl = homeConfig.customerServiceUrl?.trim() || "";
   const goQuestionBank = () => { setPage("questionBankHome"); setActiveNav(2); };
   const goSubjective = () => { setPage("subjectiveGrading"); setActiveNav(2); };
   const openBannerTarget = (target = "") => {
@@ -1300,12 +1313,9 @@ function HomePage({
     window.history.pushState({ page: pathToPage(nextPath) }, "", nextPath);
     setPage(pathToPage(nextPath));
   };
-  const openCustomerService = () => {
-    if (!customerServiceUrl) {
-      notify("课程咨询入口暂未开放，请稍后再试", "warning");
-      return;
-    }
-    window.open(customerServiceUrl, "_blank", "noopener,noreferrer");
+  const openJoinGroup = () => {
+    setJoinGroupQrLoadFailed(false);
+    setJoinGroupOpen(true);
   };
   const openModule = (title: string, page?: string) => {
     if (page === "courses") { setPage("courses"); setActiveNav(1); return; }
@@ -1487,21 +1497,56 @@ function HomePage({
           <div style={{ background: "#0f1826", borderRadius: 17, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden" }}>
             <div style={{ padding: "18px 20px 16px", background: "linear-gradient(135deg,rgba(29,201,164,0.1),rgba(29,201,164,0.04))", borderBottom: "1px solid rgba(29,201,164,0.1)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <MessageCircle size={15} color="#1dc9a4" />
-                <span style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0", fontFamily: "'Noto Serif SC',serif" }}>课程咨询</span>
+                <QrCode size={15} color="#1dc9a4" />
+                <span style={{ fontSize: 14, fontWeight: 600, color: "#dde4f0", fontFamily: "'Noto Serif SC',serif" }}>{joinGroupConfig?.title || "进群"}</span>
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: customerServiceUrl ? "#1dc9a4" : "#5a7898", boxShadow: customerServiceUrl ? "0 0 6px #1dc9a4" : "none" }} />
-                  <span style={{ fontSize: 10, color: customerServiceUrl ? "#1dc9a4" : "#5a7898", fontWeight: 600 }}>{customerServiceUrl ? "可咨询" : "暂不可用"}</span>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#1dc9a4", boxShadow: "0 0 6px #1dc9a4" }} />
+                  <span style={{ fontSize: 10, color: "#1dc9a4", fontWeight: 600 }}>{joinGroupConfig?.statusText || "可加入"}</span>
                 </div>
               </div>
-              <p style={{ fontSize: 12, color: "#3d5e78", lineHeight: 1.75 }}>想了解课程安排、班型服务或学习规划，可以联系得恩法考老师进行咨询。</p>
+              <p style={{ fontSize: 12, color: "#3d5e78", lineHeight: 1.75 }}>{joinGroupConfig?.description || "扫码加入26法考资料分享群，获取备考资料、考点汇总和学习交流。"}</p>
             </div>
             <div style={{ padding: "14px 20px" }}>
-              <button onClick={openCustomerService} style={{ width: "100%", padding: "10px", borderRadius: 11, background: customerServiceUrl ? "rgba(29,201,164,0.1)" : "rgba(143,163,190,0.08)", border: customerServiceUrl ? "1px solid rgba(29,201,164,0.2)" : "1px solid rgba(143,163,190,0.16)", color: customerServiceUrl ? "#1dc9a4" : "#8fa3be", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{customerServiceUrl ? "联系课程顾问" : "咨询入口暂未开放"}</button>
+              <button onClick={openJoinGroup} style={{ width: "100%", padding: "10px", borderRadius: 11, background: "rgba(29,201,164,0.1)", border: "1px solid rgba(29,201,164,0.2)", color: "#1dc9a4", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{joinGroupConfig?.buttonText || "扫码进群"}</button>
             </div>
           </div>
         </div>
       </div>
+      {joinGroupOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={joinGroupConfig?.buttonText || "扫码进群"}
+          onClick={() => setJoinGroupOpen(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 1200, background: "rgba(3,7,18,0.72)", backdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 24 }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{ width: "min(94vw, 520px)", borderRadius: 20, background: "#0f1826", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden", boxShadow: "0 28px 90px rgba(0,0,0,0.45)" }}
+          >
+            <div style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+              <QrCode size={17} color="#1dc9a4" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, color: "#dde4f0", fontWeight: 800 }}>{joinGroupConfig?.modalTitle || "扫码加入26法考资料分享群"}</div>
+                <div style={{ fontSize: 11, color: "#5a7898", marginTop: 3 }}>{joinGroupConfig?.modalHint || "长按或截图后使用微信扫码加入"}</div>
+              </div>
+              <button type="button" onClick={() => setJoinGroupOpen(false)} aria-label="关闭" style={{ width: 32, height: 32, borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#8fa3be", display: "grid", placeItems: "center", cursor: "pointer" }}>
+                <X size={16} />
+              </button>
+            </div>
+            <div style={{ padding: 18, background: "linear-gradient(180deg,rgba(78,142,247,0.08),rgba(29,201,164,0.05))" }}>
+              {!joinGroupQrImageUrl || joinGroupQrLoadFailed ? (
+                <div style={{ minHeight: 260, borderRadius: 14, background: "rgba(255,255,255,0.06)", border: "1px dashed rgba(255,255,255,0.18)", display: "grid", placeItems: "center", textAlign: "center", padding: 24, color: "#8fa3be", fontSize: 13, lineHeight: 1.8 }}>
+                  二维码图片暂未配置<br />
+                  请到后台系统配置上传进群二维码
+                </div>
+              ) : (
+                <img src={joinGroupQrImageUrl} alt={joinGroupConfig?.modalTitle || "进群二维码"} onError={() => setJoinGroupQrLoadFailed(true)} style={{ width: "100%", display: "block", borderRadius: 14, background: "#fff" }} />
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

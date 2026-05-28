@@ -153,6 +153,14 @@ const resolveMemberHomeBannerUrls = (portalConfig) => {
       fallbackUrl: item.imageUrl ?? "",
     }),
   }));
+
+  portalConfig.memberHome.joinGroup = {
+    ...(portalConfig.memberHome.joinGroup ?? {}),
+    qrImageUrl: getReadableObjectUrl({
+      objectKey: portalConfig.memberHome.joinGroup?.qrImageObjectKey ?? "",
+      fallbackUrl: portalConfig.memberHome.joinGroup?.qrImageUrl ?? "",
+    }),
+  };
 };
 
 const serializeSystemConfig = (config) => {

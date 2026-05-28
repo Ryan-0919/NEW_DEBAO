@@ -280,6 +280,50 @@ export function SystemConfigManagement() {
             </Button>
           </section>
           <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 lg:grid-cols-2">
+            <div className="lg:col-span-2">
+              <h3 className="text-base font-semibold text-slate-950">首页进群卡片</h3>
+              <p className="mt-1 text-sm text-slate-500">控制学员首页右侧的进群入口，二维码上传并保存后会在前台弹窗展示。</p>
+            </div>
+            <TextField label="进群卡片标题" value={field(["memberHome", "joinGroup", "title"], "进群")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "title"], value)} />
+            <TextField label="进群状态文案" value={field(["memberHome", "joinGroup", "statusText"], "可加入")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "statusText"], value)} />
+            <TextField label="进群按钮文案" value={field(["memberHome", "joinGroup", "buttonText"], "扫码进群")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "buttonText"], value)} />
+            <TextField label="进群弹窗标题" value={field(["memberHome", "joinGroup", "modalTitle"], "扫码加入26法考资料分享群")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "modalTitle"], value)} />
+            <div className="lg:col-span-2">
+              <TextField label="进群说明" textarea rows={3} value={field(["memberHome", "joinGroup", "description"], "扫码加入26法考资料分享群，获取备考资料、考点汇总和学习交流。")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "description"], value)} />
+            </div>
+            <div className="lg:col-span-2">
+              <TextField label="进群弹窗提示" value={field(["memberHome", "joinGroup", "modalHint"], "长按或截图后使用微信扫码加入")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "modalHint"], value)} />
+            </div>
+            <div className="lg:col-span-2">
+              <ImageField
+                label="进群二维码"
+                url={field(["memberHome", "joinGroup", "qrImageUrl"])}
+                uploading={uploadingKey === "joinGroupQr"}
+                onUpload={(file) =>
+                  void uploadImage("joinGroupQr", file, (url, objectKey) => {
+                    setPortalConfig((current) =>
+                      setPathValue(
+                        setPathValue(current, ["memberHome", "joinGroup", "qrImageUrl"], url),
+                        ["memberHome", "joinGroup", "qrImageObjectKey"],
+                        objectKey,
+                      ),
+                    );
+                  })
+                }
+                onClear={() => {
+                  setPortalConfig((current) =>
+                    setPathValue(
+                      setPathValue(current, ["memberHome", "joinGroup", "qrImageUrl"], ""),
+                      ["memberHome", "joinGroup", "qrImageObjectKey"],
+                      "",
+                    ),
+                  );
+                }}
+              />
+            </div>
+          </section>
+
+          <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 lg:grid-cols-2">
             <TextField label="考试页眉标题" value={field(["examHome", "title"])} onChange={(value) => updatePortalPath(["examHome", "title"], value)} />
             <TextField label="客观题入口文案" value={field(["examHome", "objectiveModeLabel"])} onChange={(value) => updatePortalPath(["examHome", "objectiveModeLabel"], value)} />
             <TextField label="主观题入口文案" value={field(["examHome", "subjectiveModeLabel"])} onChange={(value) => updatePortalPath(["examHome", "subjectiveModeLabel"], value)} />
