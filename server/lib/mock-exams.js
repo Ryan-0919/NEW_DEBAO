@@ -893,15 +893,20 @@ const extractJsonPayload = (text) => {
   return parseJsonSafely(firstBrace >= 0 && lastBrace >= firstBrace ? candidate.slice(firstBrace, lastBrace + 1) : candidate, null);
 };
 
+const extractJsonCandidateText = (text) => {
+  const normalized = `${text ?? ""}`.trim();
+  if (!normalized) return "";
+  const fenced = normalized.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1]?.trim() || normalized;
+  const firstBrace = candidate.indexOf("{");
+  const lastBrace = candidate.lastIndexOf("}");
+  return firstBrace >= 0 && lastBrace >= firstBrace ? candidate.slice(firstBrace, lastBrace + 1) : candidate;
+};
+
 const getAiReviewPayloadErrorReason = (texts = []) => {
   for (const text of texts) {
-    const normalized = `${text ?? ""}`.trim();
-    if (!normalized) continue;
-    const fenced = normalized.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const candidate = fenced?.[1]?.trim() || normalized;
-    const firstBrace = candidate.indexOf("{");
-    const lastBrace = candidate.lastIndexOf("}");
-    const jsonText = firstBrace >= 0 && lastBrace >= firstBrace ? candidate.slice(firstBrace, lastBrace + 1) : candidate;
+    const jsonText = extractJsonCandidateText(text);
+    if (!jsonText) continue;
     try {
       const parsed = JSON.parse(jsonText);
       if (!Array.isArray(parsed?.subQuestions ?? parsed?.sub_questions)) {
@@ -912,6 +917,65 @@ const getAiReviewPayloadErrorReason = (texts = []) => {
     }
   }
   return "AI 没有返回可解析的 JSON 内容";
+};
+
+const parseAiReviewPayloadFromTexts = (texts = []) => {
+  for (const text of texts) {
+    const candidate = extractJsonPayload(text);
+    if (candidate && Array.isArray(candidate.subQuestions ?? candidate.sub_questions)) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const requestJsonRepairFromAi = async ({ runtimeConfig, endpoint, brokenText, signal }) => {
+  const candidateText = extractJsonCandidateText(brokenText);
+  if (!candidateText) return null;
+
+  const maxTokens = Math.max(0, Number(runtimeConfig.maxTokens ?? 0) || 0);
+  const requestBody = {
+    model: runtimeConfig.model,
+    temperature: 0,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: [
+          "你是 JSON 修复器。",
+          "你的任务是把用户提供的不合法 JSON 修复成合法 JSON 对象。",
+          "只能返回修复后的 JSON，不要 Markdown，不要解释，不要代码块。",
+          "不得改写字段含义，不得新增批改结论，只修复引号、逗号、转义、截断括号等格式问题。",
+          "如果字符串中需要引用原文或概念，统一改用中文引号“”。",
+        ].join("\n"),
+      },
+      {
+        role: "user",
+        content: [
+          "请修复下面这段 AI 批改 JSON，使其成为可被 JSON.parse 解析的合法 JSON，并保留 subQuestions 结构：",
+          candidateText,
+        ].join("\n\n"),
+      },
+    ],
+  };
+  if (maxTokens > 0) {
+    requestBody.max_tokens = maxTokens;
+  }
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${runtimeConfig.apiKey}`,
+    },
+    body: JSON.stringify(requestBody),
+    signal,
+  });
+  const rawText = await response.text();
+  const payload = parseJsonSafely(rawText, null);
+  if (!response.ok || !payload || typeof payload !== "object") return null;
+  const parsed = extractDirectAiReviewPayload(payload) ?? parseAiReviewPayloadFromTexts(extractCompletionTexts(payload));
+  return parsed && Array.isArray(parsed.subQuestions ?? parsed.sub_questions) ? parsed : null;
 };
 
 const normalizeAiAnswerMarkStatus = (value) => {
@@ -1398,13 +1462,15 @@ const requestOpenAiCompatibleReviewOnce = async ({ runtimeConfig, question, answ
     const completionTexts = extractCompletionTexts(payload);
     let parsed = extractDirectAiReviewPayload(payload);
     if (!parsed) {
-      for (const text of completionTexts) {
-        const candidate = extractJsonPayload(text);
-        if (candidate && Array.isArray(candidate.subQuestions ?? candidate.sub_questions)) {
-          parsed = candidate;
-          break;
-        }
-      }
+      parsed = parseAiReviewPayloadFromTexts(completionTexts);
+    }
+    if (!parsed || !Array.isArray(parsed.subQuestions ?? parsed.sub_questions)) {
+      parsed = await requestJsonRepairFromAi({
+        runtimeConfig,
+        endpoint,
+        brokenText: completionTexts[0] || rawText,
+        signal: controller.signal,
+      });
     }
     if (!parsed || !Array.isArray(parsed.subQuestions ?? parsed.sub_questions)) {
       const reason = getAiReviewPayloadErrorReason(completionTexts);
