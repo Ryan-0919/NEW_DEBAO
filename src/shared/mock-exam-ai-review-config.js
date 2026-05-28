@@ -106,6 +106,70 @@ export const DEFAULT_AI_REVIEW_GRADING_PRINCIPLES_TEMPLATE =
     "{{小问批改依据}}",
   ].join("\n");
 
+export const AI_REVIEW_OUTPUT_JSON_EXAMPLE = `{
+  "subQuestions": [
+    {
+      "id": "sub_1",
+      "score": 3,
+      "reviewComment": "本问结论基本正确，但遗漏了部分证明责任分配理由。",
+      "abilityLabel": "证明责任",
+      "referenceAnswer": "这里填写本小问参考答案。",
+      "rubricGuidance": "这里填写本小问批改说明。",
+      "answerMarks": [
+        {
+          "id": "mark_1",
+          "segmentId": "seg_1",
+          "status": "score",
+          "score": 2,
+          "comment": "命中采分点：赵某应对污染行为承担证明责任。"
+        },
+        {
+          "id": "mark_2",
+          "segmentId": "seg_2",
+          "status": "wrong",
+          "comment": "这里的证明责任分配不准确。"
+        }
+      ],
+      "rubricPoints": [
+        {
+          "id": "rubric_1",
+          "title": "污染行为证明责任",
+          "description": "指出白云制药厂排放废气的事实由赵某承担证明责任。",
+          "maxScore": 2,
+          "awardedScore": 2,
+          "hit": true,
+          "comment": "已命中。"
+        },
+        {
+          "id": "rubric_2",
+          "title": "其他养殖户未受影响",
+          "description": "指出山林周边其他养殖户禽类未受影响的事实由白云制药厂承担证明责任。",
+          "maxScore": 2,
+          "awardedScore": 0,
+          "hit": false,
+          "comment": "未体现该事实的证明责任分配。"
+        }
+      ],
+      "missedPoints": [
+        {
+          "id": "missed_1",
+          "title": "遗漏其他养殖户未受影响的证明责任",
+          "description": "答案没有说明该事实应由白云制药厂承担证明责任。",
+          "score": 2,
+          "comment": "该点是独立采分点，不能省略。",
+          "suggestion": "补充说明该事实属于抗辩或反证方向，应由白云制药厂承担证明责任。"
+        }
+      ]
+    }
+  ]
+}`;
+
+export const AI_REVIEW_OUTPUT_JSON_EXAMPLE_PROMPT =
+  [
+    "输出 JSON 示例，请严格参考字段结构；真实批改时必须替换为本题、本小问、本学生答案对应的数据：",
+    AI_REVIEW_OUTPUT_JSON_EXAMPLE,
+  ].join("\n");
+
 export const DEFAULT_AI_REVIEW_OUTPUT_REQUIREMENTS_PROMPT =
   [
     "只返回合法 JSON，不要 Markdown。",
@@ -125,6 +189,8 @@ export const DEFAULT_AI_REVIEW_OUTPUT_REQUIREMENTS_PROMPT =
     "rubricPoints 必须逐条覆盖题目数据里提供的所有采分点，不能遗漏、合并或少返回；未命中的采分点也必须返回。",
     "missedPoints 不是可选装饰字段；只要存在未命中的采分点，missedPoints 必须非空，且每条必须包含 title、description 或 comment/suggestion。",
     "如果没有遗漏点，missedPoints 必须返回空数组 []，不要省略字段。",
+    "",
+    AI_REVIEW_OUTPUT_JSON_EXAMPLE_PROMPT,
   ].join("\n");
 
 export const DEFAULT_MOCK_EXAM_AI_REVIEW_CONFIG = {

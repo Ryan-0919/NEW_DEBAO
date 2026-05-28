@@ -2,6 +2,7 @@ import { getReadableObjectUrl } from "./upload.js";
 import { formatDateTime } from "./time.js";
 import {
   AI_REVIEW_GRADING_TEMPLATE_PLACEHOLDERS,
+  AI_REVIEW_OUTPUT_JSON_EXAMPLE_PROMPT,
   AI_REVIEW_PROMPT_TEMPLATE_PLACEHOLDERS,
   getMissingMockExamAiReviewPromptTemplatePlaceholders,
 } from "../../src/shared/mock-exam-ai-review-config.js";
@@ -1211,7 +1212,8 @@ const REQUIRED_AI_REVIEW_OUTPUT_REQUIREMENTS = [
 const appendRequiredAiReviewOutputRequirements = (value = "") => {
   const base = `${value ?? ""}`.trim();
   const missingRules = REQUIRED_AI_REVIEW_OUTPUT_REQUIREMENTS.filter((rule) => !base.includes(rule));
-  return [base, ...missingRules].filter(Boolean).join("\n");
+  const shouldAppendExample = !base.includes("\"subQuestions\"") || !base.includes("\"missedPoints\"");
+  return [base, ...missingRules, shouldAppendExample ? AI_REVIEW_OUTPUT_JSON_EXAMPLE_PROMPT : ""].filter(Boolean).join("\n");
 };
 
 const buildAiReviewPrompt = ({ question, answer, runtimeConfig }) => {
