@@ -1203,6 +1203,8 @@ const buildAnswerReferenceSegments = (answerText) => {
 };
 
 const REQUIRED_AI_REVIEW_OUTPUT_REQUIREMENTS = [
+  "硬性校验：所有字符串内容中禁止直接使用未转义的英文双引号 \"；引用学生原文、法律概念或关键词时必须使用中文引号“”或将英文双引号转义为 \\\"。",
+  "硬性校验：rubricPoints 中采分点编号字段必须使用 id，不要使用 pointId、point_id、rubricId 或其他编号字段。",
   "硬性校验：rubricPoints 中每个未命中的采分点必须设置 hit:false、awardedScore:0，并且必须在 missedPoints 中生成一条对应遗漏点。",
   "硬性校验：rubricPoints 必须逐条覆盖题目数据里提供的所有采分点，不能遗漏、合并或少返回；未命中的采分点也必须返回。",
   "硬性校验：missedPoints 不是可选字段；只要存在未命中的采分点，missedPoints 必须非空，且每条必须包含 title、description 或 comment/suggestion。",
