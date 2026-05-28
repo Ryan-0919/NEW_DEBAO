@@ -907,9 +907,10 @@ function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary }: {
   const studyStreak = getStudyStreak(studySummary.heatmapDays);
 
   return (
-    <header style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(7,12,24,0.96)", backdropFilter: "blur(24px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-      <div style={{ maxWidth: 1340, margin: "0 auto", padding: "0 36px", height: 58, display: "flex", alignItems: "center", gap: 40 }}>
+    <header className="debao-nav-shell" style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(7,12,24,0.96)", backdropFilter: "blur(24px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <div className="debao-nav-inner" style={{ maxWidth: 1340, margin: "0 auto", padding: "0 36px", height: 58, display: "flex", alignItems: "center", gap: 40 }}>
         <div
+          className="debao-nav-brand"
           style={{ display: "flex", alignItems: "center", gap: 11, flexShrink: 0, cursor: "pointer" }}
           onClick={() => { setActiveNav(0); setPage("home"); }}
         >
@@ -919,12 +920,12 @@ function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary }: {
             <div style={{ fontSize: 10, color: "#4a6a88", letterSpacing: "0.1em" }}>得恩法考 · LAW EXAM</div>
           </div>
         </div>
-        <nav style={{ display: "flex", gap: 2 }}>
+        <nav className="debao-nav-tabs" style={{ display: "flex", gap: 2 }}>
           {navItems.map((item, i) => (
             <button key={item} onClick={() => { setActiveNav(i); setPage(i === 1 ? "courses" : i === 2 ? "questionBankHome" : i === 3 ? "myProfile" : "home"); }} style={{ padding: "7px 18px", borderRadius: 9, fontSize: 13, border: "none", cursor: "pointer", background: activeNav === i ? "rgba(201,151,62,0.1)" : "transparent", color: activeNav === i ? "#c9973e" : "#5a7898", fontWeight: activeNav === i ? 600 : 400, transition: "all 0.15s" }}>{item}</button>
           ))}
         </nav>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
+        <div className="debao-nav-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 13px", borderRadius: 20, background: "rgba(247,110,110,0.08)", border: "1px solid rgba(247,110,110,0.18)" }}>
             <Flame size={13} color="#f76e6e" />
             <span style={{ fontSize: 12, color: "#f76e6e", fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{studyStreak}天连续</span>
@@ -1195,19 +1196,19 @@ function HomePage({
   }, [visibleMemberBanners.length]);
 
   return (
-    <div style={{ maxWidth: 1340, margin: "0 auto", padding: "28px 36px 0" }}>
+    <div className="debao-page debao-home-page" style={{ maxWidth: 1340, margin: "0 auto", padding: "28px 36px 0" }}>
       {/* Banner + Announcements */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 308px", gap: 18, alignItems: "stretch" }}>
-        <div style={{ position: "relative", borderRadius: 20, overflow: "hidden", minHeight: 330, background: "#101828" }}>
+      <div className="debao-home-hero-grid" style={{ display: "grid", gridTemplateColumns: "1fr 308px", gap: 18, alignItems: "stretch" }}>
+        <div className="debao-home-hero" style={{ position: "relative", borderRadius: 20, overflow: "hidden", minHeight: 330, background: "#101828" }}>
           <img key={memberBannerImageUrl} src={memberBannerImageUrl} alt={memberHero.title || "得宝学习首页"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(105deg,rgba(4,8,20,0.95) 0%,rgba(4,8,20,0.8) 45%,rgba(4,8,20,0.15) 100%)" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(4,8,20,0.7) 0%, transparent 40%)" }} />
-          <div style={{ position: "relative", zIndex: 2, padding: "38px 44px", height: "100%", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div className="debao-home-hero-content" style={{ position: "relative", zIndex: 2, padding: "38px 44px", height: "100%", display: "flex", flexDirection: "column", justifyContent: "center" }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 13px", borderRadius: 20, background: "rgba(201,151,62,0.18)", border: "1px solid rgba(201,151,62,0.4)", marginBottom: 20, width: "fit-content" }}>
               <Scale size={11} color="#c9973e" />
               <span style={{ fontSize: 11, color: "#e8c46a", fontWeight: 700, letterSpacing: "0.08em" }}>{memberHero?.badge || "法考学习"}</span>
             </div>
-            <h2 style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 36, fontWeight: 700, color: "#f8f0e0", lineHeight: 1.25, marginBottom: 14, whiteSpace: "pre-line", textShadow: "0 2px 20px rgba(0,0,0,0.5)" }}>{memberHero?.title || "欢迎使用得宝"}</h2>
+            <h2 className="debao-home-hero-title" style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 36, fontWeight: 700, color: "#f8f0e0", lineHeight: 1.25, marginBottom: 14, whiteSpace: "pre-line", textShadow: "0 2px 20px rgba(0,0,0,0.5)" }}>{memberHero?.title || "欢迎使用得宝"}</h2>
             <p style={{ fontSize: 13, color: "rgba(200,220,248,0.6)", marginBottom: 30, letterSpacing: "0.03em" }}>{memberHero?.description || "课程学习、机考训练、法条检索和打字练习统一收口。"}</p>
             {memberHero?.primaryButtonText || memberHero?.secondaryButtonText ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -1235,7 +1236,7 @@ function HomePage({
         </div>
 
         {/* Announcements */}
-        <div style={{ background: "#0f1826", borderRadius: 20, border: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="debao-home-announcements" style={{ background: "#0f1826", borderRadius: 20, border: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 3, height: 14, borderRadius: 2, background: "linear-gradient(to bottom,#c9973e,#e8c46a)" }} />
@@ -1272,7 +1273,7 @@ function HomePage({
           <div style={{ width: 3, height: 14, borderRadius: 2, background: "linear-gradient(to bottom,#c9973e,#e8c46a)" }} />
           <span style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 14, fontWeight: 600, color: "#8fa3be" }}>快速入口</span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 13 }}>
+        <div className="debao-module-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 13 }}>
           {modules.map(m => {
             const Icon = m.icon;
             return (
@@ -1294,7 +1295,7 @@ function HomePage({
       </div>
 
       {/* Main content */}
-      <div style={{ marginTop: 28, paddingBottom: 56, display: "grid", gridTemplateColumns: "1fr 308px", gap: 22 }}>
+      <div className="debao-home-content-grid" style={{ marginTop: 28, paddingBottom: 56, display: "grid", gridTemplateColumns: "1fr 308px", gap: 22 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -7915,14 +7916,14 @@ function DebaoAppShell() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#090e1a", fontFamily: "'Noto Sans SC',sans-serif", color: "#dde4f0" }}>
+    <div className="debao-app-shell" style={{ minHeight: "100vh", background: "#090e1a", fontFamily: "'Noto Sans SC',sans-serif", color: "#dde4f0" }}>
       <Toast toast={toast} />
       {checkingAuth ? (
         <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#5a7898", fontSize: 14 }}>正在校验得宝登录态...</div>
       ) : !currentUser ? (
         <AuthPage onAuthenticated={handleAuthenticated} notify={notify} />
       ) : (
-      <>
+      <div className="debao-app-content">
       {page !== "mockExamRoom" && page !== "typingPractice" && !(page === "questionBank" && selectedQuestionChapter?.layout === "officialSubjective") && <Nav activeNav={activeNav} setActiveNav={setActiveNav} setPage={setPage} currentUser={currentUser} studySummary={studySummary} />}
       {myExamRecordRoute
         ? <DebaoMyExamRecordPage
@@ -7969,7 +7970,7 @@ function DebaoAppShell() {
         : page === "settings"
         ? <SettingsPage setPage={setPage} notify={notify} onLogout={handleLogout} currentUser={currentUser} />
         : <HomePage setPage={setPage} setActiveNav={setActiveNav} goToCourse={goToCourse} notify={notify} courses={courses} homeConfig={homeConfig} studySummary={studySummary} loadingStudySummary={loadingStudySummary} />}
-      </>
+      </div>
       )}
     </div>
   );

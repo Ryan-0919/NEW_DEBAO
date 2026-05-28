@@ -51,7 +51,7 @@ export function ReviewLayout({ children, pageTitle = "批改后台", pageDescrip
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#f3f6fb] text-slate-900">
+    <div className="review-shell flex h-screen overflow-hidden bg-[#f3f6fb] text-slate-900">
       <aside className="flex h-screen w-[240px] shrink-0 flex-col border-r border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-5 py-5">
           <AppLogo />
