@@ -378,11 +378,20 @@ export function MockExamManagement() {
   const togglePaperStatus = async (paper: AdminMockExamPaper) => {
     setActionLoadingId(`status:${paper.id}`);
     try {
-      await adminContentService.updateMockExamPaper(paper.id, {
-        ...buildPaperPayload(toPaperForm(paper)),
-        status: paper.status === "published" ? "draft" : "published",
-      });
-      toast.success(paper.status === "published" ? "试卷已下架为草稿" : "试卷已发布");
+      if (paper.status === "published") {
+        if (!window.confirm(`确认收回试卷「${paper.title}」吗？\n收回后学生端将看不到这张试卷，也不能通过考试记录入口打开；已有数据不会删除。`)) {
+          setActionLoadingId("");
+          return;
+        }
+        await adminContentService.recallMockExamPaper(paper.id);
+        toast.success("试卷已收回，学生端不可见");
+      } else {
+        await adminContentService.updateMockExamPaper(paper.id, {
+          ...buildPaperPayload(toPaperForm(paper)),
+          status: "published",
+        });
+        toast.success("试卷已发布");
+      }
       await loadData();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "更新发布状态失败");
@@ -930,7 +939,7 @@ export function MockExamManagement() {
                         disabled={actionLoadingId === `status:${paper.id}`}
                         onClick={() => void togglePaperStatus(paper)}
                       >
-                        {paper.status === "published" ? "下架" : "发布"}
+                        {paper.status === "published" ? "收回" : "发布"}
                       </Button>
                       <Button
                         variant="outline"

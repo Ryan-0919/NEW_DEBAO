@@ -88,6 +88,8 @@ const isMatchingPaperType = (paper, paperType = "") => {
   return getPaperType(paper) === filter;
 };
 
+const isPublishedMockExamPaper = (paper) => paper?.status === "published";
+
 const getPaperCoverUrl = (paper) => {
   const paperType = paper?.paperType ?? inferPaperTypeFromQuestions(paper?.questions ?? []);
   return (
@@ -1034,6 +1036,28 @@ const normalizeAiRubricPointsWithFallback = ({ rawRubricPoints, fallbackRubricPo
 const sumRubricAwardedScores = (rubricPoints) =>
   normalizeRubricPoints(rubricPoints).reduce((sum, point) => sum + Math.max(0, Number(point.awardedScore ?? 0) || 0), 0);
 
+const getMissedRubricPoints = (rubricPoints = []) =>
+  normalizeRubricPoints(rubricPoints).filter((point) => {
+    const pointScore = Math.max(0, Number(point.maxScore ?? point.score ?? 0) || 0);
+    return !point.hit && pointScore > 0;
+  });
+
+const assertAiMissedPointsReturned = ({ rubricPoints, missedPoints, title }) => {
+  const missedRubricPoints = getMissedRubricPoints(rubricPoints);
+  if (missedRubricPoints.length === 0) return;
+
+  const missedTitles = missedRubricPoints.map((point) => point.title || point.description || point.comment).filter(Boolean).slice(0, 3).join("、");
+  if (missedPoints.length === 0) {
+    throw createHttpError(`AI批改返回缺少遗漏点 missedPoints：${title || "unknown"}${missedTitles ? `，未命中采分点：${missedTitles}` : ""}`, 502);
+  }
+  if (missedPoints.length < missedRubricPoints.length) {
+    throw createHttpError(
+      `AI批改返回的遗漏点数量不足：${title || "unknown"}，未命中采分点 ${missedRubricPoints.length} 个，missedPoints 只有 ${missedPoints.length} 个`,
+      502,
+    );
+  }
+};
+
 const syncPositiveAnswerMarkScoresWithRubricPoints = ({ answerMarks, rubricPoints }) => {
   const normalizedMarks = Array.isArray(answerMarks) ? answerMarks : [];
   const positiveMarks = normalizedMarks.filter((mark) => mark.status === "score" || mark.status === "correct");
@@ -1068,7 +1092,8 @@ const syncPositiveAnswerMarkScoresWithRubricPoints = ({ answerMarks, rubricPoint
 
 const normalizeReturnedAiSubQuestion = ({ item, fallback, index, runtimeConfig }) => {
   const maxScore = Number(fallback.maxScore ?? 0) || 0;
-  const rawRubricPoints = Array.isArray(item?.rubricPoints) ? item.rubricPoints : Array.isArray(item?.rubric_points) ? item.rubric_points : [];
+  const returnedRubricPoints = Array.isArray(item?.rubricPoints) ? item.rubricPoints : Array.isArray(item?.rubric_points) ? item.rubric_points : null;
+  const rawRubricPoints = returnedRubricPoints ?? [];
   const rawMissedPoints = Array.isArray(item?.missedPoints) ? item.missedPoints : Array.isArray(item?.missed_points) ? item.missed_points : [];
   const rawAnswerMarks = Array.isArray(item?.answerMarks) ? item.answerMarks : Array.isArray(item?.answer_marks) ? item.answer_marks : null;
   const rawScore = Number(item?.score ?? item?.awardedScore ?? item?.awarded_score);
@@ -1082,8 +1107,25 @@ const normalizeReturnedAiSubQuestion = ({ item, fallback, index, runtimeConfig }
     answerSegments: fallback.answerSegments,
     title: fallback.title || fallback.id,
   });
+  const fallbackRubricPointCount = normalizeRubricPoints(fallback.rubricPoints).length;
+  if (fallbackRubricPointCount > 0 && (!Array.isArray(returnedRubricPoints) || returnedRubricPoints.length === 0)) {
+    throw createHttpError(`AI批改返回缺少采分点 rubricPoints：${fallback.title || fallback.id || "unknown"}`, 502);
+  }
+  if (fallbackRubricPointCount > 0 && returnedRubricPoints.length < fallbackRubricPointCount) {
+    throw createHttpError(
+      `AI批改返回的采分点数量不足：${fallback.title || fallback.id || "unknown"}，应返回 ${fallbackRubricPointCount} 个，实际返回 ${returnedRubricPoints.length} 个`,
+      502,
+    );
+  }
   const rubricPoints = normalizeAiRubricPointsWithFallback({ rawRubricPoints, fallbackRubricPoints: fallback.rubricPoints });
-  const normalizedScore = clampScore(sumRubricAwardedScores(rubricPoints) || score, 0, maxScore);
+  const missedPoints = normalizeMissedPoints(rawMissedPoints);
+  assertAiMissedPointsReturned({
+    rubricPoints,
+    missedPoints,
+    title: fallback.title || fallback.id,
+  });
+  const rubricAwardedScore = sumRubricAwardedScores(rubricPoints);
+  const normalizedScore = clampScore(rubricPoints.length > 0 ? rubricAwardedScore : score, 0, maxScore);
   const syncedAnswerMarks = syncPositiveAnswerMarkScoresWithRubricPoints({
     answerMarks,
     rubricPoints,
@@ -1100,13 +1142,13 @@ const normalizeReturnedAiSubQuestion = ({ item, fallback, index, runtimeConfig }
       score,
       maxScore,
       title: fallback.title,
-      missedPoints: normalizeMissedPoints(rawMissedPoints),
+      missedPoints,
     }),
     referenceAnswer: `${item?.referenceAnswer ?? item?.reference_answer ?? fallback.referenceAnswer ?? ""}`.trim(),
     reviewSource: "ai",
     reviewProvider: "openai-compatible",
     abilityLabel: `${item?.abilityLabel ?? item?.ability_label ?? fallback.abilityLabel ?? fallback.title ?? ""}`.trim(),
-    missedPoints: normalizeMissedPoints(rawMissedPoints),
+    missedPoints,
     answerMarks: syncedAnswerMarks,
     rubricGuidance: `${item?.rubricGuidance ?? item?.rubric_guidance ?? fallback.rubricGuidance ?? ""}`.trim(),
     rubricPoints,
@@ -1159,6 +1201,19 @@ const buildAnswerReferenceSegments = (answerText) => {
     .map((segment, index) => ({ id: `seg_${index + 1}`, ...segment }));
 };
 
+const REQUIRED_AI_REVIEW_OUTPUT_REQUIREMENTS = [
+  "硬性校验：rubricPoints 中每个未命中的采分点必须设置 hit:false、awardedScore:0，并且必须在 missedPoints 中生成一条对应遗漏点。",
+  "硬性校验：rubricPoints 必须逐条覆盖题目数据里提供的所有采分点，不能遗漏、合并或少返回；未命中的采分点也必须返回。",
+  "硬性校验：missedPoints 不是可选字段；只要存在未命中的采分点，missedPoints 必须非空，且每条必须包含 title、description 或 comment/suggestion。",
+  "硬性校验：如果没有遗漏点，missedPoints 必须返回空数组 []，不要省略字段。",
+];
+
+const appendRequiredAiReviewOutputRequirements = (value = "") => {
+  const base = `${value ?? ""}`.trim();
+  const missingRules = REQUIRED_AI_REVIEW_OUTPUT_REQUIREMENTS.filter((rule) => !base.includes(rule));
+  return [base, ...missingRules].filter(Boolean).join("\n");
+};
+
 const buildAiReviewPrompt = ({ question, answer, runtimeConfig }) => {
   const questionMeta = getQuestionMeta(question);
   const answerMap = parseSubjectiveAnswerMap(answer?.answerJson, question);
@@ -1185,7 +1240,7 @@ const buildAiReviewPrompt = ({ question, answer, runtimeConfig }) => {
     .join(subQuestionRubrics)
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  const outputRequirements = `${runtimeConfig?.outputRequirementsPrompt ?? ""}`.trim();
+  const outputRequirements = appendRequiredAiReviewOutputRequirements(runtimeConfig?.outputRequirementsPrompt);
 
   const questionData = JSON.stringify(
     {
@@ -1578,11 +1633,13 @@ const assertMockExamPaperPermission = async ({ db, userId, paperId }) => {
     select: {
       id: true,
       seriesId: true,
+      status: true,
       permissionRequired: true,
     },
   });
 
   if (!paper) throw createHttpError("试卷不存在", 404);
+  if (paper.status !== "published") throw createHttpError("试卷不存在", 404);
   if (!paper.permissionRequired) return null;
 
   const [paperPermission, seriesPermission] = await Promise.all([
@@ -2165,7 +2222,11 @@ export const listUserVisibleMockExamRecords = async ({ db, userId, paperType = "
     },
   });
 
-  return records.filter((record) => isMatchingPaperType(getRecordPaper(record), paperType)).filter(isRecordVisibleInUserHistory).map(serializeUserMockExamHistoryItem);
+  return records
+    .filter((record) => isPublishedMockExamPaper(record.paper))
+    .filter((record) => isMatchingPaperType(getRecordPaper(record), paperType))
+    .filter(isRecordVisibleInUserHistory)
+    .map(serializeUserMockExamHistoryItem);
 };
 
 const createLeaderboardPaperPayload = (paper) => ({
@@ -2259,6 +2320,7 @@ export const listUserVisibleMockExamLeaderboardPapers = async ({ db, userId }) =
 
   const paperMap = new Map();
   records.forEach((record) => {
+    if (!isPublishedMockExamPaper(record.paper)) return;
     if (!isRecordPublishedToUser(record)) return;
     const paper = getRecordPaper(record);
     if (!paper?.id || paperMap.has(paper.id)) return;
@@ -2286,6 +2348,7 @@ export const getUserMockExamLeaderboardDetail = async ({ db, userId, paperId }) 
     },
   });
   if (!paper) throw createHttpError("试卷不存在", 404);
+  if (!isPublishedMockExamPaper(paper)) throw createHttpError("试卷不存在", 404);
 
   const records = await db.mockExamRecord.findMany({
     where: {
@@ -2347,12 +2410,13 @@ export const getUserMockExamLeaderboardDetail = async ({ db, userId, paperId }) 
 };
 
 export const getRecentMockExamForUser = async ({ db, userId, currentTime = new Date() }) => {
-  const record = await db.mockExamRecord.findFirst({
+  const records = await db.mockExamRecord.findMany({
     where: {
       userId,
       OR: [{ status: "in_progress" }, { status: "submitted" }],
     },
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    take: 20,
     include: {
       answers: true,
       paper: {
@@ -2371,6 +2435,7 @@ export const getRecentMockExamForUser = async ({ db, userId, currentTime = new D
     },
   });
 
+  const record = records.find((item) => isPublishedMockExamPaper(item.paper)) ?? null;
   if (!record) return null;
 
   const paper = getRecordPaper(record);

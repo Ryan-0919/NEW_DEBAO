@@ -241,6 +241,8 @@ export const adminContentService = {
     adminPatchJson<AdminMockExamPaper>(`/api/admin/content/mock-exams/papers/${paperId}`, payload),
   deleteMockExamPaper: (paperId: string) =>
     adminDelete<{ success: boolean } | AdminMockExamPaper>(`/api/admin/content/mock-exams/papers/${paperId}`),
+  recallMockExamPaper: (paperId: string) =>
+    adminPostJson<AdminMockExamPaper>(`/api/admin/content/mock-exams/papers/${paperId}/recall`),
   updateMockExamPaperOrder: (items: { id: string; sortOrder: number }[]) =>
     adminPatchJson<{ success: boolean }>("/api/admin/content/mock-exams/papers/order", { items }),
   uploadMockExamCover: (file: File) => {

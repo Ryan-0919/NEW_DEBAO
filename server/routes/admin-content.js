@@ -739,6 +739,48 @@ adminContentRouter.patch("/mock-exams/papers/order", async (req, res) => {
   return ok(res, { success: true }, "试卷顺序已更新");
 });
 
+adminContentRouter.post("/mock-exams/papers/:paperId/recall", async (req, res) => {
+  const paper = await prisma.mockExamPaper.findUnique({
+    where: { id: req.params.paperId },
+    include: {
+      series: { select: { id: true, name: true } },
+      questions: {
+        where: { isActive: true },
+        select: { id: true, type: true, score: true },
+      },
+      _count: { select: { records: true, permissions: true, leaderboardEntries: true } },
+    },
+  });
+  if (!paper) return fail(res, "试卷不存在", 404);
+
+  if (paper.status === "draft") {
+    return ok(res, serializeAdminMockExamPaper(paper), "试卷已处于收回状态");
+  }
+
+  const updated = await prisma.mockExamPaper.update({
+    where: { id: paper.id },
+    data: { status: "draft" },
+    include: {
+      series: { select: { id: true, name: true } },
+      questions: {
+        where: { isActive: true },
+        select: { id: true, type: true, score: true },
+      },
+      _count: { select: { records: true, permissions: true, leaderboardEntries: true } },
+    },
+  });
+
+  await writeAdminAuditLog(req, {
+    action: "recall_mock_exam_paper",
+    entityType: "mock_exam_paper",
+    entityId: updated.id,
+    entityName: updated.title,
+    detail: { previousStatus: paper.status, nextStatus: updated.status },
+  });
+
+  return ok(res, serializeAdminMockExamPaper(updated), "试卷已收回，学生端不可见");
+});
+
 adminContentRouter.patch("/mock-exams/papers/:paperId", async (req, res) => {
   const current = await prisma.mockExamPaper.findUnique({
     where: { id: req.params.paperId },

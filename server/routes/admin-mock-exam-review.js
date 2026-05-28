@@ -1033,6 +1033,61 @@ adminMockExamReviewRouter.post("/records/:recordId/ai-review", async (req, res) 
   }
 });
 
+adminMockExamReviewRouter.post("/records/batch-ai-review", async (req, res) => {
+  const recordIds = [
+    ...new Set((Array.isArray(req.body?.recordIds) ? req.body.recordIds : []).map((item) => `${item ?? ""}`.trim()).filter(Boolean)),
+  ];
+  const currentTime = new Date();
+
+  if (recordIds.length === 0) {
+    return fail(res, "请选择需要重批的试卷", 400);
+  }
+
+  const results = [];
+  for (const recordId of recordIds) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const record = await getAdminReviewRecord(tx, recordId);
+        assertReviewableRecord(record);
+        await ensurePublishedReviewSnapshot({ tx, record });
+
+        const lock = getLockInfo(record, req, currentTime);
+        if (lock.active && !lock.ownedByMe) {
+          const error = new Error(`该记录已被 ${record.manualReviewerName || "其他老师"} 领取，不能重新批改`);
+          error.statusCode = 409;
+          throw error;
+        }
+
+        return record.id;
+      });
+
+      await enqueueMockExamAiReview({
+        db: prisma,
+        recordId,
+        adminId: req.auth.adminId,
+        currentTime,
+      });
+
+      results.push({ recordId, success: true, message: "已加入AI批改队列" });
+    } catch (error) {
+      results.push({ recordId, success: false, message: error.message || "AI重批失败" });
+    }
+  }
+
+  const successCount = results.filter((item) => item.success).length;
+  const failedCount = results.length - successCount;
+
+  if (successCount > 0) {
+    await writeAdminAuditLog(req, {
+      action: "batch_rerun_mock_exam_ai_review",
+      entityType: "mock_exam_record",
+      detail: { recordIds, successCount, failedCount, results },
+    });
+  }
+
+  return ok(res, { successCount, failedCount, results }, successCount > 0 ? "已批量加入AI批改队列" : "没有试卷加入AI批改队列");
+});
+
 adminMockExamReviewRouter.post("/records/:recordId/release", async (req, res) => {
   try {
     const recordId = `${req.params.recordId ?? ""}`.trim();

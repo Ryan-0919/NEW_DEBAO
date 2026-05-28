@@ -369,10 +369,10 @@ function SubjectiveAnswerReviewBlock({
     .map((point, index) => ({
       id: point.id || `missed_${index + 1}`,
       title: stripHtml(point.title || ""),
-      description: stripHtml(point.description || ""),
+      description: stripHtml(point.description || point.comment || point.suggestion || ""),
       score: Number(point.score ?? 0) || 0,
     }))
-    .filter((point) => point.title && point.description && !isPlaceholderMissedPointTitle(point.title));
+    .filter((point) => point.title && !isPlaceholderMissedPointTitle(point.title));
   const paragraphs = (showReviewFeedback ? subQuestion.reviewComment || "暂无批改评语" : "")
     .split(/\n+/)
     .filter(Boolean);

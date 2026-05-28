@@ -345,12 +345,33 @@ function PaperCard({ paper, onOpen }: { paper: AdminMockExamReviewPaper; onOpen:
   );
 }
 
-function RecordRow({ record, onOpen, onClaim }: { record: AdminMockExamReviewRecord; onOpen: (record: AdminMockExamReviewRecord) => void; onClaim: (record: AdminMockExamReviewRecord) => void }) {
+function RecordRow({
+  record,
+  selected,
+  onSelect,
+  onOpen,
+  onClaim,
+}: {
+  record: AdminMockExamReviewRecord;
+  selected: boolean;
+  onSelect: (recordId: string, selected: boolean) => void;
+  onOpen: (record: AdminMockExamReviewRecord) => void;
+  onClaim: (record: AdminMockExamReviewRecord) => void;
+}) {
   const status = statusMeta[record.reviewWorkflowStatus] ?? statusMeta.all;
   const claimLabel = record.lock.ownedByMe ? "继续批改" : record.reviewWorkflowStatus === "published" ? "重新修改" : "领取";
   const publishedCount = Number(record.publishedSubjectiveCount ?? 0);
   return (
     <tr className="group hover:bg-slate-50">
+      <td className="px-5 py-4">
+        <input
+          type="checkbox"
+          className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+          checked={selected}
+          aria-label={`选择 ${record.userLabel}`}
+          onChange={(event) => onSelect(record.id, event.target.checked)}
+        />
+      </td>
       <td className="px-5 py-4">
         <p className="font-semibold text-slate-950">{record.userLabel}</p>
         <p className="mt-1 text-xs text-slate-500">{record.userPhone || record.userId}</p>
@@ -847,11 +868,15 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [aiReviewLoading, setAiReviewLoading] = useState(false);
+  const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+  const [batchAiReviewLoading, setBatchAiReviewLoading] = useState(false);
 
   const totalDraftScore = useMemo(() => reviewForm.reduce((sum, question) => sum + getQuestionTotalScore(question), 0), [reviewForm]);
   const detailReturnTo = useMemo(() => normalizeAdminReturnTo(returnTo), [returnTo]);
   const canEdit = Boolean(detail?.record.lock.canEdit);
   const hasUnsavedChanges = canEdit && Boolean(savedFormSnapshot) && serializeReviewForm(reviewForm) !== savedFormSnapshot;
+  const selectedRecordIdSet = useMemo(() => new Set(selectedRecordIds), [selectedRecordIds]);
+  const allCurrentPageSelected = records.length > 0 && records.every((record) => selectedRecordIdSet.has(record.id));
 
   const loadPapers = async (page = papersPage.page) => {
     setLoading(true);
@@ -881,6 +906,7 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
         status: nextStatus,
         keyword: recordKeyword.trim(),
       });
+      setSelectedRecordIds([]);
       setSelectedPaper((current) => (current ? { ...current, stats: payload.paper.stats } : current));
       setRecords(payload.items);
       setRecordsPage({ page: payload.page, totalPages: payload.totalPages, total: payload.total });
@@ -903,6 +929,7 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
         status: nextStatus,
         keyword: recordKeyword.trim(),
       });
+      setSelectedRecordIds([]);
       setSelectedPaper((current) => (current ? { ...current, stats: payload.paper.stats } : current));
       setRecords(payload.items);
       setRecordsPage({ page: payload.page, totalPages: payload.totalPages, total: payload.total });
@@ -974,6 +1001,7 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
     setRecordsPage({ page: 1, totalPages: 1, total: 0 });
     setRecords([]);
     setRecordStatus("all");
+    setSelectedRecordIds([]);
     await loadRecords(paper, 1, "all");
   };
 
@@ -991,6 +1019,17 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const toggleRecordSelected = (recordId: string, selected: boolean) => {
+    setSelectedRecordIds((current) => {
+      if (selected) return current.includes(recordId) ? current : [...current, recordId];
+      return current.filter((id) => id !== recordId);
+    });
+  };
+
+  const toggleCurrentPageSelected = (selected: boolean) => {
+    setSelectedRecordIds(selected ? records.map((record) => record.id) : []);
   };
 
   const claimRecord = async (record: AdminMockExamReviewRecord) => {
@@ -1090,6 +1129,31 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
       toast.error(error instanceof Error ? error.message : "AI重批失败");
     } finally {
       setAiReviewLoading(false);
+    }
+  };
+
+  const batchRerunAiReview = async () => {
+    if (selectedRecordIds.length === 0) {
+      toast.error("请先选择需要重批的试卷");
+      return;
+    }
+    if (!window.confirm(`确认将已选择的 ${selectedRecordIds.length} 份试卷批量加入 AI 批改队列吗？\n已发送给学生的试卷会保留上一版结果，重新发送后才替换。`)) return;
+
+    setBatchAiReviewLoading(true);
+    try {
+      const payload = await adminMockExamReviewService.batchRunAiReview(selectedRecordIds);
+      if (payload.failedCount > 0) {
+        const failedMessage = payload.results.find((item) => !item.success)?.message ?? "部分试卷加入失败";
+        toast.warning(`已加入 ${payload.successCount} 份，失败 ${payload.failedCount} 份：${failedMessage}`);
+      } else {
+        toast.success(`已将 ${payload.successCount} 份试卷加入 AI 批改队列`);
+      }
+      setSelectedRecordIds([]);
+      await loadRecords(selectedPaper, recordsPage.page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "批量AI重批失败");
+    } finally {
+      setBatchAiReviewLoading(false);
     }
   };
 
@@ -1331,6 +1395,14 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
               <Input className="h-11 rounded-full bg-white pl-9" value={recordKeyword} onChange={(event) => setRecordKeyword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void loadRecords(selectedPaper, 1); }} placeholder="搜索手机号、昵称或用户ID" />
             </div>
             <Button className="h-11 rounded-full px-5" variant="outline" onClick={() => void loadRecords(selectedPaper, 1)}>搜索</Button>
+            <Button
+              className="h-11 rounded-full bg-amber-600 px-5 text-white hover:bg-amber-700"
+              disabled={selectedRecordIds.length === 0 || batchAiReviewLoading}
+              onClick={() => void batchRerunAiReview()}
+            >
+              <RefreshCw className={`size-4 ${batchAiReviewLoading ? "animate-spin" : ""}`} />
+              批量AI重批{selectedRecordIds.length > 0 ? `（${selectedRecordIds.length}）` : ""}
+            </Button>
           </div>
         </section>
 
@@ -1339,6 +1411,15 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
             <table className="w-full min-w-[1180px] text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
                 <tr>
+                  <th className="px-5 py-4">
+                    <input
+                      type="checkbox"
+                      className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      checked={allCurrentPageSelected}
+                      aria-label="选择当前页全部记录"
+                      onChange={(event) => toggleCurrentPageSelected(event.target.checked)}
+                    />
+                  </th>
                   <th className="px-5 py-4">考生</th>
                   <th className="px-5 py-4">状态</th>
                   <th className="px-5 py-4">批改进度</th>
@@ -1349,9 +1430,18 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {records.length === 0 ? (
-                  <tr><td colSpan={6} className="py-16 text-center text-slate-500">{loading ? "批改队列加载中..." : "暂无匹配记录"}</td></tr>
+                  <tr><td colSpan={7} className="py-16 text-center text-slate-500">{loading ? "批改队列加载中..." : "暂无匹配记录"}</td></tr>
                 ) : (
-                  records.map((record) => <RecordRow key={record.id} record={record} onOpen={openDetail} onClaim={claimRecord} />)
+                  records.map((record) => (
+                    <RecordRow
+                      key={record.id}
+                      record={record}
+                      selected={selectedRecordIdSet.has(record.id)}
+                      onSelect={toggleRecordSelected}
+                      onOpen={openDetail}
+                      onClaim={claimRecord}
+                    />
+                  ))
                 )}
               </tbody>
             </table>

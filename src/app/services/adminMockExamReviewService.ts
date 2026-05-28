@@ -195,6 +195,16 @@ export type AdminMockExamReviewSavePayload = {
   }[];
 };
 
+export type AdminMockExamReviewBatchAiReviewResult = {
+  successCount: number;
+  failedCount: number;
+  results: {
+    recordId: string;
+    success: boolean;
+    message: string;
+  }[];
+};
+
 export const adminMockExamReviewService = {
   getSummary: () => adminRequest<AdminMockExamReviewStats>("/api/admin/mock-exam-reviews/summary"),
   getPapers: (params: { page?: number; pageSize?: number; keyword?: string } = {}) =>
@@ -208,6 +218,8 @@ export const adminMockExamReviewService = {
   getRecord: (recordId: string) => adminRequest<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}`),
   claimRecord: (recordId: string) => adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/claim`),
   runAiReview: (recordId: string) => adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/ai-review`),
+  batchRunAiReview: (recordIds: string[]) =>
+    adminPostJson<AdminMockExamReviewBatchAiReviewResult>("/api/admin/mock-exam-reviews/records/batch-ai-review", { recordIds }),
   releaseRecord: (recordId: string) => adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/release`),
   saveDraft: (recordId: string, payload: AdminMockExamReviewSavePayload) =>
     adminPatchJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/review-draft`, payload),

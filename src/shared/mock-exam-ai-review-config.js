@@ -121,6 +121,10 @@ export const DEFAULT_AI_REVIEW_OUTPUT_REQUIREMENTS_PROMPT =
     "answerMarks 中 status 为 correct 或 score 的正向批注必须带整数 score，且 score 必须大于 0。",
     "每个小问 answerMarks 中所有正向批注的 score 合计必须严格等于该小问 score。",
     "如果某个得分点没有学生原文可对应，不要生成正向批注；不得用没有 score 的对勾表示得分。",
+    "rubricPoints 中每个未命中的采分点必须设置 hit:false、awardedScore:0，并且必须在 missedPoints 中生成一条对应遗漏点。",
+    "rubricPoints 必须逐条覆盖题目数据里提供的所有采分点，不能遗漏、合并或少返回；未命中的采分点也必须返回。",
+    "missedPoints 不是可选装饰字段；只要存在未命中的采分点，missedPoints 必须非空，且每条必须包含 title、description 或 comment/suggestion。",
+    "如果没有遗漏点，missedPoints 必须返回空数组 []，不要省略字段。",
   ].join("\n");
 
 export const DEFAULT_MOCK_EXAM_AI_REVIEW_CONFIG = {
