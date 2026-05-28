@@ -65,7 +65,7 @@ const getInitialDebaoTheme = (): DebaoThemeMode => {
 const modules = [
   { id: 1, title: "课程学习", sub: "名师精讲 · 系统备考", icon: Play, color: "#c9973e", glow: "rgba(201,151,62,0.2)", page: "courses" },
   { id: 2, title: "题库", sub: "海量真题 · 专项练习", icon: BookOpen, color: "#4e8ef7", glow: "rgba(78,142,247,0.2)", hot: true },
-  { id: 3, title: "进入主观批改", sub: "AI评分 · 要点解析", icon: FileText, color: "#1dc9a4", glow: "rgba(29,201,164,0.2)", desktopOnly: true },
+  { id: 3, title: "进入主观批改", sub: "人工精批 · 要点解析", icon: FileText, color: "#1dc9a4", glow: "rgba(29,201,164,0.2)", desktopOnly: true },
   { id: 4, title: "客观题模考", sub: "全真仿真 · 限时测验", icon: Target, color: "#c97ef5", glow: "rgba(201,126,245,0.2)", desktopOnly: true },
   { id: 5, title: "主观法条检索", sub: "全库法条 · 快速定位", icon: Scale, color: "#f7a94e", glow: "rgba(247,169,78,0.2)" },
   { id: 6, title: "打字练习", sub: "法律术语 · 答题提速", icon: Swords, color: "#f76e6e", glow: "rgba(247,110,110,0.2)", desktopOnly: true },
