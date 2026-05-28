@@ -893,6 +893,27 @@ const extractJsonPayload = (text) => {
   return parseJsonSafely(firstBrace >= 0 && lastBrace >= firstBrace ? candidate.slice(firstBrace, lastBrace + 1) : candidate, null);
 };
 
+const getAiReviewPayloadErrorReason = (texts = []) => {
+  for (const text of texts) {
+    const normalized = `${text ?? ""}`.trim();
+    if (!normalized) continue;
+    const fenced = normalized.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const candidate = fenced?.[1]?.trim() || normalized;
+    const firstBrace = candidate.indexOf("{");
+    const lastBrace = candidate.lastIndexOf("}");
+    const jsonText = firstBrace >= 0 && lastBrace >= firstBrace ? candidate.slice(firstBrace, lastBrace + 1) : candidate;
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (!Array.isArray(parsed?.subQuestions ?? parsed?.sub_questions)) {
+        return "AI 返回的是合法 JSON，但缺少 subQuestions 数组";
+      }
+    } catch (error) {
+      return `AI 返回的 JSON 语法不合法：${error instanceof Error ? error.message : "无法解析"}`;
+    }
+  }
+  return "AI 没有返回可解析的 JSON 内容";
+};
+
 const normalizeAiAnswerMarkStatus = (value) => {
   const status = `${value ?? ""}`.trim().toLowerCase();
   if (status === "correct" || status === "score" || status === "right" || status === "positive") return "score";
@@ -1203,11 +1224,14 @@ const buildAnswerReferenceSegments = (answerText) => {
 };
 
 const REQUIRED_AI_REVIEW_OUTPUT_REQUIREMENTS = [
+  "硬性校验：只能返回一个合法 JSON 对象，不要 Markdown，不要 ```json 代码块，不要解释文字、前缀或后缀。",
   "硬性校验：所有字符串内容中禁止直接使用未转义的英文双引号 \"；引用学生原文、法律概念或关键词时必须使用中文引号“”或将英文双引号转义为 \\\"。",
   "硬性校验：rubricPoints 中采分点编号字段必须使用 id，不要使用 pointId、point_id、rubricId 或其他编号字段。",
+  "硬性校验：rubricPoints 中每条采分点必须是对象，并且必须使用 id、title、description、maxScore、awardedScore、hit、comment 字段；不要使用 point、achieved、matched 等替代字段。",
   "硬性校验：rubricPoints 中每个未命中的采分点必须设置 hit:false、awardedScore:0，并且必须在 missedPoints 中生成一条对应遗漏点。",
   "硬性校验：rubricPoints 必须逐条覆盖题目数据里提供的所有采分点，不能遗漏、合并或少返回；未命中的采分点也必须返回。",
   "硬性校验：missedPoints 不是可选字段；只要存在未命中的采分点，missedPoints 必须非空，且每条必须包含 title、description 或 comment/suggestion。",
+  "硬性校验：missedPoints 中每条遗漏点必须是对象，并且必须使用 id、title、description、score、comment、suggestion 字段；不要返回字符串数组。",
   "硬性校验：如果没有遗漏点，missedPoints 必须返回空数组 []，不要省略字段。",
 ];
 
@@ -1342,8 +1366,9 @@ const requestOpenAiCompatibleReviewOnce = async ({ runtimeConfig, question, answ
       }
     }
     if (!parsed || !Array.isArray(parsed.subQuestions ?? parsed.sub_questions)) {
+      const reason = getAiReviewPayloadErrorReason(completionTexts);
       throw createHttpError(
-        `批改返回结果不是有效 JSON，缺少 subQuestions。AI返回预览：${truncateForErrorMessage(completionTexts[0] || rawText)}`,
+        `批改返回结果不是有效 JSON：${reason}。AI返回预览：${truncateForErrorMessage(completionTexts[0] || rawText)}`,
         502,
       );
     }
