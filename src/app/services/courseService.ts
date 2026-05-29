@@ -11,6 +11,7 @@ export interface LegacyCourse {
   description: string;
   courseType: LegacyCourseType;
   status: LegacyCourseStatus;
+  isPublic?: boolean;
   openTime: string;
   handoutUrl?: string;
   handoutObjectKey?: string;

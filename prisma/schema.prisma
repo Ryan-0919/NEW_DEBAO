@@ -213,6 +213,7 @@ model Course {
   description       String                 @db.LongText
   courseType        CourseContentType      @default(audio)
   status            CourseStatus           @default(closed)
+  isPublic          Boolean                @default(false)
   openTime          DateTime
   sortOrder         Int                    @default(0)
   openedAt          DateTime?
@@ -227,6 +228,7 @@ model Course {
   shopProducts      ShopProductCourse[]
 
   @@index([courseType, status, openTime])
+  @@index([isPublic, status, openTime])
   @@index([status, openTime])
 }
 

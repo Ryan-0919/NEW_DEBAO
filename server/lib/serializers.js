@@ -17,6 +17,7 @@ export const serializeCourse = (
   description: normalizeDisplayText(course.description),
   courseType: course.courseType ?? "audio",
   status: course.status,
+  isPublic: Boolean(course.isPublic),
   openTime: formatDateTime(course.openTime),
   handoutUrl: getReadableObjectUrl({
     objectKey: course.handoutObjectKey ?? "",

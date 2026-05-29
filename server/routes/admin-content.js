@@ -412,6 +412,7 @@ const readCoursePayload = (body = {}) => {
     description: `${body.description ?? ""}`.trim(),
     courseType,
     status,
+    isPublic: toBool(body.isPublic, false),
     openTime: parseOpenTime(body.openTime),
     sortOrder: Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0,
   };

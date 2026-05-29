@@ -506,7 +506,53 @@ const buildUserStudySummary = async (userId) => {
   };
 };
 
+const courseAccessInclude = {
+  tags: {
+    orderBy: { order: "asc" },
+  },
+  courseAudios: {
+    where: readyAudioRelationWhere,
+    include: {
+      audio: {
+        select: {
+          duration: true,
+        },
+      },
+    },
+  },
+  courseVideos: {
+    include: {
+      video: {
+        select: {
+          duration: true,
+        },
+      },
+    },
+  },
+  _count: {
+    select: {
+      courseAudios: true,
+      courseVideos: true,
+    },
+  },
+};
+
 const assertCoursePermission = async (userId, courseId) => {
+  const publicCourse = await prisma.course.findFirst({
+    where: {
+      id: courseId,
+      isPublic: true,
+    },
+    include: courseAccessInclude,
+  });
+
+  if (publicCourse) {
+    if (publicCourse.status !== "open") {
+      throw new Error("课程尚未开放");
+    }
+    return publicCourse;
+  }
+
   const permission = await prisma.userCoursePermission.findFirst({
     where: {
       userId,
@@ -629,35 +675,34 @@ const getTagVideosWithProgress = async ({ tagId, userId, courseId, courseVideos 
 };
 
 userRouter.get("/courses", async (req, res) => {
-  const permissions = await prisma.userCoursePermission.findMany({
-    where: { userId: req.auth.userId },
-    include: {
-      course: {
-        include: {
-          courseAudios: {
-            where: readyAudioRelationWhere,
-          },
-          courseVideos: true,
-          _count: {
-            select: {
-              courseAudios: true,
-              courseVideos: true,
+  const courses = await prisma.course.findMany({
+    where: {
+      status: "open",
+      OR: [
+        { isPublic: true },
+        {
+          permissions: {
+            some: {
+              userId: req.auth.userId,
             },
           },
         },
+      ],
+    },
+    include: {
+      courseAudios: {
+        where: readyAudioRelationWhere,
+      },
+      courseVideos: true,
+      _count: {
+        select: {
+          courseAudios: true,
+          courseVideos: true,
+        },
       },
     },
-    orderBy: {
-      course: {
-        openTime: "desc",
-      },
-    },
+    orderBy: [{ sortOrder: "asc" }, { openTime: "desc" }],
   });
-
-  const courses = permissions
-    .map((item) => item.course)
-    .filter((course) => course.status === "open")
-    .sort((a, b) => new Date(b.openTime).getTime() - new Date(a.openTime).getTime());
 
   const courseIds = courses.map((course) => course.id);
   const audioProgressList =
@@ -873,7 +918,7 @@ userRouter.get("/home-overview", async (req, res) => {
       },
     });
 
-    if (course?.status === "open" && (course.permissions?.length ?? 0) > 0) {
+    if (course?.status === "open" && ((course.permissions?.length ?? 0) > 0 || course.isPublic)) {
       const relation = useVideo ? course.courseVideos?.[0] : course.courseAudios?.[0];
       const tagName = relation?.tag?.name ?? course.tags[0]?.name ?? "";
       const durationSeconds = Math.max(0, Number(targetMedia.duration ?? 0));
@@ -1089,7 +1134,7 @@ userRouter.get("/tags/:tagId/audios", async (req, res) => {
 
   if (!tag) return fail(res, "标签不存在", 404);
 
-  const hasPermission = tag.course.permissions.some((item) => item.userId === req.auth.userId);
+  const hasPermission = tag.course.isPublic || tag.course.permissions.some((item) => item.userId === req.auth.userId);
   if (!hasPermission || tag.course.status !== "open") {
     return fail(res, "无权访问该标签内容", 403);
   }
@@ -1127,7 +1172,7 @@ userRouter.get("/tags/:tagId/videos", async (req, res) => {
 
   if (!tag) return fail(res, "标签不存在", 404);
 
-  const hasPermission = tag.course.permissions.some((item) => item.userId === req.auth.userId);
+  const hasPermission = tag.course.isPublic || tag.course.permissions.some((item) => item.userId === req.auth.userId);
   if (!hasPermission || tag.course.status !== "open") {
     return fail(res, "无权访问该标签内容", 403);
   }
@@ -1861,22 +1906,25 @@ const assertQuestionBankPermission = async (userId, bookId, include = {}) => {
 };
 
 const getCourseLinkedQuestionBankBookIds = async (userId) => {
-  const coursePermissions = await prisma.userCoursePermission.findMany({
-    where: { userId },
-    select: {
-      course: {
-        select: {
-          id: true,
-          status: true,
+  const courses = await prisma.course.findMany({
+    where: {
+      status: "open",
+      OR: [
+        { isPublic: true },
+        {
+          permissions: {
+            some: {
+              userId,
+            },
+          },
         },
-      },
+      ],
+    },
+    select: {
+      id: true,
     },
   });
-  const courseIdSet = new Set(
-    coursePermissions
-      .filter((item) => item.course?.status === "open")
-      .map((item) => item.course.id),
-  );
+  const courseIdSet = new Set(courses.map((course) => course.id));
   if (courseIdSet.size === 0) return new Set();
 
   const config = await prisma.systemConfig.findUnique({

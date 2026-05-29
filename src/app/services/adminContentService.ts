@@ -11,6 +11,7 @@ export type AdminCourse = {
   description: string;
   courseType: AdminCourseType;
   status: AdminCourseStatus;
+  isPublic: boolean;
   openTime: string;
   handoutUrl: string;
   handoutObjectKey: string;

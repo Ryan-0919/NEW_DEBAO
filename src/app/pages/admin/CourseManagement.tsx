@@ -9,6 +9,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../components/ui/sheet";
+import { Switch } from "../../components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Textarea } from "../../components/ui/textarea";
 import {
@@ -42,6 +43,7 @@ const defaultForm = {
   description: "",
   courseType: "audio" as AdminCourseType,
   status: "closed" as AdminCourseStatus,
+  isPublic: false,
   openTime: "",
   sortOrder: 0,
   tagsText: "",
@@ -284,6 +286,7 @@ export function CourseManagement() {
       description: course.description,
       courseType: course.courseType,
       status: course.status,
+      isPublic: Boolean(course.isPublic),
       openTime: normalizeDateTimeInput(course.openTime),
       sortOrder: course.sortOrder,
       tagsText: "",
@@ -395,6 +398,7 @@ export function CourseManagement() {
         description: form.description.trim(),
         courseType: form.courseType,
         status: form.status,
+        isPublic: form.isPublic,
         openTime: fromDateTimeInput(form.openTime),
         sortOrder: form.sortOrder,
       };
@@ -822,6 +826,15 @@ export function CourseManagement() {
                 <Label>排序值</Label>
                 <Input type="number" value={form.sortOrder} onChange={(event) => setForm((current) => ({ ...current, sortOrder: Number(event.target.value) || 0 }))} />
               </div>
+              <div className="sm:col-span-3 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <Label className="text-sm font-semibold text-emerald-900">免费公开</Label>
+                    <p className="mt-1 text-xs text-emerald-700">开启后，课程在已开放状态下对所有登录学员可见，无需单独授权。</p>
+                  </div>
+                  <Switch checked={form.isPublic} onCheckedChange={(checked) => setForm((current) => ({ ...current, isPublic: checked }))} />
+                </div>
+              </div>
             </div>
           </section>
 
@@ -1105,6 +1118,7 @@ export function CourseManagement() {
                         </div>
                         <div className="min-w-0">
                           <p className="truncate font-medium text-slate-900">{course.name}</p>
+                          {course.isPublic ? <Badge variant="outline" className="mt-1 border-emerald-100 bg-emerald-50 text-emerald-700">免费公开</Badge> : null}
                           <p className="mt-1 line-clamp-2 max-w-xl text-xs leading-5 text-slate-500">{course.description || "-"}</p>
                         </div>
                       </div>
