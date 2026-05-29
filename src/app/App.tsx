@@ -2267,11 +2267,11 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
       .finally(() => setSyncingProgress(false));
   };
 
-  const saveAudioSeconds = (seconds: number, complete = false) => {
+  const saveAudioSeconds = (seconds: number, complete = false, force = false) => {
     if (!isLegacyCourse || !currentLesson.id || currentLesson.source === "static" || !currentLesson.mediaUrl || currentLesson.id === "__empty__") return;
     const lessonId = currentLesson.id;
     const progressSeconds = Math.max(0, Math.floor(seconds));
-    if (!complete && Math.abs(progressSeconds - lastSavedProgressRef.current) < 10) return;
+    if (!complete && !force && Math.abs(progressSeconds - lastSavedProgressRef.current) < 10) return;
 
     lastSavedProgressRef.current = progressSeconds;
     setSyncingProgress(true);
@@ -2296,6 +2296,9 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
       return;
     }
 
+    if (audioRef.current && currentLesson.mediaUrl) {
+      saveAudioSeconds(audioRef.current.currentTime, false, true);
+    }
     setIsPlaying(false);
     selectLesson(adjacent);
   };
@@ -2589,16 +2592,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
           {/* Controls */}
           <div className="debao-audio-controls" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20 }}>
-              <button onClick={() => setProgress(p => {
-                if (audioRef.current && currentLesson.mediaUrl) {
-                  const nextSeconds = Math.max(0, audioRef.current.currentTime - 15);
-                  audioRef.current.currentTime = nextSeconds;
-                  saveAudioSeconds(nextSeconds);
-                  return Math.max(0, Math.min(100, Math.round((nextSeconds / currentDurationSec) * 100)));
-                }
-                moveAudioLesson("prev");
-                return p;
-              })}
+              <button onClick={() => moveAudioLesson("prev")} aria-label="上一讲" title="上一讲"
                 style={{ background: "none", border: "none", cursor: "pointer", color: "#5a7898", display: "flex", alignItems: "center", padding: 4 }}>
                 <SkipBack size={18} />
               </button>
@@ -2608,16 +2602,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
                   ? <div style={{ display: "flex", gap: 3 }}><div style={{ width: 3, height: 14, background: "#fff", borderRadius: 2 }} /><div style={{ width: 3, height: 14, background: "#fff", borderRadius: 2 }} /></div>
                   : <Play size={18} fill="#fff" color="#fff" style={{ marginLeft: 2 }} />}
               </button>
-              <button onClick={() => setProgress(p => {
-                if (audioRef.current && currentLesson.mediaUrl) {
-                  const nextSeconds = Math.min(currentDurationSec, audioRef.current.currentTime + 15);
-                  audioRef.current.currentTime = nextSeconds;
-                  saveAudioSeconds(nextSeconds, nextSeconds >= currentDurationSec);
-                  return Math.max(0, Math.min(100, Math.round((nextSeconds / currentDurationSec) * 100)));
-                }
-                moveAudioLesson("next");
-                return p;
-              })}
+              <button onClick={() => moveAudioLesson("next")} aria-label="下一讲" title="下一讲"
                 style={{ background: "none", border: "none", cursor: "pointer", color: "#5a7898", display: "flex", alignItems: "center", padding: 4 }}>
                 <SkipForward size={18} />
               </button>
