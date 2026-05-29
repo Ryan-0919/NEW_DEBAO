@@ -112,6 +112,19 @@ const clampProgressToDuration = (progress, duration) => {
   return Math.min(progress, durationSeconds);
 };
 
+const mergeLearningProgress = (existingRecord, nextProgress, duration) => {
+  const durationSeconds = Math.max(0, Number(duration ?? 0));
+  const existingProgress = Math.max(0, Number(existingRecord?.progress ?? 0));
+  if (existingRecord?.completed && durationSeconds > 0) return durationSeconds;
+  return clampProgressToDuration(Math.max(existingProgress, nextProgress), duration);
+};
+
+const getCompletedLearningProgress = (existingRecord, nextProgress, duration) => {
+  const durationSeconds = Math.max(0, Number(duration ?? 0));
+  if (durationSeconds > 0) return durationSeconds;
+  return Math.max(0, Number(existingRecord?.progress ?? 0), nextProgress ?? 0);
+};
+
 const statusForCourseAccessError = (error, fallback = 404) => {
   const message = `${error?.message ?? ""}`;
   if (message.includes("无权")) return 403;
@@ -1302,7 +1315,16 @@ userRouter.post("/progress", async (req, res) => {
     where: { id: audioId },
     select: { duration: true },
   });
-  const normalizedProgress = clampProgressToDuration(parsedProgress, audio?.duration);
+  const existingRecord = await prisma.userProgress.findUnique({
+    where: {
+      userId_courseId_audioId: {
+        userId: req.auth.userId,
+        courseId,
+        audioId,
+      },
+    },
+  });
+  const normalizedProgress = mergeLearningProgress(existingRecord, parsedProgress, audio?.duration);
   const timestamp = new Date();
   const record = await saveUserProgressRecord({
     userId: req.auth.userId,
@@ -1310,6 +1332,7 @@ userRouter.post("/progress", async (req, res) => {
     audioId,
     updateData: {
       progress: normalizedProgress,
+      ...(existingRecord?.completed ? { completed: true } : {}),
       lastUpdated: timestamp,
     },
     createData: {
@@ -1348,8 +1371,16 @@ userRouter.post("/progress/complete", async (req, res) => {
     where: { id: audioId },
     select: { duration: true },
   });
-  const normalizedProgress =
-    parsedProgress === undefined ? undefined : clampProgressToDuration(parsedProgress, audio?.duration);
+  const existingRecord = await prisma.userProgress.findUnique({
+    where: {
+      userId_courseId_audioId: {
+        userId: req.auth.userId,
+        courseId,
+        audioId,
+      },
+    },
+  });
+  const normalizedProgress = getCompletedLearningProgress(existingRecord, parsedProgress, audio?.duration);
   const timestamp = new Date();
   const record = await saveUserProgressRecord({
     userId: req.auth.userId,
@@ -1357,11 +1388,11 @@ userRouter.post("/progress/complete", async (req, res) => {
     audioId,
     updateData: {
       completed: true,
-      ...(normalizedProgress !== undefined ? { progress: normalizedProgress } : {}),
+      progress: normalizedProgress,
       lastUpdated: timestamp,
     },
     createData: {
-      progress: normalizedProgress ?? 0,
+      progress: normalizedProgress,
       completed: true,
       lastUpdated: timestamp,
     },
@@ -1396,7 +1427,16 @@ userRouter.post("/video-progress", async (req, res) => {
     where: { id: videoId },
     select: { duration: true },
   });
-  const normalizedProgress = clampProgressToDuration(parsedProgress, video?.duration);
+  const existingRecord = await prisma.userVideoProgress.findUnique({
+    where: {
+      userId_courseId_videoId: {
+        userId: req.auth.userId,
+        courseId,
+        videoId,
+      },
+    },
+  });
+  const normalizedProgress = mergeLearningProgress(existingRecord, parsedProgress, video?.duration);
   const timestamp = new Date();
   const record = await saveUserVideoProgressRecord({
     userId: req.auth.userId,
@@ -1404,6 +1444,7 @@ userRouter.post("/video-progress", async (req, res) => {
     videoId,
     updateData: {
       progress: normalizedProgress,
+      ...(existingRecord?.completed ? { completed: true } : {}),
       lastUpdated: timestamp,
     },
     createData: {
@@ -1441,8 +1482,16 @@ userRouter.post("/video-progress/complete", async (req, res) => {
     where: { id: videoId },
     select: { duration: true },
   });
-  const normalizedProgress =
-    parsedProgress === undefined ? undefined : clampProgressToDuration(parsedProgress, video?.duration);
+  const existingRecord = await prisma.userVideoProgress.findUnique({
+    where: {
+      userId_courseId_videoId: {
+        userId: req.auth.userId,
+        courseId,
+        videoId,
+      },
+    },
+  });
+  const normalizedProgress = getCompletedLearningProgress(existingRecord, parsedProgress, video?.duration);
   const timestamp = new Date();
   const record = await saveUserVideoProgressRecord({
     userId: req.auth.userId,
@@ -1450,11 +1499,11 @@ userRouter.post("/video-progress/complete", async (req, res) => {
     videoId,
     updateData: {
       completed: true,
-      ...(normalizedProgress !== undefined ? { progress: normalizedProgress } : {}),
+      progress: normalizedProgress,
       lastUpdated: timestamp,
     },
     createData: {
-      progress: normalizedProgress ?? 0,
+      progress: normalizedProgress,
       completed: true,
       lastUpdated: timestamp,
     },

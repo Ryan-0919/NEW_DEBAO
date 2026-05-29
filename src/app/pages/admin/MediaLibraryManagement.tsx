@@ -34,9 +34,12 @@ const formatDuration = (seconds = 0) => {
 
 const formatFileSize = (bytes: number) => {
   if (!bytes) return "";
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
+
+const MAX_MEDIA_UPLOAD_FILE_SIZE = 2048 * 1024 * 1024;
 
 const getFolderCount = (type: AdminCourseType, folder: AdminMediaFolder) => (type === "video" ? folder.videoCount ?? 0 : folder.audioCount ?? 0);
 
@@ -93,6 +96,7 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
   const [handoutObjectKey, setHandoutObjectKey] = useState("");
   const [handoutFile, setHandoutFile] = useState<File | null>(null);
   const [savingItem, setSavingItem] = useState(false);
+  const [reprocessingItemId, setReprocessingItemId] = useState("");
   const [uploadFolderId, setUploadFolderId] = useState("");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadScript, setUploadScript] = useState("");
@@ -271,6 +275,30 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
     }
   };
 
+  const reprocessVideoItem = async (item: AdminMediaItem) => {
+    if (type !== "video") return;
+    if (item.objectKey?.endsWith("/index.m3u8")) {
+      toast.info("该视频已经是 HLS 分片格式");
+      return;
+    }
+    if (item.processStatus === "pending" || item.processStatus === "processing") {
+      toast.info("该视频正在处理中");
+      return;
+    }
+    if (!window.confirm(`确定将“${item.name}”重新处理为 HLS 分片吗？处理期间学生端暂时不能播放该视频。`)) return;
+
+    setReprocessingItemId(item.id);
+    try {
+      await adminContentService.reprocessMediaItem(type, item.id);
+      toast.success("已加入 HLS 重新处理队列");
+      await refreshAll();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "视频重新处理失败");
+    } finally {
+      setReprocessingItemId("");
+    }
+  };
+
   const toggleItemSelection = (itemId: string) => {
     setSelectedItemIds((current) => (current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]));
   };
@@ -355,17 +383,34 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
       return;
     }
 
+    const oversizedFiles = uploadFiles.filter((file) => file.size > MAX_MEDIA_UPLOAD_FILE_SIZE);
+    if (oversizedFiles.length > 0) {
+      toast.error(`单个文件不能超过 2GB，请拆分或压缩：${oversizedFiles[0].name}`);
+      return;
+    }
+
+    const targetFolderId = uploadFolderId;
+    const filesToUpload = [...uploadFiles];
+    const scriptToUpload = uploadScript;
     setUploadingMedia(true);
+    setShowUploadDialog(false);
+    setUploadFiles([]);
+    setUploadScript("");
+    setSelectedFolderId(targetFolderId);
+    toast.info(`已开始上传 ${filesToUpload.length} 个${labels.single}，可继续操作页面`);
+
     try {
-      const uploaded = await adminContentService.uploadMediaItems(type, uploadFolderId, uploadFiles, uploadScript);
-      toast.success(`已上传 ${uploaded.length} 个${labels.single}，后台处理中`);
-      setShowUploadDialog(false);
-      setUploadFiles([]);
-      setUploadScript("");
-      setSelectedFolderId(uploadFolderId);
+      let uploadedCount = 0;
+      for (const [index, file] of filesToUpload.entries()) {
+        const script = filesToUpload.length === 1 || index === 0 ? scriptToUpload : "";
+        const uploaded = await adminContentService.uploadMediaItems(type, targetFolderId, [file], script);
+        uploadedCount += uploaded.length;
+      }
+      toast.success(`已上传 ${uploadedCount} 个${labels.single}，后台处理中`);
       await refreshAll();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `上传${labels.single}失败`);
+      toast.error(error instanceof Error ? error.message : `部分${labels.single}上传失败`);
+      await refreshAll();
     } finally {
       setUploadingMedia(false);
     }
@@ -389,9 +434,9 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
             <p className="mt-2 text-sm text-slate-500">集中维护名称、文件夹、文稿、讲义、引用课程和处理状态。</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" onClick={openUploadDialog}>
+            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={uploadingMedia} onClick={openUploadDialog}>
               <UploadCloud className="mr-2 size-4" />
-              上传{labels.single}
+              {uploadingMedia ? "上传中..." : `上传${labels.single}`}
             </Button>
             <Button
               className="bg-blue-600 text-white hover:bg-blue-700"
@@ -582,6 +627,9 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
                       <td className="px-4 py-4">
                         <p className="max-w-sm truncate font-medium text-slate-900">{item.name}</p>
                         <p className="mt-1 text-xs text-slate-500">时长 {formatDuration(item.duration)} · {item.mimeType || "未知格式"}</p>
+                        {type === "video" ? (
+                          <p className="mt-1 text-xs text-slate-500">{item.objectKey?.endsWith("/index.m3u8") ? "播放格式：HLS 分片" : "播放格式：单文件视频"}</p>
+                        ) : null}
                         <p className="mt-1 max-w-sm truncate text-xs text-slate-400">{item.objectKey || item.objectUrl || "无文件标识"}</p>
                       </td>
                       <td className="px-4 py-4">
@@ -606,6 +654,17 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
                       <td className="px-4 py-4 text-xs text-slate-500">{item.uploadedAt || "-"}</td>
                       <td className="px-4 py-4">
                         <div className="flex justify-end gap-2">
+                          {type === "video" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-amber-200 bg-white text-amber-700 hover:bg-amber-50"
+                              disabled={reprocessingItemId === item.id || item.objectKey?.endsWith("/index.m3u8") || item.processStatus === "pending" || item.processStatus === "processing"}
+                              onClick={() => void reprocessVideoItem(item)}
+                            >
+                              {reprocessingItemId === item.id ? "入队中" : "重转 HLS"}
+                            </Button>
+                          ) : null}
                           <Button variant="outline" size="sm" className="border-slate-200 bg-white" onClick={() => openEditItem(item)}>
                             编辑
                           </Button>
@@ -725,8 +784,8 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
             <DialogTitle>上传{labels.single}到{labels.title}</DialogTitle>
             <DialogDescription>
               {type === "video"
-                ? "视频会先进入后台解码/转码队列，处理完成后可在课程中引用。支持长视频上传。"
-                : "音频会先进入后台解码/转码队列，处理完成后可在课程中引用。"}
+                ? "视频会逐个上传并进入后台解码/转码队列，处理完成后可在课程中引用。单个文件最大 2GB。"
+                : "音频会逐个上传并进入后台解码/转码队列，处理完成后可在课程中引用。单个文件最大 2GB。"}
             </DialogDescription>
           </DialogHeader>
 
@@ -813,8 +872,8 @@ export function MediaLibraryManagement({ type }: { type: AdminCourseType }) {
 
               <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
                 {type === "video"
-                  ? "上传后会转成浏览器更稳定的 MP4 播放格式。长视频处理时间会更久，处理期间请在列表中查看状态。"
-                  : "上传后会统一处理为更适合在线播放的音频格式。处理完成前不能添加到课程。"}
+                  ? "点击开始上传后弹窗会关闭，文件会按顺序上传。长视频处理时间会更久，处理期间请在列表中查看状态。"
+                  : "点击开始上传后弹窗会关闭，文件会按顺序上传。处理完成前不能添加到课程。"}
               </div>
             </aside>
           </div>

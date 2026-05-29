@@ -8,7 +8,7 @@ import { ok, fail } from "../lib/response.js";
 import { serializeAudio, serializeFolder, serializeTag, serializeVideo, serializeVideoFolder } from "../lib/serializers.js";
 import { serializeCourseWithCounts } from "../lib/course-content.js";
 import { formatDateTime } from "../lib/time.js";
-import { uploadBuffer } from "../lib/upload.js";
+import { deleteObjectPrefix, uploadBuffer } from "../lib/upload.js";
 import { cleanupObjectIfReplaced, cleanupObjectIfUnused } from "../lib/assets.js";
 import { normalizeDisplayText } from "../lib/text.js";
 import { writeAdminAuditLog } from "../lib/admin-audit.js";
@@ -17,6 +17,7 @@ import {
   enqueueMediaProcessing,
   getMediaUploadTempRoot,
   promoteMediaUploadSource,
+  restageMediaSourceFromObject,
 } from "../lib/media-processing.js";
 
 const CONTENT_MANAGER_ROLES = ["super_admin", "operations_admin"];
@@ -132,7 +133,13 @@ const serializeMediaLibraryItem = (type, item) => (type === "video" ? serializeV
 
 const cleanupMediaObjectKeys = async (items = []) => {
   const keys = [...new Set(items.flatMap((item) => [item?.objectKey, item?.handoutObjectKey]).map((item) => `${item ?? ""}`.trim()).filter(Boolean))];
-  await Promise.all(keys.map((key) => cleanupObjectIfUnused(key)));
+  await Promise.all(
+    keys.map((key) =>
+      key.endsWith("/index.m3u8")
+        ? deleteObjectPrefix(key.slice(0, -"index.m3u8".length)).catch(() => cleanupObjectIfUnused(key))
+        : cleanupObjectIfUnused(key),
+    ),
+  );
 };
 
 const parseOpenTime = (value) => {
@@ -1761,6 +1768,58 @@ adminContentRouter.post("/media/items/upload", mediaUpload.array("files"), async
   });
 
   return ok(res, created, `${type === "video" ? "视频" : "音频"}已上传，正在后台处理`);
+});
+
+adminContentRouter.post("/media/items/:itemId/reprocess", async (req, res) => {
+  const type = readStrictMediaType(req.body?.type);
+  if (!type) return fail(res, "素材类型不正确", 400);
+  if (type !== "video") return fail(res, "当前仅支持视频重新转 HLS", 400);
+
+  const item = await prisma.video.findUnique({
+    where: { id: req.params.itemId },
+    select: {
+      id: true,
+      name: true,
+      objectKey: true,
+      processStatus: true,
+    },
+  });
+  if (!item) return fail(res, "视频不存在", 404);
+  if (!item.objectKey) return fail(res, "该视频没有可重新处理的文件", 400);
+  if (item.objectKey.endsWith("/index.m3u8")) return fail(res, "该视频已经是 HLS 分片格式", 400);
+  if (item.processStatus === "pending" || item.processStatus === "processing") return fail(res, "该视频正在处理中，请稍后再试", 400);
+
+  try {
+    await restageMediaSourceFromObject({
+      type: "video",
+      itemId: item.id,
+      objectKey: item.objectKey,
+      originalName: item.name,
+    });
+    const nextItem = await prisma.video.update({
+      where: { id: item.id },
+      data: {
+        processStatus: "pending",
+        processMessage: "已加入 HLS 重新处理队列",
+      },
+      include: includeMediaLibraryRelations("video"),
+    });
+    enqueueMediaProcessing("video", item.id);
+
+    await writeAdminAuditLog(req, {
+      action: "reprocess_video_hls",
+      entityType: "video",
+      entityId: item.id,
+      entityName: item.name,
+      detail: {
+        previousObjectKey: item.objectKey,
+      },
+    });
+
+    return ok(res, serializeVideoLibraryItem(nextItem), "视频已加入 HLS 重新处理队列");
+  } catch (error) {
+    return fail(res, error instanceof Error ? error.message : "视频重新处理失败", 500);
+  }
 });
 
 adminContentRouter.post("/media/handout/upload", handoutUpload.single("file"), async (req, res) => {

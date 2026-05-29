@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, MouseEvent as ReactMouseEvent, ReactNode, SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
+import Hls from "hls.js";
 import {
   Bell, BookOpen, BarChart2, MessageCircle, Trophy,
   Scale, Swords, ChevronRight, FileText, Target,
@@ -430,7 +431,7 @@ const mapLegacyCourseDetail = (payload: LegacyCourseDetailPayload, appCourse: Ap
       .map(lesson => ({
         id: `${chapter.id}-${lesson.id}`,
         name: lesson.handoutName || `${lesson.title}讲义`,
-        size: "得宝课程资料",
+        size: "得恩法考课程资料",
         type: "pdf",
         url: lesson.handoutUrl,
         courseId: payload.course.id,
@@ -444,7 +445,7 @@ const mapLegacyCourseDetail = (payload: LegacyCourseDetailPayload, appCourse: Ap
       ? {
           id: `${payload.course.id}-course-handout`,
           name: payload.course.handoutName || `${payload.course.name}讲义`,
-          size: "得宝课程资料",
+          size: "得恩法考课程资料",
           type: "pdf",
           url: payload.course.handoutUrl,
           courseId: payload.course.id,
@@ -517,6 +518,29 @@ const updateLessonProgressInChapters = (chapters: ChapterModel[], lessonId: stri
 const calcLessonPercent = (lesson: LessonModel | null) => {
   if (!lesson || lesson.durationSeconds <= 0) return lesson?.done ? 100 : 0;
   return Math.max(0, Math.min(100, Math.round((lesson.progressSeconds / lesson.durationSeconds) * 100)));
+};
+
+const getLessonLearnedSeconds = (lesson: LessonModel) => {
+  const savedSeconds = Math.max(0, lesson.savedProgressSeconds ?? 0);
+  const playbackSeconds = Math.max(0, lesson.progressSeconds ?? 0);
+  const durationSeconds = Math.max(0, lesson.durationSeconds ?? parseDurationToSeconds(lesson.duration));
+  if (lesson.done && durationSeconds > 0) return durationSeconds;
+  const learnedSeconds = Math.max(savedSeconds, playbackSeconds);
+  return durationSeconds > 0 ? Math.min(learnedSeconds, durationSeconds) : learnedSeconds;
+};
+
+const calcCourseLearningProgress = (chapters: ChapterModel[]) => {
+  const lessons = chapters.flatMap(chapter => chapter.lessons).filter(lesson => lesson.id !== "__empty__");
+  const totalLessons = lessons.length;
+  const completedLessons = lessons.filter(lesson => lesson.done).length;
+  const totalDurationSeconds = lessons.reduce((sum, lesson) => sum + Math.max(0, lesson.durationSeconds ?? parseDurationToSeconds(lesson.duration)), 0);
+  const learnedSeconds = lessons.reduce((sum, lesson) => sum + getLessonLearnedSeconds(lesson), 0);
+  const percent = totalDurationSeconds > 0
+    ? Math.max(0, Math.min(100, Math.round((learnedSeconds / totalDurationSeconds) * 100)))
+    : totalLessons > 0
+    ? Math.round((completedLessons / totalLessons) * 100)
+    : 0;
+  return { totalLessons, completedLessons, percent };
 };
 
 const inferCourseCategory = (course: LegacyCourse) => {
@@ -2651,7 +2675,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
             </div>
             {/* Meta */}
             <div className="debao-audio-meta" style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 10, color: `${c.color}99`, fontWeight: 600, marginBottom: 2, letterSpacing: "0.04em" }}>{c.title} · 得宝音频</div>
+              <div style={{ fontSize: 10, color: `${c.color}99`, fontWeight: 600, marginBottom: 2, letterSpacing: "0.04em" }}>{c.title} · 得恩法考音频</div>
               <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 15, fontWeight: 700, color: "#dde4f0", marginBottom: 1 }}>{currentLesson.title}</div>
               <div style={{ fontSize: 11, color: "#3a5570" }}>主讲：{c.teacher} · 时长 {currentLesson.duration} · {currentLesson.mediaUrl ? "媒体已连接" : "等待媒体地址"}</div>
             </div>
@@ -2696,7 +2720,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
             </div>
             <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#c8d8ee", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentLesson.title}</div>
-              <div style={{ fontSize: 10, color: "#2e4260" }}>{currentLesson.mediaUrl ? "得宝媒体" : c.teacher}</div>
+              <div style={{ fontSize: 10, color: "#2e4260" }}>{currentLesson.mediaUrl ? "得恩法考媒体" : c.teacher}</div>
             </div>
           </div>
 
@@ -2793,6 +2817,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   const appCourse = course;
   const isLegacyCourse = appCourse.source === "legacy";
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoPlayerRef = useRef<HTMLDivElement | null>(null);
   const lastSavedVideoProgressRef = useRef(-1);
   const initialDetail = makeCourseShellDetail(appCourse, "正在读取课程目录", "课程目录同步中", "正在读取课程目录，请稍候。");
   const [detail, setDetail] = useState<ResolvedCourseDetail>(() => initialDetail);
@@ -2803,6 +2828,9 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteSaving, setNoteSaving] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [videoVolume, setVideoVolume] = useState(80);
+  const [videoSpeed, setVideoSpeed] = useState("1.0");
+  const [showVideoSpeedMenu, setShowVideoSpeedMenu] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [savingVideoProgress, setSavingVideoProgress] = useState(false);
   const [detailError, setDetailError] = useState("");
@@ -2866,10 +2894,13 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   }, [appCourse.id, isLegacyCourse]);
 
   const c = detail;
-  const totalDone = c.chapters.reduce((s, ch) => s + ch.done, 0);
-  const totalLessons = c.chapters.reduce((s, ch) => s + ch.total, 0);
-  const progressPct = totalLessons > 0 ? Math.round((totalDone / totalLessons) * 100) : 0;
+  const courseLearningProgress = calcCourseLearningProgress(c.chapters);
+  const totalDone = courseLearningProgress.completedLessons;
+  const totalLessons = courseLearningProgress.totalLessons;
+  const progressPct = courseLearningProgress.percent;
   const lessonProgressPct = calcLessonPercent(currentLesson);
+  const videoSpeeds = ["0.75", "1.0", "1.25", "1.5", "2.0"];
+  const videoVolumePct = Math.max(0, Math.min(100, videoVolume));
 
   const toggleChapter = (id: string) =>
     setExpandedChapters(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
@@ -2944,6 +2975,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     if (!isLegacyCourse || currentLesson.source !== "legacy" || !currentLesson.mediaUrl || currentLesson.id === "__empty__") return;
     const lessonId = currentLesson.id;
     const progressSeconds = Math.max(0, Math.floor(seconds));
+    if (!complete && currentLesson.done) return;
     if (!complete && Math.abs(progressSeconds - lastSavedVideoProgressRef.current) < 10) return;
 
     lastSavedVideoProgressRef.current = progressSeconds;
@@ -2975,6 +3007,39 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
 
     selectLesson(adjacent);
   };
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const mediaUrl = currentLesson.mediaUrl;
+    if (!video || !mediaUrl) return;
+
+    if (!mediaUrl.includes(".m3u8")) {
+      video.src = mediaUrl;
+      return;
+    }
+
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = mediaUrl;
+      return;
+    }
+
+    if (!Hls.isSupported()) {
+      notify("当前浏览器暂不支持 HLS 视频播放，请使用最新版 Chrome、Edge 或 Safari", "warning");
+      return;
+    }
+
+    const hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+      backBufferLength: 90,
+    });
+    hls.loadSource(mediaUrl);
+    hls.attachMedia(video);
+
+    return () => {
+      hls.destroy();
+    };
+  }, [currentLesson.mediaUrl]);
 
   useEffect(() => {
     let active = true;
@@ -3023,13 +3088,48 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   };
 
   const toggleVideoPlayback = () => {
-    if (currentLesson.mediaUrl) {
+    const video = videoRef.current;
+
+    if (!currentLesson.mediaUrl) {
+      setIsPlaying(false);
+      notify(currentLesson.id === "__empty__" ? "当前课程暂无可播放课时" : "当前课时暂未配置媒体", "warning");
+      return;
+    }
+
+    if (!video) {
       setIsPlaying(p => !p);
       return;
     }
 
-    setIsPlaying(false);
-    notify(currentLesson.id === "__empty__" ? "当前课程暂无可播放课时" : "当前课时暂未配置媒体", "warning");
+    if (!video.paused && !video.ended) {
+      video.pause();
+      setIsPlaying(false);
+      return;
+    }
+
+    void video.play()
+      .then(() => setIsPlaying(true))
+      .catch(() => {
+        setIsPlaying(false);
+        notify("视频播放失败，请稍后重试", "warning");
+      });
+  };
+
+  const setVideoMuted = () => {
+    const nextVolume = videoVolumePct > 0 ? 0 : 80;
+    setVideoVolume(nextVolume);
+  };
+
+  const toggleVideoFullscreen = () => {
+    const container = videoPlayerRef.current;
+    if (!container) return;
+
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.();
+      return;
+    }
+
+    void container.requestFullscreen?.();
   };
 
   const downloadMaterial = (material: CourseMaterial) => {
@@ -3082,6 +3182,14 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
 
     notify(`${material.name} 暂无可下载地址`, "warning");
   };
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.volume = videoVolumePct / 100;
+    video.playbackRate = Number(videoSpeed) || 1;
+  }, [videoVolumePct, videoSpeed, currentLesson.mediaUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -3167,14 +3275,15 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
           </div>
 
           {/* Video player */}
-          <div className="debao-video-player" style={{ borderRadius: 18, overflow: "hidden", background: "#000", aspectRatio: "16/9", position: "relative", marginBottom: 0 }}>
+          <div ref={videoPlayerRef} className="debao-video-player" style={{ borderRadius: 18, overflow: "hidden", background: "#000", aspectRatio: "16/9", position: "relative", marginBottom: 0 }}>
             {currentLesson.mediaUrl && (
               <video
                 ref={videoRef}
-                src={currentLesson.mediaUrl}
                 preload="metadata"
                 playsInline
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", background: "#000" }}
+                onClick={toggleVideoPlayback}
+                onPlay={() => setIsPlaying(true)}
                 onLoadedMetadata={event => {
                   const target = event.currentTarget;
                   if (currentLesson.progressSeconds > 0 && Number.isFinite(target.duration)) {
@@ -3194,7 +3303,10 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                     }));
                   }
                 }}
-                onPause={event => saveVideoSeconds(event.currentTarget.currentTime)}
+                onPause={event => {
+                  setIsPlaying(false);
+                  saveVideoSeconds(event.currentTarget.currentTime);
+                }}
                 onEnded={event => {
                   setIsPlaying(false);
                   saveVideoSeconds(event.currentTarget.duration || currentLesson.durationSeconds, true);
@@ -3202,35 +3314,37 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
               />
             )}
             {/* Fake video bg */}
-            <div style={{ position: "absolute", inset: 0, background: currentLesson.mediaUrl ? "linear-gradient(to top,rgba(0,0,0,0.46),transparent 55%)" : "linear-gradient(135deg,#060e20,#0a1830)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: currentLesson.mediaUrl ? "none" : "auto" }}>
-              <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle at 30% 50%, rgba(78,142,247,0.08) 0%, transparent 60%), radial-gradient(circle at 80% 30%, rgba(29,201,164,0.05) 0%, transparent 50%)" }} />
+            <div className="debao-video-overlay" style={{ position: "absolute", inset: 0, background: currentLesson.mediaUrl ? "linear-gradient(to top,rgba(0,0,0,0.46),transparent 55%)" : "linear-gradient(135deg,#060e20,#0a1830)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: !currentLesson.mediaUrl || !isPlaying ? "auto" : "none" }}>
+              <div className="debao-video-overlay-bg" style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle at 30% 50%, rgba(78,142,247,0.08) 0%, transparent 60%), radial-gradient(circle at 80% 30%, rgba(29,201,164,0.05) 0%, transparent 50%)" }} />
               {/* Lesson title overlay */}
-              <div style={{ position: "absolute", top: 20, left: 24, right: 24 }}>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4, fontFamily: "'JetBrains Mono',monospace" }}>
-                  {currentLesson.tagName || "得宝课程"} &nbsp;/&nbsp; {loadingDetail ? "同步中" : currentLesson.mediaUrl ? "媒体已连接" : "课程内容"}
+              <div className="debao-video-title-overlay" style={{ position: "absolute", top: 20, left: 24, right: 24 }}>
+                <div className="debao-video-title-meta" style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4, fontFamily: "'JetBrains Mono',monospace" }}>
+                  {currentLesson.tagName || "得恩法考"} &nbsp;/&nbsp; {loadingDetail ? "同步中" : currentLesson.mediaUrl ? "媒体已连接" : "课程内容"}
                 </div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.85)", fontFamily: "'Noto Serif SC',serif" }}>
+                <div className="debao-video-title-text" style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.85)", fontFamily: "'Noto Serif SC',serif" }}>
                   {currentLesson.title}
                 </div>
               </div>
               {/* Big play button */}
-              <button
-                onClick={toggleVideoPlayback}
-                style={{ width: 72, height: 72, borderRadius: "50%", background: isPlaying ? "rgba(78,142,247,0.2)" : "rgba(255,255,255,0.12)", border: "2px solid rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", cursor: currentLesson.mediaUrl ? "pointer" : "not-allowed", backdropFilter: "blur(8px)", transition: "all 0.2s", zIndex: 2, pointerEvents: "auto" }}>
-                {isPlaying
-                  ? <div style={{ display: "flex", gap: 5 }}><div style={{ width: 4, height: 22, background: "#fff", borderRadius: 2 }} /><div style={{ width: 4, height: 22, background: "#fff", borderRadius: 2 }} /></div>
-                  : <Play size={28} color="#fff" fill="#fff" style={{ marginLeft: 4 }} />}
-              </button>
+              {(!currentLesson.mediaUrl || !isPlaying) && (
+                <button
+                  className="debao-video-big-play"
+                  onClick={toggleVideoPlayback}
+                  style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(255,255,255,0.12)", border: "2px solid rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", cursor: currentLesson.mediaUrl ? "pointer" : "not-allowed", backdropFilter: "blur(8px)", transition: "all 0.2s", zIndex: 2, pointerEvents: "auto" }}>
+                  <Play size={28} color="#fff" fill="#fff" style={{ marginLeft: 4 }} />
+                </button>
+              )}
               {/* Duration badge */}
-              <div style={{ position: "absolute", bottom: 60, right: 20, fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono',monospace" }}>
+              <div className="debao-video-duration-badge" style={{ position: "absolute", bottom: 60, right: 20, fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono',monospace" }}>
                 {currentLesson.duration}
               </div>
             </div>
 
             {/* Controls bar */}
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top,rgba(0,0,0,0.85),transparent)", padding: "28px 20px 14px" }}>
+            <div className="debao-video-controls-bar" style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top,rgba(0,0,0,0.85),transparent)", padding: "28px 20px 14px" }}>
               {/* Progress scrubber */}
               <div
+                className="debao-video-progress-scrubber"
                 style={{ height: 3, background: "rgba(255,255,255,0.15)", borderRadius: 3, marginBottom: 12, cursor: currentLesson.mediaUrl ? "pointer" : "default", position: "relative" }}
                 onClick={event => {
                   if (!videoRef.current || !currentLesson.mediaUrl) return;
@@ -3247,20 +3361,55 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                   saveVideoSeconds(seconds, ratio >= 0.99);
                 }}
               >
-                <div style={{ height: "100%", width: `${lessonProgressPct}%`, background: `linear-gradient(90deg,${c.color},${c.color}cc)`, borderRadius: 3 }} />
-                <div style={{ position: "absolute", left: `${lessonProgressPct}%`, top: "50%", transform: "translate(-50%,-50%)", width: 10, height: 10, borderRadius: "50%", background: c.color, boxShadow: `0 0 6px ${c.color}` }} />
+                <div className="debao-video-progress-fill" style={{ height: "100%", width: `${lessonProgressPct}%`, background: `linear-gradient(90deg,${c.color},${c.color}cc)`, borderRadius: 3 }} />
+                <div className="debao-video-progress-knob" style={{ position: "absolute", left: `${lessonProgressPct}%`, top: "50%", transform: "translate(-50%,-50%)", width: 10, height: 10, borderRadius: "50%", background: c.color, boxShadow: `0 0 6px ${c.color}` }} />
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <button onClick={toggleVideoPlayback} style={{ background: "none", border: "none", cursor: currentLesson.mediaUrl ? "pointer" : "not-allowed", color: "#fff", display: "flex" }}>
+              <div className="debao-video-controls-row" style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <button className="debao-video-control-button debao-video-play-button" onClick={toggleVideoPlayback} style={{ background: "none", border: "none", cursor: currentLesson.mediaUrl ? "pointer" : "not-allowed", color: "#fff", display: "flex" }}>
                   {isPlaying ? <div style={{ display: "flex", gap: 3 }}><div style={{ width: 3, height: 14, background: "#fff", borderRadius: 1 }} /><div style={{ width: 3, height: 14, background: "#fff", borderRadius: 1 }} /></div> : <Play size={16} fill="#fff" color="#fff" />}
                 </button>
-                <button onClick={() => moveVideoLesson("prev")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 0 }}><SkipBack size={15} color="rgba(255,255,255,0.6)" /></button>
-                <button onClick={() => moveVideoLesson("next")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 0 }}><SkipForward size={15} color="rgba(255,255,255,0.6)" /></button>
-                <Volume2 size={15} color="rgba(255,255,255,0.6)" />
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono',monospace", marginLeft: 2 }}>{formatDuration(currentLesson.progressSeconds)} / {currentLesson.duration}</span>
-                <div style={{ marginLeft: "auto", display: "flex", gap: 14, alignItems: "center" }}>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>1.0x</span>
-                  <Maximize2 size={14} color="rgba(255,255,255,0.6)" />
+                <button className="debao-video-control-button debao-video-prev-button" onClick={() => moveVideoLesson("prev")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 0 }}><SkipBack size={15} color="rgba(255,255,255,0.6)" /></button>
+                <button className="debao-video-control-button debao-video-next-button" onClick={() => moveVideoLesson("next")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 0 }}><SkipForward size={15} color="rgba(255,255,255,0.6)" /></button>
+                <div className="debao-video-volume-control" style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <button className="debao-video-control-button debao-video-volume-button" type="button" onClick={setVideoMuted} aria-label="静音" title={videoVolumePct > 0 ? "静音" : "恢复音量"} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 0 }}>
+                    <Volume2 size={15} color={videoVolumePct > 0 ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.32)"} />
+                  </button>
+                  <div
+                    className="debao-video-volume-slider"
+                    style={{ width: 64, height: 3, background: "rgba(255,255,255,0.14)", borderRadius: 2, cursor: "pointer" }}
+                    onClick={event => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const nextVolume = Math.max(0, Math.min(100, Math.round(((event.clientX - rect.left) / rect.width) * 100)));
+                      setVideoVolume(nextVolume);
+                    }}
+                  >
+                    <div style={{ height: "100%", width: `${videoVolumePct}%`, background: "rgba(255,255,255,0.52)", borderRadius: 2 }} />
+                  </div>
+                </div>
+                <span className="debao-video-time-label" style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono',monospace", marginLeft: 2 }}>{formatDuration(currentLesson.progressSeconds)} / {currentLesson.duration}</span>
+                <div className="debao-video-right-controls" style={{ marginLeft: "auto", display: "flex", gap: 14, alignItems: "center" }}>
+                  <div className="debao-video-speed-control" style={{ position: "relative" }}>
+                    <button className="debao-video-speed-button" type="button" onClick={() => setShowVideoSpeedMenu(p => !p)} style={{ padding: "4px 9px", borderRadius: 7, fontSize: 11, fontFamily: "'JetBrains Mono',monospace", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.72)", cursor: "pointer" }}>
+                      {videoSpeed}x
+                    </button>
+                    {showVideoSpeedMenu && (
+                      <div className="debao-video-speed-menu" style={{ position: "absolute", right: 0, bottom: 32, minWidth: 72, padding: 6, borderRadius: 10, background: "rgba(10,16,28,0.96)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 12px 30px rgba(0,0,0,0.35)", display: "flex", flexDirection: "column", gap: 2, zIndex: 4 }}>
+                        {videoSpeeds.map(sp => (
+                          <button
+                            key={sp}
+                            type="button"
+                            onClick={() => { setVideoSpeed(sp); setShowVideoSpeedMenu(false); }}
+                            style={{ padding: "6px 10px", borderRadius: 7, border: "none", background: videoSpeed === sp ? `${c.color}24` : "transparent", color: videoSpeed === sp ? c.color : "rgba(255,255,255,0.68)", fontSize: 12, fontFamily: "'JetBrains Mono',monospace", cursor: "pointer", textAlign: "left" }}
+                          >
+                            {sp}x
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button className="debao-video-control-button debao-video-fullscreen-button" type="button" onClick={toggleVideoFullscreen} aria-label="全屏" title="全屏" style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 0 }}>
+                    <Maximize2 size={14} color="rgba(255,255,255,0.6)" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -3278,9 +3427,6 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
               </button>
               <button onClick={() => moveVideoLesson("next")} style={{ padding: "7px 16px", borderRadius: 9, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12, color: "#5a7898", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                 下一讲 <SkipForward size={13} />
-              </button>
-              <button onClick={() => saveVideoProgress(true)} style={{ padding: "7px 16px", borderRadius: 9, background: `${c.color}14`, border: `1px solid ${c.color}30`, fontSize: 12, color: c.color, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
-                标记学完 <CheckCircle2 size={13} />
               </button>
             </div>
           </div>
@@ -3307,7 +3453,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
               <div className="debao-video-intro-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
                 {[
                   { label: "课程总讲数", value: `${c.lessons} 讲`, icon: ListVideo, color: c.color },
-                  { label: "内容来源",   value: "得宝课程", icon: Users, color: "#1dc9a4" },
+                  { label: "内容来源",   value: "得恩法考", icon: Users, color: "#1dc9a4" },
                   { label: "同步状态",   value: loadingDetail ? "同步中" : "完成", icon: Star, color: "#c9973e" },
                 ].map(s => {
                   const Icon = s.icon;

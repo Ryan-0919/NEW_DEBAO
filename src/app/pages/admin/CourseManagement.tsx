@@ -60,9 +60,11 @@ const formatDuration = (seconds = 0) => {
 };
 const formatFileSize = (bytes: number) => {
   if (!bytes) return "";
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
+const MAX_MEDIA_UPLOAD_FILE_SIZE = 2048 * 1024 * 1024;
 
 const mediaStatusMeta = (item: AdminMediaItem) => {
   if (!item.processStatus) return { label: "可用", className: "border-emerald-100 bg-emerald-50 text-emerald-700" };
@@ -569,20 +571,40 @@ export function CourseManagement() {
       return;
     }
 
+    const oversizedFiles = courseUploadFiles.filter((file) => file.size > MAX_MEDIA_UPLOAD_FILE_SIZE);
+    if (oversizedFiles.length > 0) {
+      toast.error(`单个文件不能超过 2GB，请拆分或压缩：${oversizedFiles[0].name}`);
+      return;
+    }
+
+    const targetFolderId = courseUploadFolderId;
+    const filesToUpload = [...courseUploadFiles];
+    const scriptToUpload = courseUploadScript;
     setCourseUploading(true);
+    setShowCourseMediaUploadDialog(false);
+    setCourseUploadFiles([]);
+    setCourseUploadScript("");
+    setMediaPickerFolderId(targetFolderId);
+    toast.info(`已开始上传 ${filesToUpload.length} 个${pickerTypeLabel}，可继续操作页面`);
+
     try {
-      const uploaded = await adminContentService.uploadMediaItems(pickerType, courseUploadFolderId, courseUploadFiles, courseUploadScript);
-      toast.success(`已上传 ${uploaded.length} 个${pickerTypeLabel}，后台处理完成后可添加到课程`);
-      setShowCourseMediaUploadDialog(false);
-      setCourseUploadFiles([]);
-      setCourseUploadScript("");
-      setMediaPickerFolderId(courseUploadFolderId);
+      let uploadedCount = 0;
+      for (const [index, file] of filesToUpload.entries()) {
+        const script = filesToUpload.length === 1 || index === 0 ? scriptToUpload : "";
+        const uploaded = await adminContentService.uploadMediaItems(pickerType, targetFolderId, [file], script);
+        uploadedCount += uploaded.length;
+      }
+      toast.success(`已上传 ${uploadedCount} 个${pickerTypeLabel}，后台处理完成后可添加到课程`);
       await Promise.all([
         adminContentService.getMediaFolders(pickerType).then(setMediaPickerFolders),
-        loadMediaPickerItems(1, mediaPickerKeyword, courseUploadFolderId),
+        loadMediaPickerItems(1, mediaPickerKeyword, targetFolderId),
       ]);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `上传${pickerTypeLabel}失败`);
+      toast.error(error instanceof Error ? error.message : `部分${pickerTypeLabel}上传失败`);
+      await Promise.all([
+        adminContentService.getMediaFolders(pickerType).then(setMediaPickerFolders),
+        loadMediaPickerItems(1, mediaPickerKeyword, targetFolderId),
+      ]);
     } finally {
       setCourseUploading(false);
     }
@@ -1298,9 +1320,9 @@ export function CourseManagement() {
                 当前：{selectedPickerFolder?.name ?? "全部文件夹"} · 共 {mediaPickerResult?.total ?? 0} 条 · 已选 {selectedMediaIds.length} 个
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" onClick={openCourseMediaUploadDialog}>
+                <Button variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" disabled={courseUploading} onClick={openCourseMediaUploadDialog}>
                   <UploadCloud className="size-4" />
-                  批量上传{pickerTypeLabel}
+                  {courseUploading ? "上传中..." : `批量上传${pickerTypeLabel}`}
                 </Button>
                 <Button variant="outline" className="border-slate-200 bg-white text-slate-700" disabled={visibleSelectableMediaIds.length === 0} onClick={toggleVisibleMediaSelection}>
                   {allVisibleMediaSelected ? "取消本页选择" : "选择本页"}
@@ -1407,7 +1429,7 @@ export function CourseManagement() {
           <DialogHeader className="border-b border-slate-200 px-6 py-5">
             <DialogTitle>批量上传{pickerTypeLabel}</DialogTitle>
             <DialogDescription>
-              文件会先进入{pickerTypeLabel}库处理队列，处理完成后再从列表中添加到当前课程，避免学生端播放未完成的内容。
+              文件会逐个上传到{pickerTypeLabel}库处理队列，处理完成后再从列表中添加到当前课程。单个文件最大 2GB。
             </DialogDescription>
           </DialogHeader>
 
@@ -1494,8 +1516,8 @@ export function CourseManagement() {
 
               <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
                 {pickerType === "video"
-                  ? "视频上传后会统一解码并转成 MP4，长视频处理时间会更久。处理完成前列表中不会作为可添加内容。"
-                  : "音频上传后会统一处理为在线播放格式。处理完成前列表中不会作为可添加内容。"}
+                  ? "点击开始上传后弹窗会关闭，视频会按顺序上传并生成 HLS 分片。处理完成前列表中不会作为可添加内容。"
+                  : "点击开始上传后弹窗会关闭，音频会按顺序上传并处理为在线播放格式。处理完成前列表中不会作为可添加内容。"}
               </div>
             </aside>
           </div>

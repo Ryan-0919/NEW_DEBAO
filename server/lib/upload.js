@@ -167,6 +167,43 @@ export const uploadFile = async ({ fileName, filePath, mimeType, folder }) => {
   };
 };
 
+export const uploadFileToObjectKey = async ({ objectKey, filePath, mimeType }) => {
+  ensureOssConfigured();
+
+  const normalizedObjectKey = `${objectKey ?? ""}`.trim();
+  if (!normalizedObjectKey) throw new Error("上传对象路径不能为空");
+  const contentType = mimeType || lookupMime(filePath) || "application/octet-stream";
+
+  await ossClient.multipartUpload(normalizedObjectKey, filePath, {
+    timeout: config.ossTimeoutMs,
+    parallel: config.ossMultipartParallel,
+    mime: contentType,
+    headers: {
+      "Content-Type": contentType,
+    },
+  });
+
+  return {
+    objectKey: normalizedObjectKey,
+    url: buildPublicUrl(normalizedObjectKey, buildOriginObjectUrl(normalizedObjectKey)),
+    readableUrl: getReadableObjectUrl({
+      objectKey: normalizedObjectKey,
+      fallbackUrl: buildPublicUrl(normalizedObjectKey, buildOriginObjectUrl(normalizedObjectKey)),
+    }),
+  };
+};
+
+export const downloadObjectToFile = async ({ objectKey, filePath }) => {
+  ensureOssConfigured();
+
+  const normalizedObjectKey = `${objectKey ?? ""}`.trim();
+  if (!normalizedObjectKey) throw new Error("下载对象路径不能为空");
+  if (!filePath) throw new Error("下载目标路径不能为空");
+
+  await ossClient.get(normalizedObjectKey, filePath);
+  return filePath;
+};
+
 export const deleteObject = async (objectKey = "") => {
   ensureOssConfigured();
 
@@ -174,5 +211,31 @@ export const deleteObject = async (objectKey = "") => {
   if (!normalized) return false;
 
   await ossClient.delete(normalized);
+  return true;
+};
+
+export const deleteObjectPrefix = async (prefix = "") => {
+  ensureOssConfigured();
+
+  const normalizedPrefix = `${prefix ?? ""}`.trim();
+  if (!normalizedPrefix) return false;
+
+  let marker = undefined;
+  do {
+    const result = await ossClient.list(
+      {
+        prefix: normalizedPrefix,
+        marker,
+        "max-keys": 1000,
+      },
+      {},
+    );
+    const objects = result.objects ?? [];
+    if (objects.length > 0) {
+      await ossClient.deleteMulti(objects.map((object) => object.name), { quiet: true });
+    }
+    marker = result.nextMarker;
+  } while (marker);
+
   return true;
 };

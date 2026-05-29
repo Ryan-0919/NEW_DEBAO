@@ -373,6 +373,8 @@ export const adminContentService = {
       body: formData,
     });
   },
+  reprocessMediaItem: (type: AdminCourseType, itemId: string) =>
+    adminPostJson<AdminMediaItem>(`/api/admin/content/media/items/${itemId}/reprocess`, { type }),
   uploadCourseAsset: (assetType: "cover" | "handout", file: File) => {
     const formData = new FormData();
     formData.set("assetType", assetType);

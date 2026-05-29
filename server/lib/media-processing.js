@@ -1,16 +1,18 @@
 import fs from "node:fs";
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readdir, rename, rm } from "node:fs/promises";
-import { dirname, extname, join, resolve } from "node:path";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { lookup as lookupMime } from "mime-types";
 import { config } from "./config.js";
 import { getMediaDurationFromFile } from "./media-duration.js";
 import { prisma } from "./prisma.js";
-import { deleteObject, uploadFile } from "./upload.js";
+import { deleteObject, deleteObjectPrefix, downloadObjectToFile, uploadFile, uploadFileToObjectKey } from "./upload.js";
 
 const MEDIA_SOURCE_BASENAME = "source";
 const AUDIO_OUTPUT_FILE = "processed.mp3";
 const VIDEO_OUTPUT_FILE = "processed.mp4";
+const VIDEO_HLS_OUTPUT_DIR = "hls";
+const VIDEO_HLS_PLAYLIST_FILE = "index.m3u8";
 
 const MEDIA_OBJECT_FOLDERS = {
   audio: "audios/library",
@@ -135,10 +137,126 @@ const runFfmpeg = ({ inputPath, outputPath, type }) =>
     });
   });
 
+const runFfmpegHls = ({ inputPath, outputDir }) =>
+  new Promise((resolvePromise, rejectPromise) => {
+    const command = config.ffmpegPath || "ffmpeg";
+    const playlistPath = join(outputDir, VIDEO_HLS_PLAYLIST_FILE);
+    const segmentPath = join(outputDir, "segment-%05d.ts");
+    const args = [
+      "-y",
+      "-i",
+      inputPath,
+      "-map",
+      "0:v:0?",
+      "-map",
+      "0:a:0?",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "23",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
+      "-hls_time",
+      "8",
+      "-hls_playlist_type",
+      "vod",
+      "-hls_segment_filename",
+      segmentPath,
+      "-f",
+      "hls",
+      playlistPath,
+    ];
+
+    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      if (stderr.length > 12_000) stderr = stderr.slice(-12_000);
+    });
+
+    child.on("error", rejectPromise);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolvePromise();
+        return;
+      }
+
+      const lastLine = stderr
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .at(-1);
+
+      rejectPromise(new Error(lastLine ? `FFmpeg HLS 处理失败：${lastLine}` : "FFmpeg HLS 处理失败"));
+    });
+  });
+
+const listFilesRecursive = async (dirPath) => {
+  const entries = await readdir(dirPath, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const fullPath = join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listFilesRecursive(fullPath)));
+      continue;
+    }
+    if (entry.isFile()) files.push(fullPath);
+  }
+
+  return files;
+};
+
+const getHlsMimeType = (filePath) => {
+  const extension = extname(filePath).toLowerCase();
+  if (extension === ".m3u8") return "application/vnd.apple.mpegurl";
+  if (extension === ".ts") return "video/mp2t";
+  return lookupMime(filePath) || "application/octet-stream";
+};
+
+const uploadHlsDirectory = async ({ type, itemId, outputDir }) => {
+  const files = await listFilesRecursive(outputDir);
+  const playlistPath = join(outputDir, VIDEO_HLS_PLAYLIST_FILE);
+  if (!files.includes(playlistPath)) throw new Error("HLS 播放列表生成失败");
+
+  const baseObjectPrefix = `${MEDIA_OBJECT_FOLDERS[type]}/hls/${itemId}`;
+  let playlistUpload = null;
+
+  for (const filePath of files) {
+    const relativePath = relative(outputDir, filePath).replace(/\\/g, "/");
+    const uploaded = await uploadFileToObjectKey({
+      objectKey: `${baseObjectPrefix}/${relativePath}`,
+      filePath,
+      mimeType: getHlsMimeType(filePath),
+    });
+    if (relativePath === VIDEO_HLS_PLAYLIST_FILE) playlistUpload = uploaded;
+  }
+
+  if (!playlistUpload) throw new Error("HLS 播放列表上传失败");
+  return playlistUpload;
+};
+
 const buildProcessedPayload = async ({ type, item, sourcePath }) => {
   const outputFile = type === "video" ? VIDEO_OUTPUT_FILE : AUDIO_OUTPUT_FILE;
   const outputPath = join(getWorkDir(type, item.id), outputFile);
   const shouldTranscode = type === "video" || config.audioTranscodeEnabled;
+
+  if (type === "video") {
+    const outputDir = join(getWorkDir(type, item.id), VIDEO_HLS_OUTPUT_DIR);
+    await mkdir(outputDir, { recursive: true });
+    await runFfmpegHls({ inputPath: sourcePath, outputDir });
+    return {
+      directoryPath: outputDir,
+      mimeType: "application/vnd.apple.mpegurl",
+      fileName: `${item.name || type}.m3u8`,
+      hls: true,
+    };
+  }
 
   if (shouldTranscode) {
     try {
@@ -209,14 +327,20 @@ const processQueuedMedia = async (type, itemId) => {
 
   try {
     const uploadPayload = await buildProcessedPayload({ type, item, sourcePath });
-    const duration = await getMediaDurationFromFile({ filePath: uploadPayload.filePath, ffprobePath: config.ffprobePath || "ffprobe" });
+    const duration = await getMediaDurationFromFile({ filePath: sourcePath, ffprobePath: config.ffprobePath || "ffprobe" });
 
-    uploaded = await uploadFile({
-      fileName: uploadPayload.fileName,
-      filePath: uploadPayload.filePath,
-      mimeType: uploadPayload.mimeType,
-      folder: MEDIA_OBJECT_FOLDERS[type],
-    });
+    uploaded = uploadPayload.hls
+      ? await uploadHlsDirectory({
+          type,
+          itemId: item.id,
+          outputDir: uploadPayload.directoryPath,
+        })
+      : await uploadFile({
+          fileName: uploadPayload.fileName,
+          filePath: uploadPayload.filePath,
+          mimeType: uploadPayload.mimeType,
+          folder: MEDIA_OBJECT_FOLDERS[type],
+        });
 
     await model.update({
       where: { id: itemId },
@@ -231,7 +355,10 @@ const processQueuedMedia = async (type, itemId) => {
     });
 
     if (item.objectKey && item.objectKey !== uploaded.objectKey) {
-      await deleteObject(item.objectKey).catch((error) => {
+      const cleanup = type === "video" && item.objectKey.endsWith(`/${VIDEO_HLS_PLAYLIST_FILE}`)
+        ? deleteObjectPrefix(item.objectKey.slice(0, -VIDEO_HLS_PLAYLIST_FILE.length))
+        : deleteObject(item.objectKey);
+      await cleanup.catch((error) => {
         console.error(`Cleanup old ${type} object failed:`, error);
       });
     }
@@ -239,7 +366,10 @@ const processQueuedMedia = async (type, itemId) => {
     await cleanupMediaProcessingSource(type, itemId);
   } catch (error) {
     if (uploaded?.objectKey) {
-      await deleteObject(uploaded.objectKey).catch((cleanupError) => {
+      const cleanup = type === "video" && uploaded.objectKey.endsWith(`/${VIDEO_HLS_PLAYLIST_FILE}`)
+        ? deleteObjectPrefix(uploaded.objectKey.slice(0, -VIDEO_HLS_PLAYLIST_FILE.length))
+        : deleteObject(uploaded.objectKey);
+      await cleanup.catch((cleanupError) => {
         console.error(`Cleanup uploaded ${type} object failed:`, cleanupError);
       });
     }
@@ -295,6 +425,25 @@ export const promoteMediaUploadSource = async ({ type, itemId, tempPath, origina
 
   await cleanupDir(workDir);
   await moveFile(tempPath, targetPath);
+
+  return targetPath;
+};
+
+export const restageMediaSourceFromObject = async ({ type, itemId, objectKey = "", originalName = "" }) => {
+  const normalizedObjectKey = `${objectKey ?? ""}`.trim();
+  if (!normalizedObjectKey) throw new Error("当前素材没有可重新处理的文件");
+  if (normalizedObjectKey.endsWith(`/${VIDEO_HLS_PLAYLIST_FILE}`)) throw new Error("该视频已经是 HLS 分片格式");
+
+  const extension = extname(originalName).toLowerCase() || extname(normalizedObjectKey).toLowerCase() || ".bin";
+  const workDir = getWorkDir(type, itemId);
+  const targetPath = join(workDir, `${MEDIA_SOURCE_BASENAME}${extension}`);
+
+  await cleanupDir(workDir);
+  await mkdir(workDir, { recursive: true });
+  await downloadObjectToFile({
+    objectKey: normalizedObjectKey,
+    filePath: targetPath,
+  });
 
   return targetPath;
 };

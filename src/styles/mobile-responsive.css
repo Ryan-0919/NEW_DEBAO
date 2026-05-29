@@ -1399,7 +1399,7 @@ textarea {
     display: flex !important;
     flex-direction: column !important;
     gap: 12px !important;
-    padding: 12px 12px 0 !important;
+    padding: 10px 10px 0 !important;
   }
 
   .debao-video-main {
@@ -1418,7 +1418,7 @@ textarea {
   }
 
   .debao-video-mobile-picker-trigger {
-    width: min(100%, 360px);
+    width: 100%;
     min-height: 44px !important;
     display: flex;
     align-items: center;
@@ -1459,8 +1459,8 @@ textarea {
   }
 
   .debao-video-mobile-picker-menu {
-    width: min(100%, 360px);
-    max-height: 42dvh;
+    width: 100%;
+    max-height: 46dvh;
     margin-top: 8px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -1570,22 +1570,29 @@ textarea {
   }
 
   .debao-video-player {
+    width: 100% !important;
+    aspect-ratio: 16 / 9 !important;
     border-radius: 14px !important;
     box-shadow: 0 14px 36px rgba(0,0,0,0.26);
   }
 
-  .debao-video-player button[style*="width: 72px"] {
+  .debao-video-big-play {
     width: 54px !important;
     height: 54px !important;
   }
 
-  .debao-video-player div[style*="top: 20px"] {
+  .debao-video-title-overlay {
     top: 12px !important;
     left: 14px !important;
     right: 14px !important;
   }
 
-  .debao-video-player div[style*="font-size: 16px"] {
+  .debao-video-title-meta {
+    font-size: 10px !important;
+    margin-bottom: 3px !important;
+  }
+
+  .debao-video-title-text {
     font-size: 13px !important;
     line-height: 1.35 !important;
     display: -webkit-box;
@@ -1594,20 +1601,81 @@ textarea {
     overflow: hidden;
   }
 
-  .debao-video-player div[style*="bottom: 60px"] {
+  .debao-video-duration-badge {
     display: none !important;
   }
 
-  .debao-video-player div[style*="padding: 28px 20px 14px"] {
-    padding: 22px 12px 10px !important;
+  .debao-video-controls-bar {
+    padding: 24px 10px 9px !important;
   }
 
-  .debao-video-player div[style*="gap: 14px"] {
-    gap: 10px !important;
+  .debao-video-progress-scrubber {
+    height: 4px !important;
+    margin-bottom: 9px !important;
   }
 
-  .debao-video-player span[style*="1.0x"],
-  .debao-video-player svg[data-lucide="maximize-2"] {
+  .debao-video-progress-knob {
+    width: 9px !important;
+    height: 9px !important;
+  }
+
+  .debao-video-controls-row {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 30px 30px 30px minmax(92px, 1fr) auto !important;
+    gap: 7px !important;
+    align-items: center !important;
+  }
+
+  .debao-video-control-button {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 999px !important;
+    background: rgba(255,255,255,0.06) !important;
+  }
+
+  .debao-video-play-button {
+    background: rgba(255,255,255,0.11) !important;
+  }
+
+  .debao-video-volume-control {
+    display: none !important;
+  }
+
+  .debao-video-time-label {
+    min-width: 0;
+    margin-left: 0 !important;
+    font-size: 10px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .debao-video-right-controls {
+    margin-left: 0 !important;
+    gap: 7px !important;
+    justify-content: flex-end !important;
+  }
+
+  .debao-video-speed-button {
+    min-height: 28px !important;
+    padding: 4px 7px !important;
+    font-size: 10px !important;
+  }
+
+  .debao-video-speed-menu {
+    right: -2px !important;
+    bottom: 34px !important;
+  }
+
+  .debao-video-fullscreen-button {
+    display: flex !important;
+  }
+
+  .debao-video-volume-slider {
     display: none !important;
   }
 
@@ -1636,7 +1704,7 @@ textarea {
   .debao-video-lesson-actions {
     width: 100%;
     display: grid !important;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 7px !important;
   }
 
@@ -1650,6 +1718,7 @@ textarea {
   }
 
   .debao-video-tabs {
+    width: 100%;
     gap: 6px !important;
     margin-bottom: 12px !important;
     border-bottom: 0 !important;
@@ -1676,6 +1745,10 @@ textarea {
   .debao-video-intro-stats {
     grid-template-columns: minmax(0, 1fr) !important;
     gap: 8px !important;
+  }
+
+  .debao-video-main > div:not(.debao-video-mobile-picker):not(.debao-video-player):not(.debao-video-lesson-strip):not(.debao-video-tabs) {
+    min-width: 0;
   }
 
   .debao-video-intro-stats > div {

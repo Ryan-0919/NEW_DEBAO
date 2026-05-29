@@ -53,7 +53,10 @@ export const summarizeAudioCourseProgress = ({ courseAudios = [], progressList =
   const totalDurationSeconds = courseAudios.reduce((sum, item) => sum + Math.max(0, Number(item.audio?.duration ?? 0)), 0);
   const learnedSeconds = courseAudios.reduce((sum, item) => {
     const durationSeconds = Math.max(0, Number(item.audio?.duration ?? 0));
-    const progressSeconds = Math.max(0, Number(progressMap.get(item.audioId)?.progress ?? 0));
+    const progress = progressMap.get(item.audioId);
+    const progressSeconds = progress?.completed && durationSeconds > 0
+      ? durationSeconds
+      : Math.max(0, Number(progress?.progress ?? 0));
     return sum + (durationSeconds > 0 ? Math.min(progressSeconds, durationSeconds) : progressSeconds);
   }, 0);
 
@@ -77,7 +80,10 @@ export const summarizeVideoCourseProgress = ({ courseVideos = [], progressList =
   const totalDurationSeconds = courseVideos.reduce((sum, item) => sum + Math.max(0, Number(item.video?.duration ?? 0)), 0);
   const learnedSeconds = courseVideos.reduce((sum, item) => {
     const durationSeconds = Math.max(0, Number(item.video?.duration ?? 0));
-    const progressSeconds = Math.max(0, Number(progressMap.get(item.videoId)?.progress ?? 0));
+    const progress = progressMap.get(item.videoId);
+    const progressSeconds = progress?.completed && durationSeconds > 0
+      ? durationSeconds
+      : Math.max(0, Number(progress?.progress ?? 0));
     return sum + (durationSeconds > 0 ? Math.min(progressSeconds, durationSeconds) : progressSeconds);
   }, 0);
 
