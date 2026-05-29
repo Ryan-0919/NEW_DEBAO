@@ -6449,6 +6449,7 @@ function MyProfilePage({
                     ["sub", "主观题批改", "批改状态 / 批改详情"],
                   ] as const).map(([k, label, desc]) => (
                     <button
+                      className={`debao-my-exam-type-tab ${recordType === k ? "is-active" : ""}`}
                       key={k}
                       type="button"
                       onClick={() => setRecordType(k)}
@@ -6511,6 +6512,7 @@ function MyProfilePage({
                   ["plain", "普通记录", plainSubjectiveRecords.length],
                 ] as const).map(([key, label, count]) => (
                   <button
+                    className={`debao-my-subjective-filter ${subjectiveRecordFilter === key ? "is-active" : ""}`}
                     key={key}
                     type="button"
                     onClick={() => setSubjectiveRecordFilter(key)}
