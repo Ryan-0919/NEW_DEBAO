@@ -271,56 +271,13 @@ export function SystemConfigManagement() {
 
         <TabsContent value="member" className="space-y-5">
           <section className="rounded-lg border border-blue-100 bg-blue-50 p-5">
-            <div className="text-sm font-semibold text-slate-950">会员首页顶部 Banner 已独立管理</div>
+            <div className="text-sm font-semibold text-slate-950">会员首页运营位已独立管理</div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              首页顶部横幅现在按多图轮播展示。标题、描述、图片和排序请到“首页Banner管理”维护；这里继续保留考试入口和我的页面文案。
+              首页 Banner、左右广告位和进群卡片请到“首页Banner管理”维护；这里继续保留考试入口和我的页面文案。
             </p>
             <Button className="mt-4 bg-blue-600 text-white hover:bg-blue-700" onClick={() => window.location.assign("/admin/home-banner")}>
               去管理首页 Banner
             </Button>
-          </section>
-          <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 lg:grid-cols-2">
-            <div className="lg:col-span-2">
-              <h3 className="text-base font-semibold text-slate-950">首页进群卡片</h3>
-              <p className="mt-1 text-sm text-slate-500">控制学员首页右侧的进群入口，二维码上传并保存后会在前台弹窗展示。</p>
-            </div>
-            <TextField label="进群卡片标题" value={field(["memberHome", "joinGroup", "title"], "进群")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "title"], value)} />
-            <TextField label="进群状态文案" value={field(["memberHome", "joinGroup", "statusText"], "可加入")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "statusText"], value)} />
-            <TextField label="进群按钮文案" value={field(["memberHome", "joinGroup", "buttonText"], "扫码进群")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "buttonText"], value)} />
-            <TextField label="进群弹窗标题" value={field(["memberHome", "joinGroup", "modalTitle"], "扫码加入26法考资料分享群")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "modalTitle"], value)} />
-            <div className="lg:col-span-2">
-              <TextField label="进群说明" textarea rows={3} value={field(["memberHome", "joinGroup", "description"], "扫码加入26法考资料分享群，获取备考资料、考点汇总和学习交流。")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "description"], value)} />
-            </div>
-            <div className="lg:col-span-2">
-              <TextField label="进群弹窗提示" value={field(["memberHome", "joinGroup", "modalHint"], "长按或截图后使用微信扫码加入")} onChange={(value) => updatePortalPath(["memberHome", "joinGroup", "modalHint"], value)} />
-            </div>
-            <div className="lg:col-span-2">
-              <ImageField
-                label="进群二维码"
-                url={field(["memberHome", "joinGroup", "qrImageUrl"])}
-                uploading={uploadingKey === "joinGroupQr"}
-                onUpload={(file) =>
-                  void uploadImage("joinGroupQr", file, (url, objectKey) => {
-                    setPortalConfig((current) =>
-                      setPathValue(
-                        setPathValue(current, ["memberHome", "joinGroup", "qrImageUrl"], url),
-                        ["memberHome", "joinGroup", "qrImageObjectKey"],
-                        objectKey,
-                      ),
-                    );
-                  })
-                }
-                onClear={() => {
-                  setPortalConfig((current) =>
-                    setPathValue(
-                      setPathValue(current, ["memberHome", "joinGroup", "qrImageUrl"], ""),
-                      ["memberHome", "joinGroup", "qrImageObjectKey"],
-                      "",
-                    ),
-                  );
-                }}
-              />
-            </div>
           </section>
 
           <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 lg:grid-cols-2">

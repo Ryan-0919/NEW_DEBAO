@@ -38,6 +38,17 @@ type SideAdItem = {
   isVisible: boolean;
 };
 
+type JoinGroupItem = {
+  title: string;
+  statusText: string;
+  description: string;
+  buttonText: string;
+  modalTitle: string;
+  modalHint: string;
+  qrImageUrl: string;
+  qrImageObjectKey: string;
+};
+
 const inputClass = "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:border-amber-400 focus-visible:ring-amber-100";
 const selectTriggerClass = "border-slate-200 bg-white text-slate-900 focus-visible:border-amber-400 focus-visible:ring-amber-100";
 const emptySideAds: Record<SideAdPosition, SideAdItem> = {
@@ -59,6 +70,16 @@ const emptySideAds: Record<SideAdPosition, SideAdItem> = {
     target: "",
     isVisible: false,
   },
+};
+const emptyJoinGroup: JoinGroupItem = {
+  title: "进群",
+  statusText: "可加入",
+  description: "扫码加入26法考资料分享群，获取备考资料、考点汇总和学习交流。",
+  buttonText: "扫码进群",
+  modalTitle: "扫码加入26法考资料分享群",
+  modalHint: "长按或截图后使用微信扫码加入",
+  qrImageUrl: "",
+  qrImageObjectKey: "",
 };
 
 const bannerTargetOptions = [
@@ -190,6 +211,20 @@ const readSideAds = (portalConfig: PortalConfig = {}): Record<SideAdPosition, Si
   right: readSideAd(portalConfig, "right"),
 });
 
+const readJoinGroup = (portalConfig: PortalConfig = {}): JoinGroupItem => {
+  const raw = getPathValue(portalConfig, ["memberHome", "joinGroup"], {}) ?? {};
+  return {
+    title: `${raw.title ?? emptyJoinGroup.title}`,
+    statusText: `${raw.statusText ?? emptyJoinGroup.statusText}`,
+    description: `${raw.description ?? emptyJoinGroup.description}`,
+    buttonText: `${raw.buttonText ?? emptyJoinGroup.buttonText}`,
+    modalTitle: `${raw.modalTitle ?? emptyJoinGroup.modalTitle}`,
+    modalHint: `${raw.modalHint ?? emptyJoinGroup.modalHint}`,
+    qrImageUrl: `${raw.qrImageUrl ?? emptyJoinGroup.qrImageUrl}`,
+    qrImageObjectKey: `${raw.qrImageObjectKey ?? emptyJoinGroup.qrImageObjectKey}`,
+  };
+};
+
 const buildSideAds = (sideAds: Record<SideAdPosition, SideAdItem>) => ({
   left: {
     ...sideAds.left,
@@ -211,7 +246,18 @@ const buildSideAds = (sideAds: Record<SideAdPosition, SideAdItem>) => ({
   },
 });
 
-const buildPortalConfig = (portalConfig: PortalConfig, items: BannerItem[], sideAds: Record<SideAdPosition, SideAdItem>) => {
+const buildJoinGroup = (joinGroup: JoinGroupItem) => ({
+  title: joinGroup.title.trim(),
+  statusText: joinGroup.statusText.trim(),
+  description: joinGroup.description.trim(),
+  buttonText: joinGroup.buttonText.trim(),
+  modalTitle: joinGroup.modalTitle.trim(),
+  modalHint: joinGroup.modalHint.trim(),
+  qrImageUrl: joinGroup.qrImageUrl.trim(),
+  qrImageObjectKey: joinGroup.qrImageObjectKey.trim(),
+});
+
+const buildPortalConfig = (portalConfig: PortalConfig, items: BannerItem[], sideAds: Record<SideAdPosition, SideAdItem>, joinGroup: JoinGroupItem) => {
   const normalizedItems = items.map((item, index) => ({
     ...item,
     badge: item.badge.trim(),
@@ -235,6 +281,7 @@ const buildPortalConfig = (portalConfig: PortalConfig, items: BannerItem[], side
   next = setPathValue(next, ["memberHome", "bannerImageUrl"], primary.imageUrl);
   next = setPathValue(next, ["memberHome", "bannerImageObjectKey"], primary.imageObjectKey);
   next = setPathValue(next, ["memberHome", "sideAds"], buildSideAds(sideAds));
+  next = setPathValue(next, ["memberHome", "joinGroup"], buildJoinGroup(joinGroup));
   return next;
 };
 
@@ -375,20 +422,110 @@ function SideAdEditor({
   );
 }
 
+function JoinGroupEditor({
+  item,
+  uploading,
+  saving,
+  inputRef,
+  onPatch,
+  onUpload,
+}: {
+  item: JoinGroupItem;
+  uploading: boolean;
+  saving: boolean;
+  inputRef: (node: HTMLInputElement | null) => void;
+  onPatch: (patch: Partial<JoinGroupItem>) => void;
+  onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const localFileInputRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-950">首页进群卡片</h3>
+        <p className="mt-1 text-xs leading-5 text-slate-500">控制学员首页的进群入口、弹窗文案和二维码。建议上传正方形二维码图。</p>
+      </div>
+
+      <div className="mt-4 grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="aspect-square overflow-hidden rounded-lg bg-white">
+            {item.qrImageUrl ? (
+              <img src={item.qrImageUrl} alt={item.modalTitle || item.title || "进群二维码"} className="h-full w-full object-contain" />
+            ) : (
+              <div className="grid h-full place-items-center px-6 text-center text-xs leading-5 text-slate-400">暂无二维码<br />建议正方形图片</div>
+            )}
+          </div>
+          {item.qrImageUrl ? <p className="mt-2 line-clamp-2 break-all text-xs text-slate-400">{item.qrImageUrl}</p> : null}
+          <div className="mt-3 space-y-2">
+            <input
+              ref={(node) => {
+                localFileInputRef.current = node;
+                inputRef(node);
+              }}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onUpload}
+            />
+            <Button variant="outline" className="w-full border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={uploading || saving} onClick={() => localFileInputRef.current?.click()}>
+              {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+              上传二维码
+            </Button>
+            <Button variant="outline" className="w-full border-rose-200 bg-white text-rose-700 hover:bg-rose-50" disabled={uploading || saving || !item.qrImageUrl} onClick={() => onPatch({ qrImageUrl: "", qrImageObjectKey: "" })}>
+              <Trash2 className="size-4" />
+              清空二维码
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid content-start gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label>卡片标题</Label>
+            <Input className={inputClass} value={item.title} onChange={(event) => onPatch({ title: event.target.value })} placeholder="例如：进群" />
+          </div>
+          <div className="space-y-2">
+            <Label>状态文案</Label>
+            <Input className={inputClass} value={item.statusText} onChange={(event) => onPatch({ statusText: event.target.value })} placeholder="例如：可加入" />
+          </div>
+          <div className="space-y-2">
+            <Label>按钮文案</Label>
+            <Input className={inputClass} value={item.buttonText} onChange={(event) => onPatch({ buttonText: event.target.value })} placeholder="例如：扫码进群" />
+          </div>
+          <div className="space-y-2">
+            <Label>弹窗标题</Label>
+            <Input className={inputClass} value={item.modalTitle} onChange={(event) => onPatch({ modalTitle: event.target.value })} placeholder="例如：扫码加入26法考资料分享群" />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>进群说明</Label>
+            <Textarea className={inputClass} rows={3} value={item.description} onChange={(event) => onPatch({ description: event.target.value })} />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>弹窗提示</Label>
+            <Input className={inputClass} value={item.modalHint} onChange={(event) => onPatch({ modalHint: event.target.value })} placeholder="例如：长按或截图后使用微信扫码加入" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HomeBannerManagement() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const sideAdFileInputRefs = useRef<Record<SideAdPosition, HTMLInputElement | null>>({ left: null, right: null });
+  const joinGroupQrInputRef = useRef<HTMLInputElement | null>(null);
   const [config, setConfig] = useState<AdminSystemConfig | null>(null);
   const [items, setItems] = useState<BannerItem[]>([emptyBanner(0)]);
   const [sideAds, setSideAds] = useState<Record<SideAdPosition, SideAdItem>>(emptySideAds);
+  const [joinGroup, setJoinGroup] = useState<JoinGroupItem>(emptyJoinGroup);
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingSideAd, setUploadingSideAd] = useState<SideAdPosition | "">("");
+  const [uploadingJoinGroupQr, setUploadingJoinGroupQr] = useState(false);
 
   const selectedItem = items.find((item) => item.id === selectedId) || items[0] || emptyBanner(0);
   const visibleCount = items.filter((item) => item.isVisible !== false).length;
+  const isBusy = saving || uploading || Boolean(uploadingSideAd) || uploadingJoinGroupQr;
   const previewStyle = useMemo(
     () => ({
       backgroundImage: selectedItem.imageUrl
@@ -406,6 +543,7 @@ export function HomeBannerManagement() {
       setConfig(payload);
       setItems(nextItems);
       setSideAds(readSideAds(payload.portalConfig ?? {}));
+      setJoinGroup(readJoinGroup(payload.portalConfig ?? {}));
       setSelectedId(nextItems[0]?.id || "");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "首页 Banner 加载失败");
@@ -432,7 +570,11 @@ export function HomeBannerManagement() {
     }));
   };
 
-  const saveItems = async (nextItems = items, successText = "首页 Banner 与广告位已保存") => {
+  const patchJoinGroup = (patch: Partial<JoinGroupItem>) => {
+    setJoinGroup((current) => ({ ...current, ...patch }));
+  };
+
+  const saveItems = async (nextItems = items, successText = "首页 Banner、广告位和进群卡片已保存") => {
     if (!config) return;
     const normalizedItems = nextItems
       .map((item, index) => ({ ...item, sortOrder: index }))
@@ -450,12 +592,13 @@ export function HomeBannerManagement() {
 
     setSaving(true);
     try {
-      const nextPortalConfig = buildPortalConfig(config.portalConfig ?? {}, normalizedItems, sideAds);
+      const nextPortalConfig = buildPortalConfig(config.portalConfig ?? {}, normalizedItems, sideAds, joinGroup);
       const payload = await adminOperationsService.updateSystemConfig({ portalConfig: nextPortalConfig });
       const savedItems = readBannerItems(payload.portalConfig ?? {});
       setConfig(payload);
       setItems(savedItems);
       setSideAds(readSideAds(payload.portalConfig ?? {}));
+      setJoinGroup(readJoinGroup(payload.portalConfig ?? {}));
       setSelectedId((current) => savedItems.some((item) => item.id === current) ? current : savedItems[0]?.id || "");
       toast.success(successText);
     } catch (error) {
@@ -526,6 +669,23 @@ export function HomeBannerManagement() {
     }
   };
 
+  const handleJoinGroupQrUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !config) return;
+
+    setUploadingJoinGroupQr(true);
+    try {
+      const uploaded = await adminOperationsService.uploadSystemImage(file);
+      patchJoinGroup({ qrImageUrl: uploaded.url, qrImageObjectKey: uploaded.objectKey });
+      toast.success("进群二维码已上传，请保存配置");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "进群二维码上传失败");
+    } finally {
+      setUploadingJoinGroupQr(false);
+    }
+  };
+
   if (loading) {
     return <div className="rounded-lg border border-slate-200 bg-white py-16 text-center text-slate-500">首页 Banner 加载中...</div>;
   }
@@ -535,19 +695,19 @@ export function HomeBannerManagement() {
       <section className="rounded-lg border border-slate-200 bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950">首页 Banner 轮播管理</h2>
-            <p className="mt-1 text-sm text-slate-500">维护学员登录后首页顶部轮播图和 PC 首页左右侧广告位。当前 Banner {items.length} 张，展示 {visibleCount} 张。</p>
+            <h2 className="text-lg font-semibold text-slate-950">首页运营位管理</h2>
+            <p className="mt-1 text-sm text-slate-500">统一维护首页 Banner 轮播、PC 左右广告位和进群卡片。当前 Banner {items.length} 张，展示 {visibleCount} 张。</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={loading || saving || uploading || Boolean(uploadingSideAd)} onClick={() => void loadData()}>
+            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={loading || isBusy} onClick={() => void loadData()}>
               <RefreshCw className="size-4" />
               重新加载
             </Button>
-            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={saving || uploading || Boolean(uploadingSideAd)} onClick={addBanner}>
+            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={isBusy} onClick={addBanner}>
               <Plus className="size-4" />
               新增 Banner
             </Button>
-            <Button className="bg-[#c9973e] text-slate-950 hover:bg-[#b88932]" disabled={saving || uploading || Boolean(uploadingSideAd)} onClick={() => void saveItems()}>
+            <Button className="bg-[#c9973e] text-slate-950 hover:bg-[#b88932]" disabled={isBusy} onClick={() => void saveItems()}>
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
               保存配置
             </Button>
@@ -555,24 +715,12 @@ export function HomeBannerManagement() {
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-2">
-        {(["left", "right"] as const).map((position) => (
-          <SideAdEditor
-            key={position}
-            position={position}
-            item={sideAds[position]}
-            uploading={uploadingSideAd === position}
-            saving={saving || uploading}
-            inputRef={(node) => {
-              sideAdFileInputRefs.current[position] = node;
-            }}
-            onPatch={(patch) => patchSideAd(position, patch)}
-            onUpload={(event) => void handleSideAdUpload(position, event)}
-          />
-        ))}
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+      <section className="space-y-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <h3 className="text-sm font-semibold text-slate-950">Banner 轮播图</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">管理首页顶部轮播内容、展示顺序、主按钮和次按钮跳转。</p>
+        </div>
+        <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
         <div className="rounded-lg border border-slate-200 bg-white">
           <div className="border-b border-slate-100 px-4 py-3">
             <div className="text-sm font-semibold text-slate-950">轮播列表</div>
@@ -716,6 +864,47 @@ export function HomeBannerManagement() {
             删除当前 Banner
           </Button>
         </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <h3 className="text-sm font-semibold text-slate-950">首页左右广告位</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">配置 PC 首页内容区两侧的广告图、按钮文案和跳转链接，手机端不展示。</p>
+        </div>
+        <div className="grid gap-5 xl:grid-cols-2">
+          {(["left", "right"] as const).map((position) => (
+            <SideAdEditor
+              key={position}
+              position={position}
+              item={sideAds[position]}
+              uploading={uploadingSideAd === position}
+              saving={isBusy}
+              inputRef={(node) => {
+                sideAdFileInputRefs.current[position] = node;
+              }}
+              onPatch={(patch) => patchSideAd(position, patch)}
+              onUpload={(event) => void handleSideAdUpload(position, event)}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <h3 className="text-sm font-semibold text-slate-950">首页进群卡片</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">配置首页进群入口和扫码弹窗，和 Banner、广告位放在同一个运营位页面统一管理。</p>
+        </div>
+        <JoinGroupEditor
+          item={joinGroup}
+          uploading={uploadingJoinGroupQr}
+          saving={isBusy}
+          inputRef={(node) => {
+            joinGroupQrInputRef.current = node;
+          }}
+          onPatch={patchJoinGroup}
+          onUpload={(event) => void handleJoinGroupQrUpload(event)}
+        />
       </section>
     </div>
   );
