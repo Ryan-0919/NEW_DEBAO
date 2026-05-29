@@ -74,18 +74,26 @@ const bannerTargetOptions = [
   { label: "我的页面", value: "/profile" },
 ];
 const SIDE_AD_EMPTY_TARGET_VALUE = "__none__";
-const sideAdTargetOptions = [
-  { label: "不跳转", value: SIDE_AD_EMPTY_TARGET_VALUE },
-  ...bannerTargetOptions,
-];
+const CUSTOM_TARGET_VALUE = "__custom__";
 
 const normalizeTarget = (value = "", fallback = "/courses") => {
-  if (/^https?:\/\//i.test(value)) return value;
-  return bannerTargetOptions.some((item) => item.value === value) ? value : fallback;
+  const normalized = value.trim();
+  return normalized || fallback;
 };
 
-const getTargetLabel = (value = "") => bannerTargetOptions.find((item) => item.value === value)?.label ?? "未选择";
-const toSideAdSelectValue = (value = "") => normalizeTarget(value, "") || SIDE_AD_EMPTY_TARGET_VALUE;
+const isPresetTarget = (value = "") => bannerTargetOptions.some((item) => item.value === value);
+const getTargetLabel = (value = "") => {
+  if (!value.trim()) return "未设置";
+  const preset = bannerTargetOptions.find((item) => item.value === value);
+  if (preset) return preset.label;
+  if (/^https?:\/\//i.test(value) || /^\/\//.test(value) || /^www\./i.test(value)) return "外部链接";
+  return "自定义路径";
+};
+const toTargetSelectValue = (value = "", allowEmpty = false) => {
+  if (!value.trim() && allowEmpty) return SIDE_AD_EMPTY_TARGET_VALUE;
+  if (isPresetTarget(value)) return value;
+  return CUSTOM_TARGET_VALUE;
+};
 const fromSideAdSelectValue = (value = "") => (value === SIDE_AD_EMPTY_TARGET_VALUE ? "" : value);
 
 const makeId = () => {
@@ -230,6 +238,56 @@ const buildPortalConfig = (portalConfig: PortalConfig, items: BannerItem[], side
   return next;
 };
 
+function TargetField({
+  label,
+  value,
+  allowEmpty = false,
+  emptyLabel = "不跳转",
+  onChange,
+}: {
+  label: string;
+  value: string;
+  allowEmpty?: boolean;
+  emptyLabel?: string;
+  onChange: (value: string) => void;
+}) {
+  const options = allowEmpty ? [{ label: emptyLabel, value: SIDE_AD_EMPTY_TARGET_VALUE }, ...bannerTargetOptions] : bannerTargetOptions;
+  const selectValue = toTargetSelectValue(value, allowEmpty);
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Select
+        value={selectValue}
+        onValueChange={(nextValue) => {
+          if (nextValue === CUSTOM_TARGET_VALUE) return;
+          onChange(fromSideAdSelectValue(nextValue));
+        }}
+      >
+        <SelectTrigger className={selectTriggerClass}>
+          <SelectValue placeholder="快捷选择本站页面" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value} className="focus:bg-amber-50 focus:text-amber-800">
+              {option.label}
+            </SelectItem>
+          ))}
+          <SelectItem value={CUSTOM_TARGET_VALUE} className="focus:bg-amber-50 focus:text-amber-800">
+            自定义链接
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <Input
+        className={inputClass}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={allowEmpty ? "可留空，或填写 /courses、https://example.com" : "填写 /courses、https://example.com 或 www.example.com"}
+      />
+      <p className="text-xs text-slate-400">当前：{getTargetLabel(value)}。外部链接会在新窗口打开，本站路径会在当前站内跳转。</p>
+    </div>
+  );
+}
+
 function SideAdEditor({
   position,
   item,
@@ -308,18 +366,7 @@ function SideAdEditor({
               <Input className={inputClass} value={item.buttonText} onChange={(event) => onPatch({ buttonText: event.target.value })} placeholder="例如：立即查看" />
             </div>
             <div className="space-y-2">
-              <Label>跳转页面</Label>
-              <Select value={toSideAdSelectValue(item.target)} onValueChange={(value) => onPatch({ target: fromSideAdSelectValue(value) })}>
-                <SelectTrigger className={selectTriggerClass}>
-                  <SelectValue placeholder="选择跳转页面" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sideAdTargetOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value} className="focus:bg-amber-50 focus:text-amber-800">{option.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-slate-400">选择不跳转时，前台只展示广告图和文案，不触发页面跳转。</p>
+              <TargetField label="跳转链接" value={item.target} allowEmpty onChange={(target) => onPatch({ target })} />
             </div>
           </div>
         </div>
@@ -654,39 +701,13 @@ export function HomeBannerManagement() {
                 <Label>主按钮文字</Label>
                 <Input className={inputClass} value={selectedItem.primaryButtonText} placeholder="例如：继续学习" onChange={(event) => patchSelected({ primaryButtonText: event.target.value })} />
               </div>
-              <div className="space-y-2">
-                <Label>主按钮跳转</Label>
-                <Select value={normalizeTarget(selectedItem.primaryButtonTarget, "/courses")} onValueChange={(value) => patchSelected({ primaryButtonTarget: value })}>
-                  <SelectTrigger className={selectTriggerClass}>
-                    <SelectValue placeholder="选择跳转页面" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bannerTargetOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value} className="focus:bg-amber-50 focus:text-amber-800">{option.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-slate-400">当前：{getTargetLabel(selectedItem.primaryButtonTarget)}</p>
-              </div>
+              <TargetField label="主按钮跳转链接" value={selectedItem.primaryButtonTarget} onChange={(primaryButtonTarget) => patchSelected({ primaryButtonTarget })} />
               <div className="border-t border-slate-100 pt-4" />
               <div className="space-y-2">
                 <Label>次按钮文字</Label>
                 <Input className={inputClass} value={selectedItem.secondaryButtonText} placeholder="例如：进入题库" onChange={(event) => patchSelected({ secondaryButtonText: event.target.value })} />
               </div>
-              <div className="space-y-2">
-                <Label>次按钮跳转</Label>
-                <Select value={normalizeTarget(selectedItem.secondaryButtonTarget, "/question-bank")} onValueChange={(value) => patchSelected({ secondaryButtonTarget: value })}>
-                  <SelectTrigger className={selectTriggerClass}>
-                    <SelectValue placeholder="选择跳转页面" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bannerTargetOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value} className="focus:bg-amber-50 focus:text-amber-800">{option.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-slate-400">当前：{getTargetLabel(selectedItem.secondaryButtonTarget)}</p>
-              </div>
+              <TargetField label="次按钮跳转链接" value={selectedItem.secondaryButtonTarget} onChange={(secondaryButtonTarget) => patchSelected({ secondaryButtonTarget })} />
             </div>
           </div>
 

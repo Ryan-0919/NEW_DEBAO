@@ -1341,12 +1341,14 @@ function HomePage({
   const goQuestionBank = () => { setPage("questionBankHome"); setActiveNav(2); };
   const goSubjective = () => { setPage("subjectiveGrading"); setActiveNav(2); };
   const openBannerTarget = (target = "") => {
-    if (!target) return;
-    if (/^https?:\/\//i.test(target)) {
-      window.open(target, "_blank", "noopener,noreferrer");
+    const normalizedTarget = target.trim();
+    if (!normalizedTarget) return;
+    if (/^(https?:)?\/\//i.test(normalizedTarget) || /^www\./i.test(normalizedTarget)) {
+      const url = /^www\./i.test(normalizedTarget) ? `https://${normalizedTarget}` : normalizedTarget;
+      window.open(url, "_blank", "noopener,noreferrer");
       return;
     }
-    const nextPath = target.startsWith("/") ? target : `/${target}`;
+    const nextPath = normalizedTarget.startsWith("/") ? normalizedTarget : `/${normalizedTarget}`;
     window.history.pushState({ page: pathToPage(nextPath) }, "", nextPath);
     setPage(pathToPage(nextPath));
   };
