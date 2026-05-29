@@ -83,6 +83,22 @@ const normalizeAnswerMarks = (value = []) =>
     }))
     .filter((item) => item.id && item.highlight);
 
+const isPositiveAnswerMark = (mark) => mark?.status === "correct" || mark?.status === "score";
+
+const sumPositiveAnswerMarkScores = (marks = []) =>
+  (Array.isArray(marks) ? marks : []).reduce(
+    (sum, mark) => sum + (isPositiveAnswerMark(mark) ? Math.max(0, Number(mark.score ?? 0) || 0) : 0),
+    0,
+  );
+
+const normalizeReviewCommentText = (value = "") =>
+  normalizeText(value)
+    .replace(/(?:本问|本小问|这一问|这问)?\s*(?:得分|得了|拿到|拿了|取得|获得)\s*[：:为是]?\s*\d+(?:\.\d+)?\s*分[，,。；;、]?\s*/gu, "")
+    .replace(/(?:扣分|扣了|丢分|丢了|失分)\s*[：:为是]?\s*\d+(?:\.\d+)?\s*分[，,。；;、]?\s*/gu, "")
+    .replace(/(?:给你|给出|评为|评分为|判为|计为)\s*\d+(?:\.\d+)?\s*分[，,。；;、]?\s*/gu, "")
+    .replace(/\s{2,}/gu, " ")
+    .trim();
+
 const getQuestionMeta = (question) => {
   const raw = parseJsonSafely(question?.questionMetaJson, {});
   const subQuestions = Array.isArray(raw?.subQuestions)
@@ -366,8 +382,9 @@ const serializeReviewDetail = (record, req, currentTime = new Date()) => {
             ? reviewJson.subQuestions.find((item) => `${item?.id ?? ""}` === subQuestion.id)
             : null;
           const maxScore = getSubjectiveMaxScore(question, subQuestion, questionMeta.subQuestions.length);
-          const score = Number(reviewItem?.score ?? 0) || 0;
           const answerText = answerBySubQuestion[subQuestion.id] ?? "";
+          const answerMarks = normalizeAnswerMarks(reviewItem?.answerMarks);
+          const score = clampScore(sumPositiveAnswerMarkScores(answerMarks), 0, maxScore);
           return {
             id: subQuestion.id,
             title: subQuestion.title,
@@ -375,13 +392,13 @@ const serializeReviewDetail = (record, req, currentTime = new Date()) => {
             wordCount: answerText.length,
             score,
             maxScore,
-            reviewComment: normalizeText(reviewItem?.reviewComment ?? ""),
+            reviewComment: normalizeReviewCommentText(reviewItem?.reviewComment ?? ""),
             referenceAnswer: normalizeText(reviewItem?.referenceAnswer ?? subQuestion.referenceAnswer ?? ""),
             abilityLabel: normalizeText(reviewItem?.abilityLabel ?? subQuestion.abilityLabel ?? subQuestion.title),
             rubricGuidance: normalizeText(reviewItem?.rubricGuidance ?? subQuestion.rubricGuidance ?? ""),
             rubricPoints: normalizeRubricPoints(reviewItem?.rubricPoints ?? subQuestion.rubricPoints),
             missedPoints: normalizeMissedPoints(reviewItem?.missedPoints),
-            answerMarks: normalizeAnswerMarks(reviewItem?.answerMarks),
+            answerMarks,
             skippedReview: Boolean(reviewItem?.skippedReview),
             skippedReviewReason: normalizeText(reviewItem?.skippedReviewReason ?? ""),
             isReviewed: Boolean(reviewItem),
@@ -472,7 +489,6 @@ const normalizeReviewPayload = ({ record, payloadAnswers = [] }) => {
         : null;
       const item = payloadSubQuestionMap.get(subQuestion.id) ?? existingReviewItem ?? {};
       const maxScore = getSubjectiveMaxScore(question, subQuestion, questionMeta.subQuestions.length);
-      const score = clampScore(item?.score ?? 0, 0, maxScore);
       const missedPoints = normalizeMissedPoints(item?.missedPoints).map((point, missedIndex) => ({
         ...point,
         id: point.id || `missed_${index + 1}_${missedIndex + 1}`,
@@ -481,13 +497,14 @@ const normalizeReviewPayload = ({ record, payloadAnswers = [] }) => {
         ...mark,
         id: mark.id || `mark_${index + 1}_${markIndex + 1}`,
       }));
+      const score = clampScore(sumPositiveAnswerMarkScores(answerMarks), 0, maxScore);
 
       return {
         id: subQuestion.id,
         title: subQuestion.title,
         score,
         maxScore,
-        reviewComment: normalizeText(item?.reviewComment ?? ""),
+        reviewComment: normalizeReviewCommentText(item?.reviewComment ?? ""),
         referenceAnswer: normalizeText(item?.referenceAnswer ?? subQuestion.referenceAnswer ?? ""),
         reviewSource: "manual",
         reviewProvider: "manual",

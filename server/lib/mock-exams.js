@@ -63,6 +63,14 @@ const parseObjectiveAnswerJson = (value) => normalizeAnswerKeys(parseJsonSafely(
 
 const normalizePlainText = (value) => `${value ?? ""}`.replace(/\r\n/g, "\n").trimEnd();
 
+const normalizeReviewCommentText = (value = "") =>
+  normalizePlainText(value)
+    .replace(/(?:本问|本小问|这一问|这问)?\s*(?:得分|得了|拿到|拿了|取得|获得)\s*[：:为是]?\s*\d+(?:\.\d+)?\s*分[，,。；;、]?\s*/gu, "")
+    .replace(/(?:扣分|扣了|丢分|丢了|失分)\s*[：:为是]?\s*\d+(?:\.\d+)?\s*分[，,。；;、]?\s*/gu, "")
+    .replace(/(?:给你|给出|评为|评分为|判为|计为)\s*\d+(?:\.\d+)?\s*分[，,。；;、]?\s*/gu, "")
+    .replace(/\s{2,}/gu, " ")
+    .trim();
+
 const isSubjectiveQuestionType = (type) => type === SUBJECTIVE_TYPE;
 const isSubjectiveQuestion = (question) => isSubjectiveQuestionType(question?.type);
 
@@ -151,6 +159,14 @@ const normalizeAnswerMarks = (value = []) =>
       segmentId: `${item?.segmentId ?? item?.segment_id ?? item?.answerSegmentId ?? item?.answer_segment_id ?? ""}`.trim() || undefined,
     }))
     .filter((item) => item.id && item.highlight);
+
+const isPositiveAnswerMark = (mark) => mark?.status === "correct" || mark?.status === "score";
+
+const sumPositiveAnswerMarkScores = (marks = []) =>
+  (Array.isArray(marks) ? marks : []).reduce(
+    (sum, mark) => sum + (isPositiveAnswerMark(mark) ? Math.max(0, Number(mark.score ?? 0) || 0) : 0),
+    0,
+  );
 
 const dedupeAnswerMarks = (marks = []) => {
   const seen = new Set();
@@ -519,8 +535,11 @@ const serializeQuestion = (question, answer, revealAnswer) => {
         const reviewItem = Array.isArray(reviewJson?.subQuestions)
           ? reviewJson.subQuestions.find((entry) => `${entry?.id ?? ""}` === item.id)
           : null;
-        const score = Number(reviewItem?.score ?? 0) || 0;
         const maxScore = Number(reviewItem?.maxScore ?? item.maxScore ?? 0) || 0;
+        const answerMarks = revealAnswer ? normalizeAnswerMarks(reviewItem?.answerMarks) : [];
+        const score = revealAnswer
+          ? clampScore(sumPositiveAnswerMarkScores(answerMarks), 0, maxScore)
+          : 0;
 
         return {
           id: item.id,
@@ -528,9 +547,9 @@ const serializeQuestion = (question, answer, revealAnswer) => {
           placeholder: item.placeholder,
           answer: text,
           wordCount: text.length,
-          score: revealAnswer ? score : 0,
+          score,
           maxScore,
-          reviewComment: revealAnswer ? `${reviewItem?.reviewComment ?? ""}`.trim() : "",
+          reviewComment: revealAnswer ? normalizeReviewCommentText(reviewItem?.reviewComment ?? "") : "",
           referenceAnswer: revealAnswer ? `${reviewItem?.referenceAnswer ?? item.referenceAnswer ?? ""}`.trim() : "",
           reviewSource: reviewItem?.reviewSource ?? reviewSource,
           reviewProvider: normalizeReviewProvider(reviewItem?.reviewProvider ?? reviewProvider),
@@ -542,7 +561,7 @@ const serializeQuestion = (question, answer, revealAnswer) => {
           missedPoints: revealAnswer ? normalizeMissedPoints(reviewItem?.missedPoints) : [],
           skippedReview: revealAnswer && Boolean(reviewItem?.skippedReview),
           skippedReviewReason: revealAnswer ? `${reviewItem?.skippedReviewReason ?? ""}`.trim() : "",
-          answerMarks: revealAnswer ? normalizeAnswerMarks(reviewItem?.answerMarks) : [],
+          answerMarks,
         };
       }),
       reviewFeedbackStars: revealAnswer ? Number(reviewJson?.feedbackStars ?? 0) || 0 : 0,
@@ -1313,7 +1332,7 @@ const normalizeReturnedAiSubQuestion = ({ item, fallback, index, runtimeConfig }
     answer: fallback.answer,
     score: normalizedScore,
     maxScore,
-    reviewComment: `${item?.reviewComment ?? item?.review_comment ?? item?.comment ?? ""}`.trim() || buildSubjectiveReviewComment({
+    reviewComment: normalizeReviewCommentText(item?.reviewComment ?? item?.review_comment ?? item?.comment ?? "") || buildSubjectiveReviewComment({
       answerText: fallback.answer,
       score,
       maxScore,
@@ -1388,6 +1407,7 @@ const REQUIRED_AI_REVIEW_OUTPUT_REQUIREMENTS = [
   "硬性校验：划线必须精确，只划最能承载判断的关键词、短语或短句，不要整段划线；优先划 6 到 35 个中文字符左右的关键表达。",
   "硬性校验：错误批注必须划学生原文中具体错误的那一小段，例如错误主体、错误法律关系、错误结论或错误理由。",
   "硬性校验：每个小问 reviewComment 必须是 300 到 400 个中文字符的自然语言老师点评，必须展开说明用户哪里答错了、为什么错、正确思路是什么、下次怎么补。",
+  "硬性校验：reviewComment 禁止出现具体评分表达，不要写“得了几分”“拿到几分”“扣了几分”“丢了几分”“本问得分为几分”等内容；分数只允许出现在结构化字段里。",
   "硬性校验：reviewComment 不要出现 AI、模型、系统、自动批改、算法、提示词 等暴露机器痕迹的表述。",
   "硬性校验：rubricPoints 中采分点编号字段必须使用 id，不要使用 pointId、point_id、rubricId 或其他编号字段。",
   "硬性校验：rubricPoints 中每条采分点必须是对象，并且必须使用 id、title、description、maxScore、awardedScore、hit、comment 字段；不要使用 point、achieved、matched 等替代字段。",

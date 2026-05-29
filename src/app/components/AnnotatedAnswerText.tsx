@@ -469,6 +469,33 @@ function ScoreImages({ scoreText }: { scoreText: string }) {
 
 const getMarkTrackOffset = (mark: ResolvedMark) => ("trackIndex" in mark && typeof mark.trackIndex === "number" ? mark.trackIndex * 4 : 0);
 
+function MarkCommentPopover({ commentText, children }: { commentText: string; children: ReactNode }) {
+  const trimmedComment = commentText.trim();
+
+  if (!trimmedComment) {
+    return <>{children}</>;
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className="inline appearance-none bg-transparent p-0 align-baseline">
+          {children}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="center"
+        sideOffset={18}
+        collisionPadding={24}
+        className="w-auto max-w-none rounded-none border-0 bg-transparent p-0 shadow-none"
+      >
+        <MarkedComment commentText={trimmedComment} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function PositiveMarkIndicators({ positiveMarks }: { positiveMarks: ResolvedMark[] }) {
   if (positiveMarks.length === 0) {
     return null;
@@ -484,13 +511,17 @@ function PositiveMarkIndicators({ positiveMarks }: { positiveMarks: ResolvedMark
             className="inline-flex items-end gap-[2px] align-baseline"
             style={{ marginBottom: `${getMarkTrackOffset(mark)}px` }}
           >
-            <img
-              src={REVIEW_ASSETS.check}
-              alt=""
-              aria-hidden="true"
-              className="h-[20px] w-[20px] shrink-0 object-contain"
-            />
-            {scoreText ? <ScoreImages scoreText={scoreText} /> : null}
+            <MarkCommentPopover commentText={mark.comment}>
+              <span className="inline-flex items-end gap-[2px] align-baseline">
+                <img
+                  src={REVIEW_ASSETS.check}
+                  alt=""
+                  aria-hidden="true"
+                  className="h-[20px] w-[20px] shrink-0 object-contain"
+                />
+                {scoreText ? <ScoreImages scoreText={scoreText} /> : null}
+              </span>
+            </MarkCommentPopover>
           </span>
         );
       })}
@@ -511,9 +542,11 @@ function NeutralMarkIndicators({ neutralMarks }: { neutralMarks: ResolvedMark[] 
           className="inline-flex items-end align-baseline"
           style={{ marginBottom: `${getMarkTrackOffset(mark)}px` }}
         >
-          <span className="inline-flex h-[20px] w-[20px] items-center justify-center rounded-full bg-[#f0a52b] text-[16px] font-semibold leading-none text-white">
-            -
-          </span>
+          <MarkCommentPopover commentText={mark.comment}>
+            <span className="inline-flex h-[20px] w-[20px] items-center justify-center rounded-full bg-[#f0a52b] text-[16px] font-semibold leading-none text-white">
+              -
+            </span>
+          </MarkCommentPopover>
         </span>
       ))}
     </span>
@@ -582,38 +615,12 @@ function WrongMarkIcons({
     />
   );
 
-  if (!mergedComment) {
-    return (
-      <span
-        className="inline-flex items-center align-baseline"
-        style={{ marginBottom: `${Math.max(...wrongMarks.map((mark) => getMarkTrackOffset(mark)), 0)}px` }}
-      >
-        {icon}
-      </span>
-    );
-  }
-
   return (
     <span
       className="inline-flex items-center gap-[2px] align-baseline"
       style={{ marginBottom: `${Math.max(...wrongMarks.map((mark) => getMarkTrackOffset(mark)), 0)}px` }}
     >
-      <Popover>
-        <PopoverTrigger asChild>
-          <button type="button" className="inline appearance-none bg-transparent p-0 align-baseline">
-            {icon}
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          side="top"
-          align="center"
-          sideOffset={18}
-          collisionPadding={24}
-          className="w-auto max-w-none rounded-none border-0 bg-transparent p-0 shadow-none"
-        >
-          <MarkedComment commentText={mergedComment} />
-        </PopoverContent>
-      </Popover>
+      <MarkCommentPopover commentText={mergedComment}>{icon}</MarkCommentPopover>
     </span>
   );
 }

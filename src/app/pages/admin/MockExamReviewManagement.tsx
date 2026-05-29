@@ -19,6 +19,7 @@ import {
 } from "../../services/adminMockExamReviewService";
 
 type ViewMode = "papers" | "queue" | "detail";
+type AutoSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
 
 type MockExamReviewManagementProps = {
   initialPaperId?: string;
@@ -83,15 +84,38 @@ const formatDuration = (seconds: number) => {
 const toReviewForm = (detail: AdminMockExamReviewDetail): ReviewFormQuestion[] =>
   detail.questions.map((question) => ({
     questionId: question.id,
-    subQuestions: question.subQuestions.map((subQuestion) => ({
-      ...subQuestion,
-      missedPoints: subQuestion.missedPoints.length > 0 ? subQuestion.missedPoints : [],
-      answerMarks: subQuestion.answerMarks.length > 0 ? subQuestion.answerMarks : [],
-    })),
+    subQuestions: question.subQuestions.map((subQuestion) => {
+      const answerMarks = subQuestion.answerMarks.length > 0 ? subQuestion.answerMarks : [];
+      const nextSubQuestion = {
+        ...subQuestion,
+        missedPoints: subQuestion.missedPoints.length > 0 ? subQuestion.missedPoints : [],
+        answerMarks,
+      };
+
+      return {
+        ...nextSubQuestion,
+        score: getSubQuestionMarkScore(nextSubQuestion),
+      };
+    }),
   }));
 
+const parseScore = (value: unknown) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+};
+
+const clampScore = (value: unknown, maxScore: number) => Math.min(Math.max(0, parseScore(value)), Math.max(0, Number(maxScore) || 0));
+
+const isPositiveMark = (mark: Pick<ReviewAnswerMark, "status">) => mark.status === "correct" || mark.status === "score";
+
+const sumPositiveMarkScores = (marks: ReviewAnswerMark[]) =>
+  (Array.isArray(marks) ? marks : []).reduce((sum, mark) => sum + (isPositiveMark(mark) ? Math.max(0, parseScore(mark.score)) : 0), 0);
+
+const getSubQuestionMarkScore = (subQuestion: AdminMockExamReviewSubQuestion) =>
+  clampScore(sumPositiveMarkScores(subQuestion.answerMarks ?? []), subQuestion.maxScore);
+
 const getQuestionTotalScore = (question?: ReviewFormQuestion | null) =>
-  (question?.subQuestions ?? []).reduce((sum, item) => sum + Number(item.score ?? 0), 0);
+  (question?.subQuestions ?? []).reduce((sum, item) => sum + getSubQuestionMarkScore(item), 0);
 
 const buildSavePayload = (detail: AdminMockExamReviewDetail, form: ReviewFormQuestion[]) => ({
   lockToken: detail.record.lock.lockToken,
@@ -100,7 +124,7 @@ const buildSavePayload = (detail: AdminMockExamReviewDetail, form: ReviewFormQue
     questionId: question.questionId,
     subQuestions: question.subQuestions.map((subQuestion) => ({
       id: subQuestion.id,
-      score: Number(subQuestion.score) || 0,
+      score: getSubQuestionMarkScore(subQuestion),
       maxScore: Number(subQuestion.maxScore) || 0,
       reviewComment: subQuestion.reviewComment,
       referenceAnswer: subQuestion.referenceAnswer,
@@ -119,16 +143,17 @@ const serializeReviewForm = (form: ReviewFormQuestion[]) => JSON.stringify(form)
 
 const hasMissingComment = (form: ReviewFormQuestion[]) => form.some((question) => question.subQuestions.some((subQuestion) => !subQuestion.reviewComment.trim()));
 
+const getAutoSaveLabel = (status: AutoSaveStatus, hasUnsavedChanges: boolean) => {
+  if (status === "saving") return "自动保存中...";
+  if (status === "pending" || hasUnsavedChanges) return "等待自动保存";
+  if (status === "error") return "自动保存失败";
+  if (status === "saved") return "已自动保存";
+  return "未开始保存";
+};
+
 type ReviewQuestion = AdminMockExamReviewDetail["questions"][number];
 type ReviewAnswerMark = AdminMockExamReviewSubQuestion["answerMarks"][number];
 const getQuestionAnchorId = (questionId: string) => `review-question-${questionId}`;
-
-const parseScore = (value: unknown) => {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? numericValue : 0;
-};
-
-const clampScore = (value: unknown, maxScore: number) => Math.min(Math.max(0, parseScore(value)), Math.max(0, Number(maxScore) || 0));
 
 const hasMarkRange = (mark: Pick<ReviewAnswerMark, "start" | "end">) =>
   Number.isInteger(Number(mark.start)) && Number.isInteger(Number(mark.end)) && Number(mark.end) > Number(mark.start);
@@ -139,11 +164,6 @@ const marksRangeOverlap = (left: Pick<ReviewAnswerMark, "start" | "end">, right:
   }
   return Number(left.start) < Number(right.end) && Number(right.start) < Number(left.end);
 };
-
-const isPositiveMark = (mark: Pick<ReviewAnswerMark, "status">) => mark.status === "correct" || mark.status === "score";
-
-const sumPositiveMarkScores = (marks: ReviewAnswerMark[]) =>
-  (Array.isArray(marks) ? marks : []).reduce((sum, mark) => sum + (isPositiveMark(mark) ? Math.max(0, parseScore(mark.score)) : 0), 0);
 
 const buildAnswerMarkDedupeKey = (mark: ReviewAnswerMark) =>
   [
@@ -438,6 +458,7 @@ function SubQuestionReviewWorkbench({
   const wrongMarkCount = marks.filter((mark) => mark.status === "wrong").length;
   const positiveMarkCount = marks.filter((mark) => isPositiveMark(mark)).length;
   const neutralMarkCount = marks.filter((mark) => mark.status === "neutral").length;
+  const markScore = getSubQuestionMarkScore({ ...subQuestion, answerMarks: marks });
   const commentLength = subQuestion.reviewComment.trim().length;
   const editingMark = marks.find((mark) => mark.id === editingMarkId) ?? null;
   const markTypeMeta: Array<{ value: ReviewAnswerMark["status"]; label: string; className: string; icon: ReactNode }> = [
@@ -515,7 +536,7 @@ function SubQuestionReviewWorkbench({
           </div>
 
           <div className="grid gap-2 sm:grid-cols-3 xl:w-[300px]">
-            <WorkbenchMetric label="本问得分" value={`${subQuestion.score || 0} 分`} tone="amber" />
+            <WorkbenchMetric label="本问得分" value={`${markScore} 分`} tone="amber" />
             <WorkbenchMetric label="作答字数" value={`${subQuestion.wordCount || 0} 字`} tone="blue" />
             <WorkbenchMetric label="批注数量" value={`${marks.length} 条`} tone="emerald" />
           </div>
@@ -527,12 +548,13 @@ function SubQuestionReviewWorkbench({
           <section className="rounded-[18px] border border-slate-200 bg-white p-3 shadow-[0_8px_22px_rgba(15,23,42,0.035)]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h4 className="text-sm font-semibold text-slate-900">学员作答（当前得分：{subQuestion.score || 0}分）</h4>
+                <h4 className="text-sm font-semibold text-slate-900">学员作答（当前得分：{markScore}分）</h4>
                 <p className="mt-1 text-xs text-slate-500">保留答案展示和划线结果。</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge className="bg-white text-slate-600">错点 {wrongMarkCount}</Badge>
                 <Badge className="bg-white text-slate-600">得分点 {positiveMarkCount}</Badge>
+                <Badge className="bg-white text-slate-600">批注得分 {markScore}</Badge>
                 <Badge className="bg-white text-slate-600">横杠 {neutralMarkCount}</Badge>
               </div>
             </div>
@@ -586,10 +608,11 @@ function SubQuestionReviewWorkbench({
                   min={0}
                   max={subQuestion.maxScore}
                   className="h-10 text-sm"
-                  value={subQuestion.score}
+                  value={markScore}
+                  readOnly
                   disabled={disabled}
-                  onChange={(event) => onChange({ score: clampScore(event.target.value, subQuestion.maxScore) })}
                 />
+                <p className="text-xs leading-5 text-slate-500">按左侧正向批注分数自动合计；如需调整，请修改对应得分点批注。</p>
               </div>
               <div className="space-y-1.5">
                 <Label>能力标签</Label>
@@ -877,6 +900,14 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
   const [aiReviewLoading, setAiReviewLoading] = useState(false);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [batchAiReviewLoading, setBatchAiReviewLoading] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>("idle");
+  const autoSaveTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const autoSaveInFlightRef = useRef(false);
+  const pendingAutoSaveRef = useRef(false);
+  const autoSavePromiseRef = useRef<Promise<boolean> | null>(null);
+  const latestReviewFormRef = useRef<ReviewFormQuestion[]>([]);
+  const latestDetailRef = useRef<AdminMockExamReviewDetail | null>(null);
+  const latestSavedSnapshotRef = useRef("");
 
   const totalDraftScore = useMemo(() => reviewForm.reduce((sum, question) => sum + getQuestionTotalScore(question), 0), [reviewForm]);
   const detailReturnTo = useMemo(() => normalizeAdminReturnTo(returnTo), [returnTo]);
@@ -884,6 +915,55 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
   const hasUnsavedChanges = canEdit && Boolean(savedFormSnapshot) && serializeReviewForm(reviewForm) !== savedFormSnapshot;
   const selectedRecordIdSet = useMemo(() => new Set(selectedRecordIds), [selectedRecordIds]);
   const allCurrentPageSelected = records.length > 0 && records.every((record) => selectedRecordIdSet.has(record.id));
+
+  useEffect(() => {
+    latestReviewFormRef.current = reviewForm;
+  }, [reviewForm]);
+
+  useEffect(() => {
+    latestDetailRef.current = detail;
+  }, [detail]);
+
+  useEffect(() => {
+    latestSavedSnapshotRef.current = savedFormSnapshot;
+  }, [savedFormSnapshot]);
+
+  useEffect(() => {
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    if (!hasUnsavedChanges || !detail?.record.lock.canEdit) {
+      if (!autoSaveInFlightRef.current) {
+        setAutoSaveStatus(savedFormSnapshot ? "saved" : "idle");
+      }
+      return;
+    }
+
+    setAutoSaveStatus("pending");
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      void persistDraft({ silent: true });
+    }, 1500);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        window.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [detail?.record.id, hasUnsavedChanges, reviewForm, savedFormSnapshot]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const loadPapers = async (page = papersPage.page) => {
     setLoading(true);
@@ -1059,7 +1139,13 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
 
   const releaseRecord = async () => {
     if (!detail) return;
-    if (hasUnsavedChanges && !window.confirm("当前批改内容还没有保存，确认释放锁并放弃这些本地修改吗？")) return;
+    if (hasUnsavedChanges) {
+      const saved = await persistDraft({ silent: true, blockUi: true, flush: true });
+      if (!saved) {
+        toast.error("当前批改内容自动保存失败，暂不释放锁，避免丢失修改");
+        return;
+      }
+    }
     if (!window.confirm("确认释放这条批改记录吗？释放后其他老师可以领取。")) return;
     setActionLoading(true);
     try {
@@ -1113,25 +1199,104 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
     );
   };
 
+  const persistDraft = async ({
+    silent = false,
+    blockUi = false,
+    flush = false,
+  }: { silent?: boolean; blockUi?: boolean; flush?: boolean } = {}): Promise<boolean> => {
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    if (autoSaveInFlightRef.current) {
+      pendingAutoSaveRef.current = true;
+      if (flush) {
+        return (autoSavePromiseRef.current ?? Promise.resolve(false)).then(() => persistDraft({ silent, blockUi, flush: true }));
+      }
+      return autoSavePromiseRef.current ?? Promise.resolve(false);
+    }
+
+    const draftDetail = latestDetailRef.current;
+    const draftForm = latestReviewFormRef.current;
+    const draftSnapshot = serializeReviewForm(draftForm);
+    if (!draftDetail || !draftDetail.record.lock.canEdit || !latestSavedSnapshotRef.current || draftSnapshot === latestSavedSnapshotRef.current) {
+      if (!silent) {
+        toast.info("当前没有新的修改，不需要保存草稿");
+      }
+      setAutoSaveStatus("saved");
+      return true;
+    }
+
+    const runSave = (async () => {
+      autoSaveInFlightRef.current = true;
+      pendingAutoSaveRef.current = false;
+      setAutoSaveStatus("saving");
+      if (blockUi) {
+        setActionLoading(true);
+      }
+
+      try {
+        const payload = await adminMockExamReviewService.saveDraft(draftDetail.record.id, buildSavePayload(draftDetail, draftForm));
+        const latestSnapshot = serializeReviewForm(latestReviewFormRef.current);
+        const nextForm = toReviewForm(payload);
+        const nextSnapshot = serializeReviewForm(nextForm);
+
+        const stillEditingSameRecord = latestDetailRef.current?.record.id === payload.record.id;
+        setDetail((current) => (current?.record.id === payload.record.id ? payload : current));
+        if (!stillEditingSameRecord) {
+          return true;
+        }
+
+        latestDetailRef.current = payload;
+        if (latestSnapshot === draftSnapshot) {
+          setReviewForm(nextForm);
+          setSavedFormSnapshot(nextSnapshot);
+          latestReviewFormRef.current = nextForm;
+          latestSavedSnapshotRef.current = nextSnapshot;
+          setAutoSaveStatus("saved");
+        } else {
+          setSavedFormSnapshot(draftSnapshot);
+          latestSavedSnapshotRef.current = draftSnapshot;
+          setAutoSaveStatus("saving");
+          pendingAutoSaveRef.current = true;
+        }
+
+        if (!silent) {
+          toast.success("批改草稿已保存");
+        }
+        return true;
+      } catch (error) {
+        setAutoSaveStatus("error");
+        if (!silent) {
+          toast.error(error instanceof Error ? error.message : "保存失败");
+        }
+        return false;
+      } finally {
+        autoSaveInFlightRef.current = false;
+        autoSavePromiseRef.current = null;
+        if (blockUi) {
+          setActionLoading(false);
+        }
+
+        if (pendingAutoSaveRef.current) {
+          pendingAutoSaveRef.current = false;
+          if (autoSaveTimerRef.current) {
+            window.clearTimeout(autoSaveTimerRef.current);
+          }
+          autoSaveTimerRef.current = window.setTimeout(() => {
+            void persistDraft({ silent: true });
+          }, 300);
+        }
+      }
+    })();
+
+    autoSavePromiseRef.current = runSave;
+    return runSave;
+  };
+
   const saveDraft = async () => {
-    if (!detail) return;
-    if (detail.record.hasPublishedReview && !hasUnsavedChanges) {
-      toast.info("当前没有新的修改，不需要保存草稿");
-      return;
-    }
-    setActionLoading(true);
-    try {
-      const payload = await adminMockExamReviewService.saveDraft(detail.record.id, buildSavePayload(detail, reviewForm));
-      setDetail(payload);
-      const nextForm = toReviewForm(payload);
-      setReviewForm(nextForm);
-      setSavedFormSnapshot(serializeReviewForm(nextForm));
-      toast.success("批改草稿已保存");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "保存失败");
-    } finally {
-      setActionLoading(false);
-    }
+    await persistDraft({ silent: false, blockUi: true, flush: true });
   };
 
   const rerunAiReview = async () => {
@@ -1211,7 +1376,13 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
 
   const goBackToQueue = async () => {
     if (actionLoading) return;
-    if (hasUnsavedChanges && !window.confirm("当前批改内容还没有保存，确认返回队列并放弃这些本地修改吗？")) return;
+    if (hasUnsavedChanges) {
+      const saved = await persistDraft({ silent: true, blockUi: true, flush: true });
+      if (!saved) {
+        toast.error("当前批改内容自动保存失败，暂不返回队列，避免丢失修改");
+        return;
+      }
+    }
     if (detailReturnTo) {
       window.location.assign(detailReturnTo);
       return;
@@ -1237,6 +1408,7 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
     const isRevisingPublishedReview = isRepublishDetail && detail.record.lock.ownedByMe;
     const detailClaimLabel = isRepublishDetail ? "重新修改" : "领取批改";
     const sendReviewLabel = isRepublishDetail ? "重新发送给学生" : "发送给学生";
+    const autoSaveLabel = getAutoSaveLabel(autoSaveStatus, hasUnsavedChanges);
     return (
       <div className="mx-auto max-w-[1600px] space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1292,6 +1464,20 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
                 {detail.record.lock.active ? <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-800">锁定至 {detail.record.lock.expiresAt}</Badge> : null}
                 {isRevisingPublishedReview ? <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">二次修改中，学生端仍显示上一版</Badge> : null}
                 {hasUnsavedChanges ? <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">有未保存修改</Badge> : null}
+                {canEdit ? (
+                  <Badge
+                    variant="outline"
+                    className={
+                      autoSaveStatus === "error"
+                        ? "border-rose-200 bg-rose-50 text-rose-700"
+                        : autoSaveStatus === "saving" || autoSaveStatus === "pending" || hasUnsavedChanges
+                          ? "border-blue-200 bg-blue-50 text-blue-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    }
+                  >
+                    {autoSaveLabel}
+                  </Badge>
+                ) : null}
               </div>
               <h2 className="mt-3 break-words text-2xl font-semibold text-slate-950">{detail.paper.title}</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
@@ -1354,7 +1540,9 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
           <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/95 px-5 py-4 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur">
             <div className="text-sm text-slate-600">
               <span className="font-semibold text-slate-950">当前草稿 {totalDraftScore}/{detail.paper.totalScore} 分</span>
-              {hasUnsavedChanges ? <span className="ml-3 text-amber-700">有未保存修改</span> : <span className="ml-3 text-emerald-700">已保存</span>}
+              <span className={autoSaveStatus === "error" ? "ml-3 text-rose-700" : hasUnsavedChanges ? "ml-3 text-amber-700" : "ml-3 text-emerald-700"}>
+                {autoSaveLabel}
+              </span>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" disabled={actionLoading || aiReviewLoading || !detail.record.lock.canClaim || (isRepublishDetail && !detail.record.lock.ownedByMe)} onClick={() => void rerunAiReview()}>
