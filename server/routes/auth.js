@@ -75,6 +75,23 @@ const resolveMemberHomeBannerUrls = (portalConfig) => {
     }),
   }));
 
+  portalConfig.memberHome.sideAds = {
+    left: {
+      ...(portalConfig.memberHome.sideAds?.left ?? {}),
+      imageUrl: getReadableObjectUrl({
+        objectKey: portalConfig.memberHome.sideAds?.left?.imageObjectKey ?? "",
+        fallbackUrl: portalConfig.memberHome.sideAds?.left?.imageUrl ?? "",
+      }),
+    },
+    right: {
+      ...(portalConfig.memberHome.sideAds?.right ?? {}),
+      imageUrl: getReadableObjectUrl({
+        objectKey: portalConfig.memberHome.sideAds?.right?.imageObjectKey ?? "",
+        fallbackUrl: portalConfig.memberHome.sideAds?.right?.imageUrl ?? "",
+      }),
+    },
+  };
+
   portalConfig.memberHome.joinGroup = {
     ...(portalConfig.memberHome.joinGroup ?? {}),
     qrImageUrl: getReadableObjectUrl({

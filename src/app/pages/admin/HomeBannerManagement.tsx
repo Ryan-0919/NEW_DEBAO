@@ -26,8 +26,40 @@ type BannerItem = {
   sortOrder: number;
 };
 
+type SideAdPosition = "left" | "right";
+
+type SideAdItem = {
+  title: string;
+  description: string;
+  imageUrl: string;
+  imageObjectKey: string;
+  buttonText: string;
+  target: string;
+  isVisible: boolean;
+};
+
 const inputClass = "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:border-amber-400 focus-visible:ring-amber-100";
 const selectTriggerClass = "border-slate-200 bg-white text-slate-900 focus-visible:border-amber-400 focus-visible:ring-amber-100";
+const emptySideAds: Record<SideAdPosition, SideAdItem> = {
+  left: {
+    title: "",
+    description: "",
+    imageUrl: "",
+    imageObjectKey: "",
+    buttonText: "",
+    target: "",
+    isVisible: false,
+  },
+  right: {
+    title: "",
+    description: "",
+    imageUrl: "",
+    imageObjectKey: "",
+    buttonText: "",
+    target: "",
+    isVisible: false,
+  },
+};
 
 const bannerTargetOptions = [
   { label: "首页", value: "/" },
@@ -41,11 +73,20 @@ const bannerTargetOptions = [
   { label: "打字练习", value: "/user/typing-practice" },
   { label: "我的页面", value: "/profile" },
 ];
+const SIDE_AD_EMPTY_TARGET_VALUE = "__none__";
+const sideAdTargetOptions = [
+  { label: "不跳转", value: SIDE_AD_EMPTY_TARGET_VALUE },
+  ...bannerTargetOptions,
+];
 
-const normalizeTarget = (value = "", fallback = "/courses") =>
-  bannerTargetOptions.some((item) => item.value === value) ? value : fallback;
+const normalizeTarget = (value = "", fallback = "/courses") => {
+  if (/^https?:\/\//i.test(value)) return value;
+  return bannerTargetOptions.some((item) => item.value === value) ? value : fallback;
+};
 
 const getTargetLabel = (value = "") => bannerTargetOptions.find((item) => item.value === value)?.label ?? "未选择";
+const toSideAdSelectValue = (value = "") => normalizeTarget(value, "") || SIDE_AD_EMPTY_TARGET_VALUE;
+const fromSideAdSelectValue = (value = "") => (value === SIDE_AD_EMPTY_TARGET_VALUE ? "" : value);
 
 const makeId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -123,7 +164,46 @@ const readBannerItems = (portalConfig: PortalConfig = {}): BannerItem[] => {
     .map((item, index) => ({ ...item, sortOrder: index }));
 };
 
-const buildPortalConfig = (portalConfig: PortalConfig, items: BannerItem[]) => {
+const readSideAd = (portalConfig: PortalConfig = {}, position: SideAdPosition): SideAdItem => {
+  const raw = getPathValue(portalConfig, ["memberHome", "sideAds", position], {}) ?? {};
+  return {
+    title: `${raw.title ?? ""}`,
+    description: `${raw.description ?? ""}`,
+    imageUrl: `${raw.imageUrl ?? ""}`,
+    imageObjectKey: `${raw.imageObjectKey ?? ""}`,
+    buttonText: `${raw.buttonText ?? ""}`,
+    target: normalizeTarget(`${raw.target ?? ""}`, ""),
+    isVisible: raw.isVisible === true,
+  };
+};
+
+const readSideAds = (portalConfig: PortalConfig = {}): Record<SideAdPosition, SideAdItem> => ({
+  left: readSideAd(portalConfig, "left"),
+  right: readSideAd(portalConfig, "right"),
+});
+
+const buildSideAds = (sideAds: Record<SideAdPosition, SideAdItem>) => ({
+  left: {
+    ...sideAds.left,
+    title: sideAds.left.title.trim(),
+    description: sideAds.left.description.trim(),
+    imageUrl: sideAds.left.imageUrl.trim(),
+    imageObjectKey: sideAds.left.imageObjectKey.trim(),
+    buttonText: sideAds.left.buttonText.trim(),
+    target: normalizeTarget(sideAds.left.target.trim(), ""),
+  },
+  right: {
+    ...sideAds.right,
+    title: sideAds.right.title.trim(),
+    description: sideAds.right.description.trim(),
+    imageUrl: sideAds.right.imageUrl.trim(),
+    imageObjectKey: sideAds.right.imageObjectKey.trim(),
+    buttonText: sideAds.right.buttonText.trim(),
+    target: normalizeTarget(sideAds.right.target.trim(), ""),
+  },
+});
+
+const buildPortalConfig = (portalConfig: PortalConfig, items: BannerItem[], sideAds: Record<SideAdPosition, SideAdItem>) => {
   const normalizedItems = items.map((item, index) => ({
     ...item,
     badge: item.badge.trim(),
@@ -146,17 +226,119 @@ const buildPortalConfig = (portalConfig: PortalConfig, items: BannerItem[]) => {
   next = setPathValue(next, ["memberHome", "hero", "description"], primary.description);
   next = setPathValue(next, ["memberHome", "bannerImageUrl"], primary.imageUrl);
   next = setPathValue(next, ["memberHome", "bannerImageObjectKey"], primary.imageObjectKey);
+  next = setPathValue(next, ["memberHome", "sideAds"], buildSideAds(sideAds));
   return next;
 };
 
+function SideAdEditor({
+  position,
+  item,
+  uploading,
+  saving,
+  inputRef,
+  onPatch,
+  onUpload,
+}: {
+  position: SideAdPosition;
+  item: SideAdItem;
+  uploading: boolean;
+  saving: boolean;
+  inputRef: (node: HTMLInputElement | null) => void;
+  onPatch: (patch: Partial<SideAdItem>) => void;
+  onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const label = position === "left" ? "左侧广告位" : "右侧广告位";
+  const localFileInputRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-950">{label}</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">PC 大屏首页主体内容外侧显示，不占用首页内容宽度。建议图片 280 x 440 px 竖图。</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch checked={item.isVisible} onCheckedChange={(checked) => onPatch({ isVisible: checked })} />
+          <span className="text-sm text-slate-600">{item.isVisible ? "展示" : "隐藏"}</span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+          <div className="aspect-[7/11] bg-slate-100">
+            {item.imageUrl ? (
+              <img src={item.imageUrl} alt={item.title || label} className="h-full w-full object-cover" />
+            ) : (
+              <div className="grid h-full place-items-center px-4 text-center text-xs leading-5 text-slate-400">暂无图片<br />建议 280 x 440 px</div>
+            )}
+          </div>
+          <div className="space-y-2 p-3">
+            <input
+              ref={(node) => {
+                localFileInputRef.current = node;
+                inputRef(node);
+              }}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onUpload}
+            />
+            <Button variant="outline" className="w-full border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={uploading || saving} onClick={() => localFileInputRef.current?.click()}>
+              {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+              上传图片
+            </Button>
+            <Button variant="outline" className="w-full border-rose-200 bg-white text-rose-700 hover:bg-rose-50" disabled={uploading || saving || !item.imageUrl} onClick={() => onPatch({ imageUrl: "", imageObjectKey: "" })}>
+              <Trash2 className="size-4" />
+              清空图片
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>广告标题</Label>
+            <Input className={inputClass} value={item.title} onChange={(event) => onPatch({ title: event.target.value })} placeholder="例如：26法考资料包" />
+          </div>
+          <div className="space-y-2">
+            <Label>广告说明</Label>
+            <Textarea className={inputClass} rows={3} value={item.description} onChange={(event) => onPatch({ description: event.target.value })} placeholder="可选，显示在图片下方的小字" />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>按钮文案</Label>
+              <Input className={inputClass} value={item.buttonText} onChange={(event) => onPatch({ buttonText: event.target.value })} placeholder="例如：立即查看" />
+            </div>
+            <div className="space-y-2">
+              <Label>跳转页面</Label>
+              <Select value={toSideAdSelectValue(item.target)} onValueChange={(value) => onPatch({ target: fromSideAdSelectValue(value) })}>
+                <SelectTrigger className={selectTriggerClass}>
+                  <SelectValue placeholder="选择跳转页面" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sideAdTargetOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="focus:bg-amber-50 focus:text-amber-800">{option.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-400">选择不跳转时，前台只展示广告图和文案，不触发页面跳转。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HomeBannerManagement() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const sideAdFileInputRefs = useRef<Record<SideAdPosition, HTMLInputElement | null>>({ left: null, right: null });
   const [config, setConfig] = useState<AdminSystemConfig | null>(null);
   const [items, setItems] = useState<BannerItem[]>([emptyBanner(0)]);
+  const [sideAds, setSideAds] = useState<Record<SideAdPosition, SideAdItem>>(emptySideAds);
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingSideAd, setUploadingSideAd] = useState<SideAdPosition | "">("");
 
   const selectedItem = items.find((item) => item.id === selectedId) || items[0] || emptyBanner(0);
   const visibleCount = items.filter((item) => item.isVisible !== false).length;
@@ -176,6 +358,7 @@ export function HomeBannerManagement() {
       const nextItems = readBannerItems(payload.portalConfig ?? {});
       setConfig(payload);
       setItems(nextItems);
+      setSideAds(readSideAds(payload.portalConfig ?? {}));
       setSelectedId(nextItems[0]?.id || "");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "首页 Banner 加载失败");
@@ -192,7 +375,17 @@ export function HomeBannerManagement() {
     setItems((current) => current.map((item) => (item.id === selectedItem.id ? { ...item, ...patch } : item)));
   };
 
-  const saveItems = async (nextItems = items, successText = "首页 Banner 轮播已保存") => {
+  const patchSideAd = (position: SideAdPosition, patch: Partial<SideAdItem>) => {
+    setSideAds((current) => ({
+      ...current,
+      [position]: {
+        ...current[position],
+        ...patch,
+      },
+    }));
+  };
+
+  const saveItems = async (nextItems = items, successText = "首页 Banner 与广告位已保存") => {
     if (!config) return;
     const normalizedItems = nextItems
       .map((item, index) => ({ ...item, sortOrder: index }))
@@ -210,11 +403,12 @@ export function HomeBannerManagement() {
 
     setSaving(true);
     try {
-      const nextPortalConfig = buildPortalConfig(config.portalConfig ?? {}, normalizedItems);
+      const nextPortalConfig = buildPortalConfig(config.portalConfig ?? {}, normalizedItems, sideAds);
       const payload = await adminOperationsService.updateSystemConfig({ portalConfig: nextPortalConfig });
       const savedItems = readBannerItems(payload.portalConfig ?? {});
       setConfig(payload);
       setItems(savedItems);
+      setSideAds(readSideAds(payload.portalConfig ?? {}));
       setSelectedId((current) => savedItems.some((item) => item.id === current) ? current : savedItems[0]?.id || "");
       toast.success(successText);
     } catch (error) {
@@ -268,6 +462,23 @@ export function HomeBannerManagement() {
     }
   };
 
+  const handleSideAdUpload = async (position: SideAdPosition, event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !config) return;
+
+    setUploadingSideAd(position);
+    try {
+      const uploaded = await adminOperationsService.uploadSystemImage(file);
+      patchSideAd(position, { imageUrl: uploaded.url, imageObjectKey: uploaded.objectKey });
+      toast.success(`${position === "left" ? "左侧" : "右侧"}广告图片已上传，请保存配置`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "广告图片上传失败");
+    } finally {
+      setUploadingSideAd("");
+    }
+  };
+
   if (loading) {
     return <div className="rounded-lg border border-slate-200 bg-white py-16 text-center text-slate-500">首页 Banner 加载中...</div>;
   }
@@ -278,23 +489,40 @@ export function HomeBannerManagement() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">首页 Banner 轮播管理</h2>
-            <p className="mt-1 text-sm text-slate-500">维护学员登录后首页顶部轮播图。当前 {items.length} 张，展示 {visibleCount} 张。</p>
+            <p className="mt-1 text-sm text-slate-500">维护学员登录后首页顶部轮播图和 PC 首页左右侧广告位。当前 Banner {items.length} 张，展示 {visibleCount} 张。</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={loading || saving || uploading} onClick={() => void loadData()}>
+            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={loading || saving || uploading || Boolean(uploadingSideAd)} onClick={() => void loadData()}>
               <RefreshCw className="size-4" />
               重新加载
             </Button>
-            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={saving || uploading} onClick={addBanner}>
+            <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={saving || uploading || Boolean(uploadingSideAd)} onClick={addBanner}>
               <Plus className="size-4" />
               新增 Banner
             </Button>
-            <Button className="bg-[#c9973e] text-slate-950 hover:bg-[#b88932]" disabled={saving || uploading} onClick={() => void saveItems()}>
+            <Button className="bg-[#c9973e] text-slate-950 hover:bg-[#b88932]" disabled={saving || uploading || Boolean(uploadingSideAd)} onClick={() => void saveItems()}>
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              保存轮播
+              保存配置
             </Button>
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-2">
+        {(["left", "right"] as const).map((position) => (
+          <SideAdEditor
+            key={position}
+            position={position}
+            item={sideAds[position]}
+            uploading={uploadingSideAd === position}
+            saving={saving || uploading}
+            inputRef={(node) => {
+              sideAdFileInputRefs.current[position] = node;
+            }}
+            onPatch={(patch) => patchSideAd(position, patch)}
+            onUpload={(event) => void handleSideAdUpload(position, event)}
+          />
+        ))}
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_360px]">

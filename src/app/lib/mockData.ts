@@ -76,6 +76,10 @@ export interface PortalMemberHomeConfig {
     qrImageUrl: string;
     qrImageObjectKey: string;
   };
+  sideAds?: {
+    left?: PortalMemberHomeSideAd;
+    right?: PortalMemberHomeSideAd;
+  };
   announcement: {
     title: string;
     subtitle: string;
@@ -96,6 +100,16 @@ export interface PortalMemberHomeConfig {
     subtitle: string;
     items: Array<{ eyebrow: string; title: string; description: string; path: string }>;
   };
+}
+
+export interface PortalMemberHomeSideAd {
+  title: string;
+  description: string;
+  imageUrl: string;
+  imageObjectKey: string;
+  buttonText: string;
+  target: string;
+  isVisible: boolean;
 }
 
 export interface PortalExamHomeConfig {

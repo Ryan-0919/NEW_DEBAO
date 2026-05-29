@@ -174,6 +174,26 @@ const EMPTY_USER_HOME_CONFIG: UserHomeConfig = {
       qrImageUrl: "",
       qrImageObjectKey: "",
     },
+    sideAds: {
+      left: {
+        title: "",
+        description: "",
+        imageUrl: "",
+        imageObjectKey: "",
+        buttonText: "",
+        target: "",
+        isVisible: false,
+      },
+      right: {
+        title: "",
+        description: "",
+        imageUrl: "",
+        imageObjectKey: "",
+        buttonText: "",
+        target: "",
+        isVisible: false,
+      },
+    },
     announcement: {
       title: "学习公告",
       subtitle: "Announcement",
@@ -1276,6 +1296,7 @@ function HomePage({
   const [bannerIdx, setBannerIdx] = useState(0);
   const [joinGroupOpen, setJoinGroupOpen] = useState(false);
   const [joinGroupQrLoadFailed, setJoinGroupQrLoadFailed] = useState(false);
+  const [closedSideAds, setClosedSideAds] = useState<Record<string, boolean>>({});
   const activeCourses = courses;
   const activeHomeCourses = activeCourses.slice(0, 3).map(mapHomeCourse);
   const memberBanners = (homeConfig.memberHome.banners || [])
@@ -1301,6 +1322,13 @@ function HomePage({
   const memberBannerImageUrl = memberHero?.imageUrl || "/portal/home-hero-banner.png";
   const joinGroupConfig = homeConfig.memberHome.joinGroup;
   const joinGroupQrImageUrl = joinGroupConfig?.qrImageUrl?.trim() || "";
+  const sideAds = homeConfig.memberHome.sideAds ?? {};
+  const visibleSideAds = ([
+    ["left", sideAds.left],
+    ["right", sideAds.right],
+  ] as const).flatMap(([position, item]) =>
+    item?.isVisible && item.imageUrl && !closedSideAds[position] ? [{ position, item }] : [],
+  );
   const homeStats = [
     { label: "累计练题", value: formatCount(studySummary.stats.totalPracticeCount), unit: "题", icon: Target, color: "#4e8ef7" },
     { label: "答题正确率", value: studySummary.stats.accuracyRate === null ? "-" : `${studySummary.stats.accuracyRate}`, unit: studySummary.stats.accuracyRate === null ? "" : "%", icon: TrendingUp, color: "#1dc9a4" },
@@ -1321,6 +1349,10 @@ function HomePage({
     const nextPath = target.startsWith("/") ? target : `/${target}`;
     window.history.pushState({ page: pathToPage(nextPath) }, "", nextPath);
     setPage(pathToPage(nextPath));
+  };
+  const openSideAdTarget = (target = "") => {
+    if (!target) return;
+    openBannerTarget(target);
   };
   const openJoinGroup = () => {
     setJoinGroupQrLoadFailed(false);
@@ -1349,6 +1381,37 @@ function HomePage({
 
   return (
     <div className="debao-page debao-home-page debao-themed-page" style={{ maxWidth: 1340, margin: "0 auto", padding: "28px 36px 0" }}>
+      {visibleSideAds.map(({ position, item }) => {
+        const hasTarget = Boolean(item.target?.trim());
+        const hasText = Boolean(item.title?.trim() || item.description?.trim() || item.buttonText?.trim());
+        return (
+          <aside key={position} className={`debao-home-side-ad debao-home-side-ad-${position}`} aria-label={position === "left" ? "左侧广告位" : "右侧广告位"}>
+            <button
+              type="button"
+              className="debao-home-side-ad-close"
+              aria-label="关闭广告"
+              onClick={() => setClosedSideAds((current) => ({ ...current, [position]: true }))}
+            >
+              <X size={13} />
+            </button>
+            <button
+              type="button"
+              className={`debao-home-side-ad-card${hasTarget ? "" : " debao-home-side-ad-card-static"}`}
+              onClick={() => openSideAdTarget(item.target)}
+              disabled={!hasTarget}
+            >
+              <img src={item.imageUrl} alt={item.title || "得宝首页广告位"} />
+              {hasText ? (
+                <span className="debao-home-side-ad-body">
+                  {item.title ? <strong>{item.title}</strong> : null}
+                  {item.description ? <span>{item.description}</span> : null}
+                  {item.buttonText ? <em>{item.buttonText}</em> : null}
+                </span>
+              ) : null}
+            </button>
+          </aside>
+        );
+      })}
       <div className="debao-mobile-home-head">
         <div className="debao-mobile-home-titlebar">
           <AppLogo compact className="debao-mobile-home-logo" />

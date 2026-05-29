@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -30,12 +31,32 @@ import {
   AdminMockExamPaperPayload,
   AdminMockExamPaperStatus,
   AdminMockExamPaperType,
+  AdminMockExamQuestion,
+  AdminMockExamQuestionType,
+  AdminPagedResult,
   AdminMockExamSeries,
   adminContentService,
 } from "../../services/adminContentService";
+import {
+  adminExamQuestionBankService,
+  type AdminExamQuestionBankFolder,
+  type AdminExamQuestionBankItem,
+  type AdminExamQuestionBankItemType,
+  type AdminExamQuestionBankPaperType,
+} from "../../services/adminExamQuestionBankService";
 
 type PaperForm = AdminMockExamPaperPayload & {
   id: string;
+};
+
+const sourcePageSize = 12;
+
+const emptySourceItemPage: AdminPagedResult<AdminExamQuestionBankItem> = {
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: sourcePageSize,
+  totalPages: 1,
 };
 
 const emptyPaperForm: PaperForm = {
@@ -73,9 +94,29 @@ const paperTypeMeta: Record<AdminMockExamPaperType, { label: string; className: 
   subjective: { label: "主观题", className: "border-emerald-100 bg-emerald-50 text-emerald-700" },
 };
 
+const questionTypeMeta: Record<AdminMockExamQuestionType, { label: string; className: string }> = {
+  single_choice: { label: "单选", className: "border-blue-100 bg-blue-50 text-blue-700" },
+  multiple_choice: { label: "多选", className: "border-violet-100 bg-violet-50 text-violet-700" },
+  uncertain_choice: { label: "不定项", className: "border-cyan-100 bg-cyan-50 text-cyan-700" },
+  subjective_case: { label: "主观案例", className: "border-emerald-100 bg-emerald-50 text-emerald-700" },
+};
+
+const sourceQuestionTypeOptions: Record<AdminMockExamPaperType, { value: AdminExamQuestionBankItemType | "all"; label: string }[]> = {
+  objective: [
+    { value: "all", label: "全部客观题" },
+    { value: "single_choice", label: "单选" },
+    { value: "multiple_choice", label: "多选" },
+    { value: "uncertain_choice", label: "不定项" },
+  ],
+  subjective: [{ value: "subjective_case", label: "主观案例" }],
+};
+
 const normalizeDateTimeInput = (value = "") => value.replace(" ", "T").slice(0, 16);
 const fromDateTimeInput = (value = "") => (value ? `${value.replace("T", " ")}:00`.slice(0, 19) : "");
 const compactNumber = (value: number | null | undefined) => Number(value ?? 0).toLocaleString("zh-CN");
+const getQuestionTitle = (item: Pick<AdminMockExamQuestion | AdminExamQuestionBankItem, "title" | "questionNo" | "stem">) =>
+  item.title || item.questionNo || item.stem || "未命名题目";
+const getQuestionPreview = (value = "", length = 90) => value.replace(/\s+/g, " ").trim().slice(0, length);
 
 const toPaperForm = (paper: AdminMockExamPaper): PaperForm => ({
   id: paper.id,
@@ -145,6 +186,16 @@ export function MockExamManagement() {
   const [seriesForm, setSeriesForm] = useState({ name: "", description: "", sortOrder: 0 });
   const [savingSeries, setSavingSeries] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState("");
+  const [paperQuestions, setPaperQuestions] = useState<AdminMockExamQuestion[]>([]);
+  const [questionLoading, setQuestionLoading] = useState(false);
+  const [questionActionLoading, setQuestionActionLoading] = useState(false);
+  const [sourceFolders, setSourceFolders] = useState<AdminExamQuestionBankFolder[]>([]);
+  const [sourceItems, setSourceItems] = useState<AdminPagedResult<AdminExamQuestionBankItem>>(emptySourceItemPage);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceFolderId, setSourceFolderId] = useState("all");
+  const [sourceType, setSourceType] = useState<AdminExamQuestionBankItemType | "all">("all");
+  const [sourceKeyword, setSourceKeyword] = useState("");
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
 
   const summary = useMemo(
     () => ({
@@ -195,6 +246,11 @@ export function MockExamManagement() {
   const paperTypeLocked = Boolean(
     editingPaper && (editingPaper.recordCount > 0 || editingPaper.permissionCount > 0 || editingPaper.leaderboardCount > 0),
   );
+  const selectedSourceSet = useMemo(() => new Set(selectedSourceIds), [selectedSourceIds]);
+  const paperSourceBankItemSet = useMemo(
+    () => new Set(paperQuestions.map((question) => question.sourceBankItemId).filter(Boolean)),
+    [paperQuestions],
+  );
 
   const loadData = async (initial = false) => {
     if (initial) setLoading(true);
@@ -217,6 +273,72 @@ export function MockExamManagement() {
   useEffect(() => {
     void loadData(true);
   }, []);
+
+  const applyPaperQuestionsPayload = (payload: Awaited<ReturnType<typeof adminContentService.getMockExamPaperQuestions>>) => {
+    setPaperQuestions(payload.questions);
+    const nextPaper = payload.paper;
+    if (nextPaper) {
+      setEditingPaper(nextPaper);
+      setPaperForm((current) => ({
+        ...current,
+        totalScore: nextPaper.activeTotalScore ?? nextPaper.totalScore ?? current.totalScore,
+        questionCount: nextPaper.activeQuestionCount ?? nextPaper.questionCount ?? current.questionCount,
+      }));
+      setPapers((current) => current.map((paper) => (paper.id === nextPaper.id ? nextPaper : paper)));
+    }
+  };
+
+  const resetSourcePicker = (paperType: AdminMockExamPaperType) => {
+    setSourceFolderId("all");
+    setSourceType(paperType === "subjective" ? "subjective_case" : "all");
+    setSourceKeyword("");
+    setSelectedSourceIds([]);
+    setSourceItems(emptySourceItemPage);
+  };
+
+  const loadPaperQuestions = async (paperId: string) => {
+    setQuestionLoading(true);
+    try {
+      applyPaperQuestionsPayload(await adminContentService.getMockExamPaperQuestions(paperId));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载试卷题目失败");
+    } finally {
+      setQuestionLoading(false);
+    }
+  };
+
+  const loadSourceFolders = async (paperType: AdminExamQuestionBankPaperType) => {
+    try {
+      setSourceFolders(await adminExamQuestionBankService.getFolders(paperType));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载机考题库文件夹失败");
+      setSourceFolders([]);
+    }
+  };
+
+  const loadSourceItems = async (
+    page = 1,
+    overrides?: Partial<{ paperType: AdminExamQuestionBankPaperType; folderId: string; type: AdminExamQuestionBankItemType | "all"; keyword: string }>,
+  ) => {
+    setSourceLoading(true);
+    try {
+      const paperType = overrides?.paperType ?? paperForm.paperType;
+      setSourceItems(
+        await adminExamQuestionBankService.getItems({
+          paperType,
+          page,
+          pageSize: sourcePageSize,
+          folderId: overrides?.folderId ?? sourceFolderId,
+          type: overrides?.type ?? sourceType,
+          keyword: (overrides?.keyword ?? sourceKeyword).trim(),
+        }),
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载机考题库题目失败");
+    } finally {
+      setSourceLoading(false);
+    }
+  };
 
   const openSeriesDialog = (series?: AdminMockExamSeries | null) => {
     setEditingSeries(series ?? null);
@@ -296,12 +418,24 @@ export function MockExamManagement() {
       seriesId: selectedSeriesId !== "all" && selectedSeriesId !== "__none__" ? selectedSeriesId : "",
       sortOrder: filteredPapers.length,
     });
+    setPaperQuestions([]);
+    setSourceFolders([]);
+    resetSourcePicker("objective");
     setMode("edit");
   };
 
   const openEditPaper = (paper: AdminMockExamPaper) => {
     setEditingPaper(paper);
     setPaperForm(toPaperForm(paper));
+    resetSourcePicker(paper.paperType);
+    void loadPaperQuestions(paper.id);
+    void loadSourceFolders(paper.paperType);
+    void loadSourceItems(1, {
+      paperType: paper.paperType,
+      folderId: "all",
+      type: paper.paperType === "subjective" ? "subjective_case" : "all",
+      keyword: "",
+    });
     setMode("edit");
   };
 
@@ -309,6 +443,10 @@ export function MockExamManagement() {
     setMode("list");
     setEditingPaper(null);
     setPaperForm(emptyPaperForm);
+    setPaperQuestions([]);
+    setSourceFolders([]);
+    setSourceItems(emptySourceItemPage);
+    setSelectedSourceIds([]);
   };
 
   const uploadPaperCover = async (file?: File | null) => {
@@ -329,6 +467,107 @@ export function MockExamManagement() {
     }
   };
 
+  const changePaperType = (value: AdminMockExamPaperType) => {
+    setPaperForm((current) => ({
+      ...current,
+      paperType: value,
+      reviewEnabled: value === "subjective" ? current.reviewEnabled || true : false,
+    }));
+    resetSourcePicker(value);
+    setSourceFolders([]);
+    if (editingPaper) {
+      void loadSourceFolders(value);
+      void loadSourceItems(1, { paperType: value, folderId: "all", type: value === "subjective" ? "subjective_case" : "all", keyword: "" });
+    }
+  };
+
+  const toggleSourceSelected = (itemId: string, checked: boolean) => {
+    setSelectedSourceIds((current) => {
+      if (checked) return current.includes(itemId) ? current : [...current, itemId];
+      return current.filter((id) => id !== itemId);
+    });
+  };
+
+  const toggleCurrentSourcePage = () => {
+    const visibleIds = sourceItems.items.filter((item) => !paperSourceBankItemSet.has(item.id)).map((item) => item.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedSourceSet.has(id));
+    setSelectedSourceIds((current) => {
+      if (allVisibleSelected) return current.filter((id) => !visibleIds.includes(id));
+      return [...new Set([...current, ...visibleIds])];
+    });
+  };
+
+  const importSelectedQuestions = async () => {
+    if (!editingPaper) {
+      toast.error("请先保存试卷，再引用机考题库题目");
+      return;
+    }
+    if (selectedSourceIds.length === 0) {
+      toast.error("请选择要引用的题目");
+      return;
+    }
+
+    setQuestionActionLoading(true);
+    try {
+      const payload = await adminContentService.importMockExamQuestionsFromBank(editingPaper.id, selectedSourceIds);
+      applyPaperQuestionsPayload(payload);
+      setSelectedSourceIds([]);
+      toast.success(payload.importedCount ? `已引用 ${payload.importedCount} 道题` : "所选题目已在当前试卷中");
+      await loadData();
+      await loadSourceItems(sourceItems.page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "引用题目失败");
+    } finally {
+      setQuestionActionLoading(false);
+    }
+  };
+
+  const movePaperQuestion = async (question: AdminMockExamQuestion, direction: -1 | 1) => {
+    if (!editingPaper) return;
+    const currentIndex = paperQuestions.findIndex((item) => item.id === question.id);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= paperQuestions.length) return;
+
+    const nextQuestions = [...paperQuestions];
+    const [item] = nextQuestions.splice(currentIndex, 1);
+    nextQuestions.splice(nextIndex, 0, item);
+    const sorted = nextQuestions.map((entry, index) => ({ ...entry, sortOrder: index }));
+    setPaperQuestions(sorted);
+
+    setQuestionActionLoading(true);
+    try {
+      applyPaperQuestionsPayload(
+        await adminContentService.updateMockExamQuestionOrder(
+          editingPaper.id,
+          sorted.map((entry, index) => ({ id: entry.id, sortOrder: index })),
+        ),
+      );
+      await loadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "更新试题顺序失败");
+      await loadPaperQuestions(editingPaper.id);
+    } finally {
+      setQuestionActionLoading(false);
+    }
+  };
+
+  const removePaperQuestion = async (question: AdminMockExamQuestion) => {
+    if (!editingPaper) return;
+    if (!window.confirm(`确认从当前试卷移除「${getQuestionTitle(question)}」？题库原题不会被删除。`)) return;
+
+    setQuestionActionLoading(true);
+    try {
+      applyPaperQuestionsPayload(await adminContentService.deleteMockExamQuestion(editingPaper.id, question.id));
+      toast.success("题目已从试卷移除");
+      await loadData();
+      await loadSourceItems(sourceItems.page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "移除题目失败");
+    } finally {
+      setQuestionActionLoading(false);
+    }
+  };
+
   const savePaper = async () => {
     if (!paperForm.title.trim()) {
       toast.error("请输入试卷名称");
@@ -343,13 +582,21 @@ export function MockExamManagement() {
     try {
       const payload = buildPaperPayload(paperForm);
       if (editingPaper) {
-        await adminContentService.updateMockExamPaper(editingPaper.id, payload);
+        const updated = await adminContentService.updateMockExamPaper(editingPaper.id, payload);
+        setEditingPaper(updated);
+        setPaperForm(toPaperForm(updated));
+        setPapers((current) => current.map((paper) => (paper.id === updated.id ? updated : paper)));
         toast.success("试卷已更新");
       } else {
-        await adminContentService.createMockExamPaper(payload);
-        toast.success("试卷已创建");
+        const created = await adminContentService.createMockExamPaper(payload);
+        setEditingPaper(created);
+        setPaperForm(toPaperForm(created));
+        setPaperQuestions([]);
+        resetSourcePicker(created.paperType);
+        void loadSourceFolders(created.paperType);
+        void loadSourceItems(1, { paperType: created.paperType, folderId: "all", type: created.paperType === "subjective" ? "subjective_case" : "all", keyword: "" });
+        toast.success("试卷已创建，可以继续引用题库题目");
       }
-      closePaperEditor();
       await loadData();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存试卷失败");
@@ -503,17 +750,7 @@ export function MockExamManagement() {
                   </div>
                   <div className="space-y-2">
                     <Label>试卷类型</Label>
-                    <Select
-                      value={paperForm.paperType}
-                      disabled={paperTypeLocked}
-                      onValueChange={(value: AdminMockExamPaperType) =>
-                        setPaperForm((current) => ({
-                          ...current,
-                          paperType: value,
-                          reviewEnabled: value === "subjective" ? current.reviewEnabled || true : false,
-                        }))
-                      }
-                    >
+                    <Select value={paperForm.paperType} disabled={paperTypeLocked} onValueChange={(value: AdminMockExamPaperType) => changePaperType(value)}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -594,6 +831,226 @@ export function MockExamManagement() {
                     </div>
                   </div>
                 </div>
+              </section>
+
+              <section className="rounded-lg border border-slate-200 bg-white">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-950">试题组卷</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      从{paperForm.paperType === "objective" ? "客观机考题库" : "主观机考题库"}引用题目，引用后会同步试卷题量和总分。
+                    </p>
+                  </div>
+                  <Badge variant="outline" className={paperTypeMeta[paperForm.paperType].className}>
+                    {paperTypeMeta[paperForm.paperType].label}
+                  </Badge>
+                </div>
+
+                {!editingPaper ? (
+                  <div className="px-5 py-10 text-center text-sm text-slate-500">先保存试卷，再从机考题库引用题目。</div>
+                ) : (
+                  <div className="grid min-h-[560px] gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">
+                    <div className="min-w-0 border-b border-slate-200 p-5 xl:border-b-0 xl:border-r">
+                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-sm text-slate-500">
+                          当前 <span className="font-semibold text-slate-900">{paperQuestions.length}</span> 道题，
+                          <span className="font-semibold text-slate-900">{paperQuestions.reduce((sum, question) => sum + Number(question.score ?? 0), 0)}</span> 分
+                        </div>
+                        <Button variant="outline" size="sm" className="border-slate-200 bg-white text-slate-700" onClick={() => void loadPaperQuestions(editingPaper.id)} disabled={questionLoading}>
+                          刷新题目
+                        </Button>
+                      </div>
+
+                      <div className="max-h-[640px] space-y-3 overflow-y-auto pr-1">
+                        {questionLoading ? (
+                          <div className="rounded-lg border border-slate-200 py-16 text-center text-sm text-slate-500">正在加载试卷题目...</div>
+                        ) : paperQuestions.length === 0 ? (
+                          <div className="rounded-lg border border-dashed border-slate-300 py-16 text-center text-sm text-slate-500">
+                            这张试卷还没有题目，请从右侧机考题库引用。
+                          </div>
+                        ) : (
+                          paperQuestions.map((question, index) => {
+                            const meta = questionTypeMeta[question.type];
+                            return (
+                              <div key={question.id} className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant="outline" className={meta.className}>
+                                        {meta.label}
+                                      </Badge>
+                                      <span className="text-xs text-slate-400">第 {index + 1} 题</span>
+                                      <span className="text-xs font-medium text-slate-600">{question.score} 分</span>
+                                      {question.sourceFolderName ? <span className="text-xs text-slate-400">来自 {question.sourceFolderName}</span> : null}
+                                    </div>
+                                    <h4 className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-slate-950">{getQuestionTitle(question)}</h4>
+                                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{getQuestionPreview(question.material || question.stem || question.analysis) || "暂无题干预览"}</p>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    <Button variant="ghost" size="sm" onClick={() => void movePaperQuestion(question, -1)} disabled={index === 0 || questionActionLoading}>
+                                      <ArrowUp className="size-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={() => void movePaperQuestion(question, 1)} disabled={index === paperQuestions.length - 1 || questionActionLoading}>
+                                      <ArrowDown className="size-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                      onClick={() => void removePaperQuestion(question)}
+                                      disabled={questionActionLoading}
+                                    >
+                                      <Trash2 className="size-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    <aside className="min-w-0 bg-white p-5">
+                      <div className="space-y-4">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                          <div className="space-y-2">
+                            <Label>题库文件夹</Label>
+                            <Select
+                              value={sourceFolderId}
+                              onValueChange={(value) => {
+                                setSourceFolderId(value);
+                                setSelectedSourceIds([]);
+                                void loadSourceItems(1, { folderId: value });
+                              }}
+                            >
+                              <SelectTrigger className="border-slate-200 bg-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="border-slate-200 bg-white text-slate-900">
+                                <SelectItem value="all">全部文件夹</SelectItem>
+                                {sourceFolders.map((folder) => (
+                                  <SelectItem key={folder.id} value={folder.id}>
+                                    {folder.name}（{folder.itemCount}）
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>题型</Label>
+                            <Select
+                              value={sourceType}
+                              onValueChange={(value: AdminExamQuestionBankItemType | "all") => {
+                                setSourceType(value);
+                                setSelectedSourceIds([]);
+                                void loadSourceItems(1, { type: value });
+                              }}
+                            >
+                              <SelectTrigger className="border-slate-200 bg-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="border-slate-200 bg-white text-slate-900">
+                                {sourceQuestionTypeOptions[paperForm.paperType].map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Input
+                            className="border-slate-200 bg-white"
+                            value={sourceKeyword}
+                            onChange={(event) => setSourceKeyword(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") void loadSourceItems(1);
+                            }}
+                            placeholder="搜索题号、题干、解析"
+                          />
+                          <Button variant="outline" className="border-slate-200 bg-white text-slate-700" onClick={() => void loadSourceItems(1)} disabled={sourceLoading}>
+                            <Search className="size-4" />
+                          </Button>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-800">
+                          <span>
+                            已选 <span className="font-semibold">{selectedSourceIds.length}</span> 道
+                          </span>
+                          <Button variant="outline" size="sm" className="border-blue-200 bg-white text-blue-700 hover:bg-blue-100" onClick={toggleCurrentSourcePage} disabled={sourceItems.items.length === 0}>
+                            {sourceItems.items.filter((item) => !paperSourceBankItemSet.has(item.id)).every((item) => selectedSourceSet.has(item.id)) && sourceItems.items.some((item) => !paperSourceBankItemSet.has(item.id))
+                              ? "取消本页"
+                              : "选择本页"}
+                          </Button>
+                        </div>
+
+                        <div className="max-h-[460px] space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-2">
+                          {sourceLoading ? (
+                            <div className="py-16 text-center text-sm text-slate-500">正在加载题库题目...</div>
+                          ) : sourceItems.items.length === 0 ? (
+                            <div className="py-16 text-center text-sm text-slate-500">暂无可选题目</div>
+                          ) : (
+                            sourceItems.items.map((item) => {
+                              const alreadyUsed = paperSourceBankItemSet.has(item.id);
+                              const meta = questionTypeMeta[item.type];
+                              return (
+                                <label
+                                  key={item.id}
+                                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                                    alreadyUsed ? "border-slate-100 bg-slate-50 text-slate-400" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/50"
+                                  }`}
+                                >
+                                  <Checkbox
+                                    checked={alreadyUsed || selectedSourceSet.has(item.id)}
+                                    disabled={alreadyUsed}
+                                    onCheckedChange={(checked) => toggleSourceSelected(item.id, checked === true)}
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant="outline" className={meta.className}>
+                                        {meta.label}
+                                      </Badge>
+                                      <span className="text-xs">{item.score} 分</span>
+                                      {alreadyUsed ? <span className="text-xs text-emerald-600">已引用</span> : null}
+                                    </div>
+                                    <p className="mt-2 line-clamp-2 text-sm font-medium leading-6 text-slate-900">{getQuestionTitle(item)}</p>
+                                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{getQuestionPreview(item.material || item.stem || item.analysis) || "暂无题干预览"}</p>
+                                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
+                                      <span>{item.folderName || "未分组"}</span>
+                                      {item.questionNo ? <span>题号 {item.questionNo}</span> : null}
+                                      {item.type === "subjective_case" ? <span>{item.subQuestions.length} 个小问</span> : <span>{item.optionCount} 个选项</span>}
+                                    </div>
+                                  </div>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+                          <span>
+                            第 {sourceItems.page} / {sourceItems.totalPages} 页，共 {sourceItems.total} 道
+                          </span>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" className="border-slate-200 bg-white" disabled={sourceItems.page <= 1 || sourceLoading} onClick={() => void loadSourceItems(sourceItems.page - 1)}>
+                              上一页
+                            </Button>
+                            <Button variant="outline" size="sm" className="border-slate-200 bg-white" disabled={sourceItems.page >= sourceItems.totalPages || sourceLoading} onClick={() => void loadSourceItems(sourceItems.page + 1)}>
+                              下一页
+                            </Button>
+                          </div>
+                        </div>
+
+                        <Button className="w-full" onClick={() => void importSelectedQuestions()} disabled={selectedSourceIds.length === 0 || questionActionLoading}>
+                          {questionActionLoading ? "引用中..." : `引用选中 ${selectedSourceIds.length} 道题`}
+                        </Button>
+                      </div>
+                    </aside>
+                  </div>
+                )}
               </section>
             </div>
 

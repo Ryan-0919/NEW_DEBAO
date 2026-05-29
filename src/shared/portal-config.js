@@ -83,6 +83,27 @@ const normalizeBannerItems = (value, fallbackItems) => {
     .filter((item) => item.title || item.description || item.imageUrl || item.imageObjectKey);
 };
 
+const normalizeSideAd = (value, fallback = {}) => {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    title: toOptionalTrimmedString(source.title, fallback.title ?? ""),
+    description: toOptionalTrimmedString(source.description, fallback.description ?? ""),
+    imageUrl: toOptionalTrimmedString(source.imageUrl, fallback.imageUrl ?? ""),
+    imageObjectKey: toOptionalTrimmedString(source.imageObjectKey, fallback.imageObjectKey ?? ""),
+    buttonText: toOptionalTrimmedString(source.buttonText, fallback.buttonText ?? ""),
+    target: toOptionalTrimmedString(source.target, fallback.target ?? ""),
+    isVisible: toBoolean(source.isVisible, fallback.isVisible ?? false),
+  };
+};
+
+const normalizeSideAds = (value, fallback = {}) => {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    left: normalizeSideAd(source.left, fallback.left),
+    right: normalizeSideAd(source.right, fallback.right),
+  };
+};
+
 export const normalizeCourseQuestionBankLinks = (value) => {
   const source = Array.isArray(value) ? value : [];
   return source
@@ -172,6 +193,26 @@ export const DEFAULT_PORTAL_CONFIG = {
       modalHint: "长按或截图后使用微信扫码加入",
       qrImageUrl: "",
       qrImageObjectKey: "",
+    },
+    sideAds: {
+      left: {
+        title: "",
+        description: "",
+        imageUrl: "",
+        imageObjectKey: "",
+        buttonText: "",
+        target: "",
+        isVisible: false,
+      },
+      right: {
+        title: "",
+        description: "",
+        imageUrl: "",
+        imageObjectKey: "",
+        buttonText: "",
+        target: "",
+        isVisible: false,
+      },
     },
     announcement: {
       title: "学习公告",
@@ -478,6 +519,10 @@ export const normalizePortalConfig = (value, options = {}) => {
     memberHomeSource.joinGroup && typeof memberHomeSource.joinGroup === "object"
       ? memberHomeSource.joinGroup
       : {};
+  const memberHomeSideAdsSource =
+    memberHomeSource.sideAds && typeof memberHomeSource.sideAds === "object"
+      ? memberHomeSource.sideAds
+      : {};
   const legacyMemberBannerItems = [
     {
       badge: toTrimmedString(memberHomeHeroSource.badge, fallback.memberHome.hero.badge),
@@ -570,6 +615,7 @@ export const normalizePortalConfig = (value, options = {}) => {
       qrImageUrl: toOptionalTrimmedString(memberHomeJoinGroupSource.qrImageUrl, fallback.memberHome.joinGroup.qrImageUrl),
       qrImageObjectKey: toOptionalTrimmedString(memberHomeJoinGroupSource.qrImageObjectKey, fallback.memberHome.joinGroup.qrImageObjectKey),
     },
+    sideAds: normalizeSideAds(memberHomeSideAdsSource, fallback.memberHome.sideAds),
     announcement: {
       title: toTrimmedString(memberHomeAnnouncementSource.title, fallback.memberHome.announcement.title),
       subtitle: toTrimmedString(memberHomeAnnouncementSource.subtitle, fallback.memberHome.announcement.subtitle),

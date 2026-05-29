@@ -18,7 +18,7 @@ function figmaAssetResolver() {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiTarget = env.VITE_DEV_API_TARGET || "http://localhost:3001"
+  const apiTarget = env.VITE_DEV_API_TARGET || "http://localhost:3011"
 
   return {
   plugins: [

@@ -145,6 +145,7 @@ export type AdminMediaUploadResult = AdminMediaItem[];
 
 export type AdminMockExamPaperType = "objective" | "subjective";
 export type AdminMockExamPaperStatus = "draft" | "published";
+export type AdminMockExamQuestionType = "single_choice" | "multiple_choice" | "uncertain_choice" | "subjective_case";
 
 export type AdminMockExamSeries = {
   id: string;
@@ -216,6 +217,50 @@ export type AdminMockExamPaperPayload = {
   sortOrder: number;
 };
 
+export type AdminMockExamQuestionOption = {
+  id: string;
+  optionKey: string;
+  content: string;
+  sortOrder: number;
+};
+
+export type AdminMockExamQuestion = {
+  id: string;
+  paperId: string;
+  sourceBankItemId: string;
+  sourceFolderId: string;
+  sourceFolderName: string;
+  sourcePaperType: AdminMockExamPaperType | "";
+  title: string;
+  questionNo: string;
+  yearLabel: string;
+  pageLabel: string;
+  sectionLabel: string;
+  tags: string[];
+  type: AdminMockExamQuestionType;
+  stem: string;
+  material: string;
+  analysis: string;
+  lessonAudioUrl: string;
+  lessonAudioObjectKey: string;
+  lessonAudioDurationSeconds: number;
+  score: number;
+  sortOrder: number;
+  correctAnswerJson: string;
+  questionMetaJson: string;
+  optionCount: number;
+  options: AdminMockExamQuestionOption[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminMockExamPaperQuestionsPayload = {
+  paper: AdminMockExamPaper | null;
+  questions: AdminMockExamQuestion[];
+  importedCount?: number;
+  skippedCount?: number;
+};
+
 export const adminContentService = {
   getMockExamSeries: () => adminRequest<AdminMockExamSeries[]>("/api/admin/content/mock-exams/series"),
   createMockExamSeries: (payload: Pick<AdminMockExamSeries, "name" | "description" | "sortOrder">) =>
@@ -235,6 +280,8 @@ export const adminContentService = {
       })}`,
     ),
   getMockExamPaper: (paperId: string) => adminRequest<AdminMockExamPaper>(`/api/admin/content/mock-exams/papers/${paperId}`),
+  getMockExamPaperQuestions: (paperId: string) =>
+    adminRequest<AdminMockExamPaperQuestionsPayload>(`/api/admin/content/mock-exams/papers/${encodeURIComponent(paperId)}/questions`),
   createMockExamPaper: (payload: AdminMockExamPaperPayload) =>
     adminPostJson<AdminMockExamPaper>("/api/admin/content/mock-exams/papers", payload),
   updateMockExamPaper: (paperId: string, payload: AdminMockExamPaperPayload) =>
@@ -243,6 +290,16 @@ export const adminContentService = {
     adminDelete<{ success: boolean } | AdminMockExamPaper>(`/api/admin/content/mock-exams/papers/${paperId}`),
   recallMockExamPaper: (paperId: string) =>
     adminPostJson<AdminMockExamPaper>(`/api/admin/content/mock-exams/papers/${paperId}/recall`),
+  importMockExamQuestionsFromBank: (paperId: string, sourceBankItemIds: string[]) =>
+    adminPostJson<AdminMockExamPaperQuestionsPayload>(`/api/admin/content/mock-exams/papers/${encodeURIComponent(paperId)}/questions/import-from-bank`, {
+      sourceBankItemIds,
+    }),
+  updateMockExamQuestionOrder: (paperId: string, items: { id: string; sortOrder: number }[]) =>
+    adminPatchJson<AdminMockExamPaperQuestionsPayload>(`/api/admin/content/mock-exams/papers/${encodeURIComponent(paperId)}/questions/order`, { items }),
+  deleteMockExamQuestion: (paperId: string, questionId: string) =>
+    adminDelete<AdminMockExamPaperQuestionsPayload>(
+      `/api/admin/content/mock-exams/papers/${encodeURIComponent(paperId)}/questions/${encodeURIComponent(questionId)}`,
+    ),
   updateMockExamPaperOrder: (items: { id: string; sortOrder: number }[]) =>
     adminPatchJson<{ success: boolean }>("/api/admin/content/mock-exams/papers/order", { items }),
   uploadMockExamCover: (file: File) => {

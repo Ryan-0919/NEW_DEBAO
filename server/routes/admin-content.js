@@ -21,6 +21,8 @@ import {
 
 const CONTENT_MANAGER_ROLES = ["super_admin", "operations_admin"];
 const MEDIA_TYPES = new Set(["audio", "video"]);
+const MOCK_EXAM_OBJECTIVE_QUESTION_TYPES = new Set(["single_choice", "multiple_choice", "uncertain_choice"]);
+const MOCK_EXAM_QUESTION_TYPES = new Set([...MOCK_EXAM_OBJECTIVE_QUESTION_TYPES, "subjective_case"]);
 const MB = 1024 * 1024;
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv"]);
@@ -159,6 +161,15 @@ const toBool = (value, fallback = false) => {
   return fallback;
 };
 
+const parseJsonSafely = (value, fallback) => {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
 const readMockExamPaperType = (value) => {
   const normalized = `${value ?? ""}`.trim();
   return normalized === "objective" || normalized === "subjective" ? normalized : null;
@@ -275,6 +286,110 @@ const validateMockExamPaperPublish = ({ payload, questions }) => {
   if (payload.paperType === "objective" && stats.subjectiveQuestionCount > 0) return "客观题模考不能包含主观题题目";
   if (payload.paperType === "subjective" && stats.subjectiveQuestionCount === 0) return "主观题批改必须至少包含一道主观题";
   return null;
+};
+
+const isMockExamQuestionAllowedForPaper = (paperType, questionType) => {
+  if (!MOCK_EXAM_QUESTION_TYPES.has(questionType)) return false;
+  if (paperType === "objective") return MOCK_EXAM_OBJECTIVE_QUESTION_TYPES.has(questionType);
+  if (paperType === "subjective") return questionType === "subjective_case";
+  return false;
+};
+
+const mockExamQuestionInclude = {
+  options: { orderBy: [{ sortOrder: "asc" }, { optionKey: "asc" }] },
+  sourceBankItem: {
+    include: {
+      folder: { select: { id: true, name: true, paperType: true } },
+    },
+  },
+};
+
+const serializeAdminMockExamQuestion = (question) => {
+  const meta = parseJsonSafely(question.questionMetaJson, {});
+  const tags = Array.isArray(meta?.tags) ? meta.tags : [];
+  return {
+    id: question.id,
+    paperId: question.paperId,
+    sourceBankItemId: question.sourceBankItemId ?? "",
+    sourceFolderId: question.sourceBankItem?.folderId ?? "",
+    sourceFolderName: question.sourceBankItem?.folder?.name ?? "",
+    sourcePaperType: question.sourceBankItem?.folder?.paperType ?? "",
+    title: meta?.title ?? "",
+    questionNo: meta?.questionNo ?? "",
+    yearLabel: meta?.yearLabel ?? "",
+    pageLabel: meta?.pageLabel ?? "",
+    sectionLabel: meta?.sectionLabel ?? "",
+    tags,
+    type: question.type,
+    stem: question.stem,
+    material: question.material ?? "",
+    analysis: question.analysis ?? "",
+    lessonAudioUrl: question.lessonAudioUrl ?? "",
+    lessonAudioObjectKey: question.lessonAudioObjectKey ?? "",
+    lessonAudioDurationSeconds: Number(question.lessonAudioDurationSeconds ?? 0),
+    score: Number(question.score ?? 0),
+    sortOrder: Number(question.sortOrder ?? 0),
+    correctAnswerJson: question.correctAnswerJson ?? "[]",
+    questionMetaJson: question.questionMetaJson ?? "",
+    optionCount: question.options?.length ?? 0,
+    options: (question.options ?? []).map((option) => ({
+      id: option.id,
+      optionKey: option.optionKey,
+      content: option.content,
+      sortOrder: Number(option.sortOrder ?? 0),
+    })),
+    createdAt: formatDateTime(question.createdAt),
+    updatedAt: formatDateTime(question.updatedAt),
+  };
+};
+
+const getAdminMockExamQuestions = (db, paperId) =>
+  db.mockExamQuestion.findMany({
+    where: { paperId, isActive: true },
+    include: mockExamQuestionInclude,
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+const syncMockExamPaperQuestionStats = async (db, paperId) => {
+  const questions = await db.mockExamQuestion.findMany({
+    where: { paperId, isActive: true },
+    select: { score: true },
+  });
+  const questionCount = questions.length;
+  const totalScore = questions.reduce((sum, question) => sum + Number(question.score ?? 0), 0);
+  await db.mockExamPaper.update({
+    where: { id: paperId },
+    data: { questionCount, totalScore },
+  });
+  return { questionCount, totalScore };
+};
+
+const getAdminMockExamPaperForResponse = (db, paperId) =>
+  db.mockExamPaper.findUnique({
+    where: { id: paperId },
+    include: {
+      series: { select: { id: true, name: true } },
+      questions: {
+        where: { isActive: true },
+        select: { id: true, type: true, score: true },
+        orderBy: { sortOrder: "asc" },
+      },
+      _count: {
+        select: {
+          records: true,
+          permissions: true,
+          leaderboardEntries: true,
+        },
+      },
+    },
+  });
+
+const getAdminMockExamQuestionPayload = async (db, paperId) => {
+  const [paper, questions] = await Promise.all([getAdminMockExamPaperForResponse(db, paperId), getAdminMockExamQuestions(db, paperId)]);
+  return {
+    paper: paper ? serializeAdminMockExamPaper(paper) : null,
+    questions: questions.map(serializeAdminMockExamQuestion),
+  };
 };
 
 const readCoursePayload = (body = {}) => {
@@ -737,6 +852,197 @@ adminContentRouter.patch("/mock-exams/papers/order", async (req, res) => {
     detail: { itemCount: items.length, items },
   });
   return ok(res, { success: true }, "试卷顺序已更新");
+});
+
+adminContentRouter.get("/mock-exams/papers/:paperId/questions", async (req, res) => {
+  const paper = await getAdminMockExamPaperForResponse(prisma, req.params.paperId);
+  if (!paper) return fail(res, "试卷不存在", 404);
+
+  const questions = await getAdminMockExamQuestions(prisma, paper.id);
+  return ok(res, {
+    paper: serializeAdminMockExamPaper(paper),
+    questions: questions.map(serializeAdminMockExamQuestion),
+  });
+});
+
+adminContentRouter.post("/mock-exams/papers/:paperId/questions/import-from-bank", async (req, res) => {
+  const sourceBankItemIds = toStringArray(req.body?.sourceBankItemIds ?? req.body?.itemIds ?? req.body?.ids);
+  if (sourceBankItemIds.length === 0) return fail(res, "请选择要引用的机考题库题目", 400);
+  if (sourceBankItemIds.length > 200) return fail(res, "单次最多引用 200 道题，请分批操作", 400);
+
+  const paper = await prisma.mockExamPaper.findUnique({
+    where: { id: req.params.paperId },
+    select: { id: true, title: true, paperType: true },
+  });
+  if (!paper) return fail(res, "试卷不存在", 404);
+  if (!paper.paperType) return fail(res, "请先设置试卷类型", 400);
+
+  const sourceItems = await prisma.questionBankItem.findMany({
+    where: { id: { in: sourceBankItemIds } },
+    include: {
+      folder: { select: { id: true, name: true, paperType: true } },
+      options: { orderBy: [{ sortOrder: "asc" }, { optionKey: "asc" }] },
+    },
+  });
+  const sourceItemMap = new Map(sourceItems.map((item) => [item.id, item]));
+  const missingIds = sourceBankItemIds.filter((id) => !sourceItemMap.has(id));
+  if (missingIds.length > 0) return fail(res, `有 ${missingIds.length} 道题不存在或已删除`, 404);
+
+  const invalidItem = sourceItems.find(
+    (item) => item.folder?.paperType !== paper.paperType || !isMockExamQuestionAllowedForPaper(paper.paperType, item.type),
+  );
+  if (invalidItem) {
+    return fail(
+      res,
+      paper.paperType === "objective" ? "客观题模考只能引用客观机考题库中的选择题" : "主观题批改只能引用主观机考题库中的主观案例题",
+      409,
+    );
+  }
+
+  const existingSourceIds = new Set(
+    (
+      await prisma.mockExamQuestion.findMany({
+        where: { paperId: paper.id, isActive: true, sourceBankItemId: { in: sourceBankItemIds } },
+        select: { sourceBankItemId: true },
+      })
+    )
+      .map((item) => item.sourceBankItemId)
+      .filter(Boolean),
+  );
+  const orderedSourceItems = sourceBankItemIds.map((id) => sourceItemMap.get(id)).filter((item) => item && !existingSourceIds.has(item.id));
+  if (orderedSourceItems.length === 0) {
+    const payload = await getAdminMockExamQuestionPayload(prisma, paper.id);
+    return ok(res, { ...payload, importedCount: 0, skippedCount: sourceBankItemIds.length }, "所选题目已在当前试卷中");
+  }
+
+  const maxSortQuestion = await prisma.mockExamQuestion.findFirst({
+    where: { paperId: paper.id, isActive: true },
+    select: { sortOrder: true },
+    orderBy: { sortOrder: "desc" },
+  });
+  const nextSortOrder = Number(maxSortQuestion?.sortOrder ?? -1) + 1;
+
+  await prisma.$transaction(async (tx) => {
+    for (const [index, item] of orderedSourceItems.entries()) {
+      const created = await tx.mockExamQuestion.create({
+        data: {
+          paperId: paper.id,
+          sourceBankItemId: item.id,
+          isActive: true,
+          type: item.type,
+          stem: item.stem,
+          material: item.material,
+          analysis: item.analysis,
+          lessonAudioUrl: item.lessonAudioUrl,
+          lessonAudioObjectKey: item.lessonAudioObjectKey,
+          lessonAudioDurationSeconds: Number(item.lessonAudioDurationSeconds ?? 0) || 0,
+          score: Number(item.score ?? 0) || 0,
+          sortOrder: nextSortOrder + index,
+          correctAnswerJson: item.correctAnswerJson || "[]",
+          questionMetaJson: item.questionMetaJson,
+        },
+      });
+
+      if (item.options.length > 0) {
+        await tx.mockExamQuestionOption.createMany({
+          data: item.options.map((option) => ({
+            questionId: created.id,
+            optionKey: option.optionKey,
+            content: option.content,
+            sortOrder: Number(option.sortOrder ?? 0) || 0,
+          })),
+        });
+      }
+    }
+    await syncMockExamPaperQuestionStats(tx, paper.id);
+  });
+
+  await writeAdminAuditLog(req, {
+    action: "import_mock_exam_questions_from_bank",
+    entityType: "mock_exam_paper",
+    entityId: paper.id,
+    entityName: paper.title,
+    detail: {
+      paperType: paper.paperType,
+      requestedCount: sourceBankItemIds.length,
+      importedCount: orderedSourceItems.length,
+      skippedCount: sourceBankItemIds.length - orderedSourceItems.length,
+      sourceBankItemIds,
+    },
+  });
+
+  const payload = await getAdminMockExamQuestionPayload(prisma, paper.id);
+  return ok(
+    res,
+    { ...payload, importedCount: orderedSourceItems.length, skippedCount: sourceBankItemIds.length - orderedSourceItems.length },
+    orderedSourceItems.length > 0 ? "题目已引用到试卷" : "所选题目已在当前试卷中",
+  );
+});
+
+adminContentRouter.patch("/mock-exams/papers/:paperId/questions/order", async (req, res) => {
+  const paper = await prisma.mockExamPaper.findUnique({
+    where: { id: req.params.paperId },
+    select: { id: true, title: true },
+  });
+  if (!paper) return fail(res, "试卷不存在", 404);
+
+  const items = (Array.isArray(req.body?.items) ? req.body.items : [])
+    .map((item, index) => ({
+      id: `${item.id ?? ""}`.trim(),
+      sortOrder: toInt(item.sortOrder ?? item.order, index),
+    }))
+    .filter((item) => item.id);
+  if (items.length === 0) return fail(res, "请提供要排序的题目", 400);
+
+  const existingCount = await prisma.mockExamQuestion.count({
+    where: { paperId: paper.id, isActive: true, id: { in: items.map((item) => item.id) } },
+  });
+  if (existingCount !== items.length) return fail(res, "有题目不属于当前试卷或已被移除", 409);
+
+  await prisma.$transaction(
+    items.map((item) =>
+      prisma.mockExamQuestion.update({
+        where: { id: item.id },
+        data: { sortOrder: item.sortOrder },
+      }),
+    ),
+  );
+
+  await writeAdminAuditLog(req, {
+    action: "reorder_mock_exam_questions",
+    entityType: "mock_exam_paper",
+    entityId: paper.id,
+    entityName: paper.title,
+    detail: { itemCount: items.length, items },
+  });
+
+  return ok(res, await getAdminMockExamQuestionPayload(prisma, paper.id), "试题顺序已更新");
+});
+
+adminContentRouter.delete("/mock-exams/papers/:paperId/questions/:questionId", async (req, res) => {
+  const question = await prisma.mockExamQuestion.findFirst({
+    where: { id: req.params.questionId, paperId: req.params.paperId, isActive: true },
+    include: { paper: { select: { id: true, title: true } } },
+  });
+  if (!question) return fail(res, "题目不存在或已被移除", 404);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.mockExamQuestion.update({
+      where: { id: question.id },
+      data: { isActive: false },
+    });
+    await syncMockExamPaperQuestionStats(tx, question.paperId);
+  });
+
+  await writeAdminAuditLog(req, {
+    action: "remove_mock_exam_question",
+    entityType: "mock_exam_paper",
+    entityId: question.paperId,
+    entityName: question.paper?.title ?? question.paperId,
+    detail: { questionId: question.id, sourceBankItemId: question.sourceBankItemId, type: question.type },
+  });
+
+  return ok(res, await getAdminMockExamQuestionPayload(prisma, question.paperId), "题目已从试卷移除");
 });
 
 adminContentRouter.post("/mock-exams/papers/:paperId/recall", async (req, res) => {
