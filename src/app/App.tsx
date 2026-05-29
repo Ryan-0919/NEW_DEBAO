@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ChangeEvent, FormEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { ChangeEvent, FormEvent, MouseEvent as ReactMouseEvent, ReactNode, SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   Bell, BookOpen, BarChart2, MessageCircle, Trophy,
@@ -113,6 +113,7 @@ type LessonModel = {
   done: boolean;
   current: boolean;
   progressSeconds: number;
+  savedProgressSeconds?: number;
   tagId?: string;
   tagName?: string;
   script?: string;
@@ -286,24 +287,30 @@ const buildProgressMap = (progressList: LegacyMediaProgress[] = []) => new Map(p
 
 const getMediaUrl = (media: LegacyMedia) => ("audioUrl" in media ? media.audioUrl : media.videoUrl);
 
-const mapLessonFromLegacy = (media: LegacyMedia, progress?: LegacyMediaProgress, options?: { current?: boolean; tagId?: string; tagName?: string }): LessonModel => ({
-  id: media.id,
-  title: media.name,
-  duration: formatDuration(media.duration),
-  durationSeconds: Math.max(0, Number(media.duration ?? 0)),
-  done: Boolean(progress?.completed),
-  current: Boolean(options?.current),
-  progressSeconds: Math.max(0, Number(progress?.progress ?? 0)),
-  tagId: options?.tagId,
-  tagName: options?.tagName,
-  script: media.script,
-  handoutUrl: media.handoutUrl,
-  handoutName: media.handoutName,
-  hasHandout: Boolean(media.hasHandout || media.handoutUrl || media.handoutObjectKey),
-  mediaUrl: getMediaUrl(media),
-  mediaKind: "audioUrl" in media ? "audio" : "video",
-  source: "legacy",
-});
+const mapLessonFromLegacy = (media: LegacyMedia, progress?: LegacyMediaProgress, options?: { current?: boolean; tagId?: string; tagName?: string }): LessonModel => {
+  const savedProgressSeconds = Math.max(0, Number(progress?.progress ?? 0));
+  const completed = Boolean(progress?.completed);
+
+  return {
+    id: media.id,
+    title: media.name,
+    duration: formatDuration(media.duration),
+    durationSeconds: Math.max(0, Number(media.duration ?? 0)),
+    done: completed,
+    current: Boolean(options?.current),
+    progressSeconds: completed ? 0 : savedProgressSeconds,
+    savedProgressSeconds,
+    tagId: options?.tagId,
+    tagName: options?.tagName,
+    script: media.script,
+    handoutUrl: media.handoutUrl,
+    handoutName: media.handoutName,
+    hasHandout: Boolean(media.hasHandout || media.handoutUrl || media.handoutObjectKey),
+    mediaUrl: getMediaUrl(media),
+    mediaKind: "audioUrl" in media ? "audio" : "video",
+    source: "legacy",
+  };
+};
 
 const getTagContentMedia = (tagContent: LegacyTagContent, courseType: LegacyCourse["courseType"]) =>
   (courseType === "video" ? tagContent.videos ?? [] : tagContent.audios ?? []) as LegacyMedia[];
@@ -327,6 +334,7 @@ const buildEmptyCourseChapters = (
         done: false,
         current: true,
         progressSeconds: 0,
+        savedProgressSeconds: 0,
         mediaKind: "video",
         source: "static",
       },
@@ -474,6 +482,7 @@ const updateLessonProgressInChapters = (chapters: ChapterModel[], lessonId: stri
       ? {
         ...lesson,
         progressSeconds,
+        savedProgressSeconds: Math.max(progressSeconds, lesson.savedProgressSeconds ?? 0),
         done: completed ? true : lesson.done,
       }
       : lesson);
@@ -2112,6 +2121,8 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
     makeCourseShellDetail(c, "正在读取课程目录", "课程目录同步中", "正在读取课程目录，请稍候。").chapters;
   const [chapters, setChapters] = useState<ChapterModel[]>(() => buildInitialAudioChapters());
   const [currentLesson, setCurrentLesson] = useState<LessonModel>(() => getCurrentLesson(chapters)!);
+  const currentAudioLessonRef = useRef<LessonModel | null>(currentLesson);
+  const pendingAudioAutoplayRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(() => calcLessonPercent(getCurrentLesson(chapters)));
   const [volume, setVolume] = useState(80);
@@ -2133,17 +2144,27 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
   const elapsed = Math.round((progress / 100) * currentDurationSec);
   const fmt = formatDuration;
 
+  useEffect(() => {
+    currentAudioLessonRef.current = currentLesson;
+  }, [currentLesson]);
+
   const updateLessonProgress = (lessonId: string, progressSeconds: number, completed = false) => {
-    if (lessonId === currentLesson.id) {
-      const nextProgress = Math.max(0, Math.min(100, currentDurationSec > 0 ? Math.round((progressSeconds / currentDurationSec) * 100) : 0));
+    const normalizedSeconds = Math.max(0, Math.floor(progressSeconds));
+    const playbackSeconds = completed ? 0 : normalizedSeconds;
+    const activeLesson = currentAudioLessonRef.current;
+
+    if (activeLesson?.id === lessonId) {
+      const duration = activeLesson.durationSeconds || parseDurationToSeconds(activeLesson.duration) || currentDurationSec;
+      const nextProgress = completed ? 0 : Math.max(0, Math.min(100, duration > 0 ? Math.round((playbackSeconds / duration) * 100) : 0));
       setProgress(nextProgress);
       setCurrentLesson(prev => ({
         ...prev,
-        progressSeconds,
+        progressSeconds: playbackSeconds,
+        savedProgressSeconds: Math.max(normalizedSeconds, prev.savedProgressSeconds ?? 0),
         done: completed ? true : prev.done,
       }));
     }
-    setChapters(prev => updateLessonProgressInChapters(prev, lessonId, progressSeconds, completed));
+    setChapters(prev => updateLessonProgressInChapters(prev, lessonId, normalizedSeconds, completed));
   };
 
   useEffect(() => {
@@ -2216,16 +2237,19 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
   const toggleChapter = (id: string) =>
     setChapters(prev => prev.map(ch => ch.id === id ? { ...ch, expanded: !ch.expanded } : ch));
 
-  const selectLesson = (lesson: typeof currentLesson) => {
+  const selectLesson = (lesson: typeof currentLesson, options: { autoplay?: boolean; resetPlayback?: boolean } = {}) => {
     if (lesson.id === "__empty__") {
       notify(detailError || "当前课程暂未配置可学习内容", "warning");
       return;
     }
 
     lastSavedProgressRef.current = -1;
-    setCurrentLesson(lesson);
+    const shouldResetPlayback = options.resetPlayback ?? lesson.done;
+    const nextLesson = shouldResetPlayback ? { ...lesson, progressSeconds: 0 } : lesson;
+    pendingAudioAutoplayRef.current = Boolean(options.autoplay && !lesson.mediaUrl);
+    setCurrentLesson(nextLesson);
     setChapters(prev => markCurrentLesson(prev, lesson.id));
-    setProgress(calcLessonPercent(lesson));
+    setProgress(calcLessonPercent(nextLesson));
     setIsPlaying(Boolean(lesson.mediaUrl));
     setShowMobileLessonPicker(false);
 
@@ -2241,8 +2265,14 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
         };
           setCurrentLesson(prev => prev.id === lesson.id ? { ...prev, ...enriched } : prev);
           setChapters(prev => patchLessonInChapters(prev, lesson.id, enriched));
+          const shouldAutoplay = pendingAudioAutoplayRef.current;
+          pendingAudioAutoplayRef.current = false;
+          if (shouldAutoplay && payload.audio.audioUrl) {
+            setIsPlaying(true);
+          }
         })
         .catch(() => {
+          pendingAudioAutoplayRef.current = false;
           notify("音频详情加载失败，请稍后重试", "warning");
         });
     }
@@ -2271,6 +2301,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
     if (!isLegacyCourse || !currentLesson.id || currentLesson.source === "static" || !currentLesson.mediaUrl || currentLesson.id === "__empty__") return;
     const lessonId = currentLesson.id;
     const progressSeconds = Math.max(0, Math.floor(seconds));
+    if (!complete && currentLesson.done) return;
     if (!complete && !force && Math.abs(progressSeconds - lastSavedProgressRef.current) < 10) return;
 
     lastSavedProgressRef.current = progressSeconds;
@@ -2301,6 +2332,24 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
     }
     setIsPlaying(false);
     selectLesson(adjacent);
+  };
+
+  const handleAudioEnded = (event: SyntheticEvent<HTMLAudioElement>) => {
+    const endedAudio = event.currentTarget;
+    const duration = endedAudio.duration || currentDurationSec;
+    const adjacent = findAdjacentLesson(chapters, currentLesson.id, "next");
+
+    saveAudioSeconds(duration, true, true);
+
+    if (adjacent && adjacent.id !== "__empty__") {
+      selectLesson(adjacent, { autoplay: true, resetPlayback: adjacent.done });
+      return;
+    }
+
+    endedAudio.currentTime = 0;
+    setProgress(0);
+    setCurrentLesson(prev => ({ ...prev, progressSeconds: 0, done: true }));
+    setIsPlaying(false);
   };
 
   const toggleAudioPlayback = () => {
@@ -2413,10 +2462,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
             if (seconds > 0 && seconds % 15 === 0) saveAudioSeconds(seconds);
           }}
           onPause={event => saveAudioSeconds(event.currentTarget.currentTime)}
-          onEnded={event => {
-            setIsPlaying(false);
-            saveAudioSeconds(event.currentTarget.duration || currentDurationSec, true);
-          }}
+          onEnded={handleAudioEnded}
         />
       )}
 
