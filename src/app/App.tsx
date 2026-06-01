@@ -620,6 +620,7 @@ type ToastType = "info" | "success" | "warning";
 type ToastState = { text: string; type?: ToastType } | null;
 type Notify = (text: string, type?: ToastType) => void;
 type AuthMode = "login" | "register";
+type LoginMethod = "password" | "sms";
 type MockExamMode = "objective" | "subjective";
 type MockExamSessionTarget = { recordId?: string; paperId?: string; mode?: MockExamMode } | null;
 const OFFICIAL_EXAM_SCOPE = { "data-v-6e05b77a": "" };
@@ -1175,16 +1176,32 @@ function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, them
 
 function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyUser) => void; notify: Notify }) {
   const [mode, setMode] = useState<AuthMode>("login");
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>("password");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [smsCode, setSmsCode] = useState("");
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsCountdown, setSmsCountdown] = useState(0);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [customerServiceUrl, setCustomerServiceUrl] = useState("");
+  const authSubtitle =
+    mode === "register"
+      ? "使用手机号创建得宝账号，注册后会自动进入学习中心。"
+      : loginMethod === "sms"
+        ? "输入手机号和短信验证码，快速进入得宝学习中心。"
+        : "使用手机号和密码登录得宝，继续学习课程、题库和模考。";
 
   const title = mode === "register" ? "注册得宝账号" : "登录得宝";
   const subtitle = mode === "register" ? "使用手机号创建得宝账号，注册后会自动进入学习中心。" : "使用手机号和密码登录得宝，继续学习课程、题库和模考。";
+
+  useEffect(() => {
+    if (smsCountdown <= 0) return;
+    const timer = window.setTimeout(() => setSmsCountdown((current) => Math.max(current - 1, 0)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [smsCountdown]);
 
   useEffect(() => {
     let active = true;
@@ -1208,15 +1225,52 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
     window.open(customerServiceUrl, "_blank", "noopener,noreferrer");
   };
 
+  const handleSendSmsCode = async () => {
+    const normalizedPhone = phone.trim();
+    if (!normalizedPhone) {
+      setError("请输入手机号");
+      return;
+    }
+
+    setSmsSending(true);
+    setError("");
+
+    try {
+      const result = await userService.sendLoginSmsCode(normalizedPhone);
+      setSmsCountdown(Math.max(Number(result.retryAfter ?? 60), 1));
+      notify("验证码已发送，请注意查收", "success");
+    } catch (err) {
+      const message = err instanceof ApiRequestError || err instanceof Error ? err.message : "验证码发送失败，请稍后重试";
+      setError(message);
+      notify(message, "warning");
+    } finally {
+      setSmsSending(false);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!phone.trim() || !password.trim()) {
+    const normalizedPhone = phone.trim();
+    const normalizedPassword = password.trim();
+    const normalizedSmsCode = smsCode.trim();
+
+    if (!normalizedPhone) {
+      setError("请输入手机号");
+      return;
+    }
+
+    if (mode === "login" && loginMethod === "sms" && !normalizedSmsCode) {
+      setError("请输入短信验证码");
+      return;
+    }
+
+    if ((mode === "register" || loginMethod === "password") && !normalizedPassword) {
       setError("请输入手机号和密码");
       return;
     }
 
     if (mode === "register") {
-      if (password.trim() !== confirmPassword.trim()) {
+      if (normalizedPassword !== confirmPassword.trim()) {
         setError("两次输入的密码不一致");
         return;
       }
@@ -1232,8 +1286,10 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
     try {
       const result =
         mode === "register"
-          ? await userService.register(phone.trim(), password.trim(), confirmPassword.trim(), agreeTerms, getDeviceInfo())
-          : await userService.login(phone.trim(), password.trim(), getDeviceInfo());
+          ? await userService.register(normalizedPhone, normalizedPassword, confirmPassword.trim(), agreeTerms, getDeviceInfo())
+          : loginMethod === "sms"
+            ? await userService.loginWithSmsCode(normalizedPhone, normalizedSmsCode, getDeviceInfo())
+            : await userService.login(normalizedPhone, normalizedPassword, getDeviceInfo());
 
       saveUserSession({
         token: result.token,
@@ -1262,7 +1318,7 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
 
         <div style={{ marginBottom: 22 }}>
           <h1 style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 24, color: "#dde4f0", margin: "0 0 8px" }}>{title}</h1>
-          <p style={{ fontSize: 13, lineHeight: 1.8, color: "#5a7898", margin: 0 }}>{subtitle}</p>
+          <p style={{ fontSize: 13, lineHeight: 1.8, color: "#5a7898", margin: 0 }}>{authSubtitle || subtitle}</p>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, padding: 4, borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", marginBottom: 20 }}>
@@ -1272,6 +1328,7 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
               type="button"
               onClick={() => {
                 setMode(item);
+                if (item === "register") setLoginMethod("password");
                 setError("");
               }}
               style={{ padding: "9px 12px", borderRadius: 9, border: "none", cursor: "pointer", background: mode === item ? "linear-gradient(90deg,#c9973e,#e8c46a)" : "transparent", color: mode === item ? "#090e1a" : "#5a7898", fontWeight: 700 }}
@@ -1281,15 +1338,45 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
           ))}
         </div>
 
+        {mode === "login" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, padding: 4, borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 }}>
+            {(["password", "sms"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => {
+                  setLoginMethod(item);
+                  setError("");
+                }}
+                style={{ padding: "8px 10px", borderRadius: 9, border: "none", cursor: "pointer", background: loginMethod === item ? "rgba(78,142,247,0.16)" : "transparent", color: loginMethod === item ? "#8ab4ff" : "#5a7898", fontSize: 12, fontWeight: 800 }}
+              >
+                {item === "password" ? "密码登录" : "验证码登录"}
+              </button>
+            ))}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 7, fontSize: 12, color: "#3a5570", fontWeight: 700 }}>
             手机号
             <input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="numeric" autoComplete="tel" style={{ padding: "12px 14px", borderRadius: 11, border: "1px solid rgba(255,255,255,0.09)", background: "#0a1020", color: "#dde4f0", outline: "none", fontSize: 14 }} />
           </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 7, fontSize: 12, color: "#3a5570", fontWeight: 700 }}>
-            密码
-            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === "register" ? "new-password" : "current-password"} style={{ padding: "12px 14px", borderRadius: 11, border: "1px solid rgba(255,255,255,0.09)", background: "#0a1020", color: "#dde4f0", outline: "none", fontSize: 14 }} />
-          </label>
+          {(mode === "register" || loginMethod === "password") ? (
+            <label style={{ display: "flex", flexDirection: "column", gap: 7, fontSize: 12, color: "#3a5570", fontWeight: 700 }}>
+              密码
+              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === "register" ? "new-password" : "current-password"} style={{ padding: "12px 14px", borderRadius: 11, border: "1px solid rgba(255,255,255,0.09)", background: "#0a1020", color: "#dde4f0", outline: "none", fontSize: 14 }} />
+            </label>
+          ) : (
+            <label style={{ display: "flex", flexDirection: "column", gap: 7, fontSize: 12, color: "#3a5570", fontWeight: 700 }}>
+              短信验证码
+              <span style={{ display: "grid", gridTemplateColumns: "1fr 118px", gap: 8 }}>
+                <input value={smsCode} onChange={(event) => setSmsCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" style={{ minWidth: 0, padding: "12px 14px", borderRadius: 11, border: "1px solid rgba(255,255,255,0.09)", background: "#0a1020", color: "#dde4f0", outline: "none", fontSize: 14 }} />
+                <button type="button" disabled={smsSending || smsCountdown > 0} onClick={handleSendSmsCode} style={{ borderRadius: 11, border: "1px solid rgba(78,142,247,0.25)", background: smsSending || smsCountdown > 0 ? "rgba(78,142,247,0.08)" : "rgba(78,142,247,0.16)", color: smsSending || smsCountdown > 0 ? "#5a7898" : "#8ab4ff", cursor: smsSending || smsCountdown > 0 ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 800 }}>
+                  {smsSending ? "发送中" : smsCountdown > 0 ? `${smsCountdown}s` : "获取验证码"}
+                </button>
+              </span>
+            </label>
+          )}
           {mode === "register" && (
             <>
               <label style={{ display: "flex", flexDirection: "column", gap: 7, fontSize: 12, color: "#3a5570", fontWeight: 700 }}>
@@ -1306,7 +1393,7 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
           {error && <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(247,110,110,0.08)", border: "1px solid rgba(247,110,110,0.2)", color: "#f76e6e", fontSize: 12, lineHeight: 1.6 }}>{error}</div>}
 
           <button disabled={loading} type="submit" style={{ marginTop: 4, padding: "12px", borderRadius: 12, border: "none", cursor: loading ? "wait" : "pointer", background: loading ? "rgba(201,151,62,0.45)" : "linear-gradient(90deg,#c9973e,#e8c46a)", color: "#090e1a", fontSize: 14, fontWeight: 800 }}>
-            {loading ? "正在处理..." : mode === "register" ? "注册并进入得宝" : "登录并进入得宝"}
+            {loading ? "正在处理..." : mode === "register" ? "注册并进入得宝" : loginMethod === "sms" ? "验证码登录并进入得宝" : "登录并进入得宝"}
           </button>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 2 }}>
             <span style={{ fontSize: 12, color: "#5a7898" }}>默认密码为 <strong style={{ color: "#e8c46a", fontFamily: "'JetBrains Mono',monospace" }}>den2024</strong></span>

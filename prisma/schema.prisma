@@ -202,6 +202,27 @@ model UserDevice {
   @@index([userId])
 }
 
+model SmsVerificationCode {
+  id             String    @id @default(cuid())
+  phone          String    @db.VarChar(20)
+  scene          String    @default("login") @db.VarChar(30)
+  codeHash       String    @db.VarChar(128)
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  sendIp         String    @db.VarChar(64)
+  sendStatus     String    @default("pending") @db.VarChar(20)
+  bizId          String?   @db.VarChar(100)
+  requestId      String?   @db.VarChar(100)
+  errorMessage   String?   @db.VarChar(255)
+  verifyAttempts Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([phone, scene, createdAt])
+  @@index([expiresAt])
+  @@index([sendStatus, createdAt])
+}
+
 model Course {
   id                String                 @id @default(cuid())
   name              String                 @db.VarChar(191)

@@ -1,12 +1,15 @@
 import { Router } from "express";
 import multer from "multer";
+import crypto from "node:crypto";
 import { prisma } from "../lib/prisma.js";
 import { comparePassword, hashPassword, signAdminToken, signUserToken } from "../lib/auth.js";
 import { ok, fail } from "../lib/response.js";
 import { serializeUser } from "../lib/serializers.js";
+import { config } from "../lib/config.js";
 import { getClientIp, getNormalizedDeviceInfo } from "../lib/request.js";
 import {
   consumeAdminLoginAttempt,
+  consumeUserSmsSendAttempt,
   consumeUserLoginAttempt,
   consumeUserRegisterAttempt,
   resetAdminLoginAttempts,
@@ -15,6 +18,15 @@ import {
   validatePhoneOrThrow,
   validatePasswordOrThrow,
 } from "../lib/security.js";
+import {
+  assertAliyunSmsConfigured,
+  generateSmsCode,
+  getSmsLoginScene,
+  hashSmsCode,
+  isSmsCodeMatched,
+  sendLoginSmsCode,
+  validateSmsCodeOrThrow,
+} from "../lib/sms.js";
 import { requireUserAuth } from "../middleware/auth.js";
 import { getReadableObjectUrl, uploadBuffer } from "../lib/upload.js";
 import { cleanupObjectIfUnused } from "../lib/assets.js";
@@ -27,6 +39,7 @@ const DEVICE_LIMIT = 5;
 const USER_LOGIN_RATE_LIMIT_ERROR_CODE = 10041;
 const ADMIN_LOGIN_RATE_LIMIT_ERROR_CODE = 10042;
 const USER_REGISTER_RATE_LIMIT_ERROR_CODE = 10043;
+const USER_SMS_SEND_RATE_LIMIT_ERROR_CODE = 10044;
 const USER_PROFILE_NICKNAME_MAX_LENGTH = 20;
 const USER_AVATAR_MAX_FILE_SIZE = 2 * 1024 * 1024;
 const USER_AVATAR_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -59,6 +72,96 @@ const normalizeNickname = (value = "") => {
   const text = normalizeDisplayText(value).replace(/\s+/g, " ").trim();
   if (!text) return "";
   return text.slice(0, USER_PROFILE_NICKNAME_MAX_LENGTH);
+};
+
+const getUserLoginInclude = () => ({
+  permissions: true,
+  devices: true,
+  mockExamSeriesPermissions: true,
+  mockExamPermissions: true,
+  bookQuestionBankPermissions: true,
+});
+
+const completeUserLogin = async ({ userId, deviceKey, req, type, model }) => {
+  const deviceInfo = getNormalizedDeviceInfo(req, { type, model });
+  const now = new Date();
+
+  const updatedUser = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM \`User\` WHERE id = ${userId} FOR UPDATE`;
+
+    const existingDevice = await tx.userDevice.findUnique({
+      where: {
+        userId_deviceKey: {
+          userId,
+          deviceKey,
+        },
+      },
+    });
+
+    if (existingDevice) {
+      await tx.userDevice.update({
+        where: { id: existingDevice.id },
+        data: {
+          type: deviceInfo.type,
+          model: deviceInfo.model,
+          ip: deviceInfo.ip,
+          loginAt: now,
+        },
+      });
+    } else {
+      const existingDevices = await tx.userDevice.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          loginAt: true,
+          updatedAt: true,
+        },
+      });
+
+      const deviceIdsToEvict = getDevicesToEvictForNewLogin(existingDevices, DEVICE_LIMIT);
+      if (deviceIdsToEvict.length > 0) {
+        await tx.userDevice.deleteMany({
+          where: {
+            userId,
+            id: {
+              in: deviceIdsToEvict,
+            },
+          },
+        });
+      }
+
+      await tx.userDevice.create({
+        data: {
+          userId,
+          deviceKey,
+          type: deviceInfo.type,
+          model: deviceInfo.model,
+          ip: deviceInfo.ip,
+          loginAt: now,
+        },
+      });
+    }
+
+    return tx.user.update({
+      where: { id: userId },
+      data: {
+        lastLoginAt: now,
+      },
+      include: getUserLoginInclude(),
+    });
+  });
+
+  const token = signUserToken({
+    userId: updatedUser.id,
+    phone: updatedUser.phone,
+    deviceKey,
+  });
+
+  return {
+    success: true,
+    token,
+    user: serializeUser(updatedUser),
+  };
 };
 
 const resolveMemberHomeBannerUrls = (portalConfig) => {
@@ -218,95 +321,266 @@ authRouter.post("/user/login", async (req, res, next) => {
       return fail(res, "\u624b\u673a\u53f7\u6216\u5bc6\u7801\u9519\u8bef", 400);
     }
 
-    const deviceInfo = getNormalizedDeviceInfo(req, { type, model });
-    const now = new Date();
-
-    const updatedUser = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM \`User\` WHERE id = ${user.id} FOR UPDATE`;
-
-      const existingDevice = await tx.userDevice.findUnique({
-        where: {
-          userId_deviceKey: {
-            userId: user.id,
-            deviceKey,
-          },
-        },
-      });
-
-      if (existingDevice) {
-        await tx.userDevice.update({
-          where: { id: existingDevice.id },
-          data: {
-            type: deviceInfo.type,
-            model: deviceInfo.model,
-            ip: deviceInfo.ip,
-            loginAt: now,
-          },
-        });
-      } else {
-        const existingDevices = await tx.userDevice.findMany({
-          where: { userId: user.id },
-          select: {
-            id: true,
-            loginAt: true,
-            updatedAt: true,
-          },
-        });
-
-        const deviceIdsToEvict = getDevicesToEvictForNewLogin(existingDevices, DEVICE_LIMIT);
-        if (deviceIdsToEvict.length > 0) {
-          await tx.userDevice.deleteMany({
-            where: {
-              userId: user.id,
-              id: {
-                in: deviceIdsToEvict,
-              },
-            },
-          });
-        }
-
-        await tx.userDevice.create({
-          data: {
-            userId: user.id,
-            deviceKey,
-            type: deviceInfo.type,
-            model: deviceInfo.model,
-            ip: deviceInfo.ip,
-            loginAt: now,
-          },
-        });
-      }
-
-      return tx.user.update({
-        where: { id: user.id },
-        data: {
-          lastLoginAt: now,
-        },
-        include: {
-          permissions: true,
-          devices: true,
-          mockExamSeriesPermissions: true,
-          mockExamPermissions: true,
-          bookQuestionBankPermissions: true,
-        },
-      });
-    });
-
-    const token = signUserToken({
-      userId: updatedUser.id,
-      phone: updatedUser.phone,
+    const loginResult = await completeUserLogin({
+      userId: user.id,
       deviceKey,
+      req,
+      type,
+      model,
     });
     resetUserLoginAttempts({ ip, phone });
 
-    return ok(res, {
-      success: true,
-      token,
-      user: serializeUser(updatedUser),
-    });
+    return ok(res, loginResult);
   } catch (error) {
     if (error?.statusCode) {
       return fail(res, error.message, error.statusCode, error.code ?? error.statusCode);
+    }
+
+    return next(error);
+  }
+});
+
+authRouter.post("/user/sms/send", async (req, res, next) => {
+  const rawPhone = `${req.body?.phone ?? ""}`;
+
+  if (!rawPhone) {
+    return fail(res, "请输入手机号", 400);
+  }
+
+  try {
+    assertAliyunSmsConfigured();
+
+    const phone = validatePhoneOrThrow(rawPhone);
+    const ip = getClientIp(req);
+    const scene = getSmsLoginScene();
+    const now = new Date();
+    const cooldownSince = new Date(now.getTime() - config.aliyunSms.sendCooldownSeconds * 1000);
+
+    const latestCode = await prisma.smsVerificationCode.findFirst({
+      where: {
+        phone,
+        scene,
+        sendStatus: "sent",
+        createdAt: {
+          gte: cooldownSince,
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: {
+        createdAt: true,
+      },
+    });
+
+    if (latestCode) {
+      const retryAfterSeconds = Math.max(
+        Math.ceil((latestCode.createdAt.getTime() + config.aliyunSms.sendCooldownSeconds * 1000 - now.getTime()) / 1000),
+        1,
+      );
+      return fail(res, `验证码发送过于频繁，请 ${retryAfterSeconds} 秒后再试`, 429, USER_SMS_SEND_RATE_LIMIT_ERROR_CODE);
+    }
+
+    const rateLimitResult = consumeUserSmsSendAttempt({
+      ip,
+      phone,
+      windowMs: config.aliyunSms.sendWindowSeconds * 1000,
+      maxAttempts: config.aliyunSms.sendWindowMax,
+    });
+
+    if (!rateLimitResult.ok) {
+      return fail(
+        res,
+        `验证码发送过于频繁，请 ${rateLimitResult.retryAfterSeconds} 秒后再试`,
+        429,
+        USER_SMS_SEND_RATE_LIMIT_ERROR_CODE,
+      );
+    }
+
+    const code = generateSmsCode();
+    const expiresAt = new Date(now.getTime() + config.aliyunSms.codeExpiresSeconds * 1000);
+    const record = await prisma.smsVerificationCode.create({
+      data: {
+        phone,
+        scene,
+        codeHash: hashSmsCode({ phone, code, scene }),
+        expiresAt,
+        sendIp: ip,
+        sendStatus: "pending",
+      },
+    });
+
+    try {
+      const sendResult = await sendLoginSmsCode({ phone, code });
+      await prisma.smsVerificationCode.update({
+        where: { id: record.id },
+        data: {
+          sendStatus: "sent",
+          bizId: sendResult.bizId || null,
+          requestId: sendResult.requestId || null,
+        },
+      });
+    } catch (error) {
+      await prisma.smsVerificationCode.update({
+        where: { id: record.id },
+        data: {
+          sendStatus: "failed",
+          consumedAt: new Date(),
+          errorMessage: error instanceof Error ? error.message.slice(0, 255) : "短信发送失败",
+          requestId: error?.requestId || null,
+          bizId: error?.bizId || null,
+        },
+      });
+      throw error;
+    }
+
+    return ok(res, {
+      success: true,
+      expiresIn: config.aliyunSms.codeExpiresSeconds,
+      retryAfter: config.aliyunSms.sendCooldownSeconds,
+    }, "验证码已发送");
+  } catch (error) {
+    if (error instanceof Error && error.message) {
+      return fail(res, error.message, 400);
+    }
+
+    return next(error);
+  }
+});
+
+authRouter.post("/user/sms/login", async (req, res, next) => {
+  const { deviceKey, type, model } = req.body ?? {};
+  const rawPhone = `${req.body?.phone ?? ""}`;
+  const rawCode = `${req.body?.code ?? ""}`;
+
+  if (!rawPhone || !rawCode || !deviceKey) {
+    return fail(res, "请输入完整的登录信息", 400);
+  }
+
+  try {
+    const phone = validatePhoneOrThrow(rawPhone);
+    const code = validateSmsCodeOrThrow(rawCode);
+    const ip = getClientIp(req);
+    const scene = getSmsLoginScene();
+    const rateLimitResult = consumeUserLoginAttempt({ ip, phone });
+
+    if (!rateLimitResult.ok) {
+      return fail(
+        res,
+        `登录尝试过于频繁，请 ${rateLimitResult.retryAfterSeconds} 秒后再试`,
+        429,
+        USER_LOGIN_RATE_LIMIT_ERROR_CODE,
+      );
+    }
+
+    const now = new Date();
+    const newUserPasswordHash = await hashPassword(crypto.randomBytes(24).toString("hex"));
+    const smsCodeRecord = await prisma.smsVerificationCode.findFirst({
+      where: {
+        phone,
+        scene,
+        sendStatus: "sent",
+        consumedAt: null,
+        expiresAt: {
+          gt: now,
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    if (!smsCodeRecord) {
+      return fail(res, "验证码已失效，请重新获取", 400);
+    }
+
+    if (smsCodeRecord.verifyAttempts >= config.aliyunSms.verifyMaxAttempts) {
+      await prisma.smsVerificationCode.update({
+        where: { id: smsCodeRecord.id },
+        data: {
+          consumedAt: now,
+        },
+      });
+      return fail(res, "验证码错误次数过多，请重新获取", 400);
+    }
+
+    if (!isSmsCodeMatched({ phone, code, codeHash: smsCodeRecord.codeHash, scene })) {
+      await prisma.smsVerificationCode.update({
+        where: { id: smsCodeRecord.id },
+        data: {
+          verifyAttempts: {
+            increment: 1,
+          },
+        },
+      });
+      return fail(res, "验证码错误，请重新输入", 400);
+    }
+
+    const loginUser = await prisma.$transaction(async (tx) => {
+      const consumedResult = await tx.smsVerificationCode.updateMany({
+        where: {
+          id: smsCodeRecord.id,
+          consumedAt: null,
+        },
+        data: {
+          consumedAt: now,
+        },
+      });
+
+      if (consumedResult.count !== 1) {
+        throw createHttpError("验证码已失效，请重新获取", 400);
+      }
+
+      const existingUser = await tx.user.findUnique({
+        where: { phone },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (existingUser) {
+        if (existingUser.status === "disabled") {
+          throw createHttpError("当前账号已停用", 403);
+        }
+
+        return existingUser;
+      }
+
+      return tx.user.create({
+        data: {
+          phone,
+          nickname: "",
+          avatarUrl: null,
+          avatarObjectKey: null,
+          passwordHash: newUserPasswordHash,
+          status: "active",
+          registeredAt: now,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+    });
+
+    const loginResult = await completeUserLogin({
+      userId: loginUser.id,
+      deviceKey,
+      req,
+      type,
+      model,
+    });
+    resetUserLoginAttempts({ ip, phone });
+
+    return ok(res, loginResult, "登录成功");
+  } catch (error) {
+    if (error?.statusCode) {
+      return fail(res, error.message, error.statusCode, error.code ?? error.statusCode);
+    }
+
+    if (error instanceof Error && error.message) {
+      return fail(res, error.message, 400);
     }
 
     return next(error);
