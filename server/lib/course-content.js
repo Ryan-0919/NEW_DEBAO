@@ -32,6 +32,7 @@ export const serializeVideoProgress = (progress) =>
         courseId: progress.courseId,
         videoId: progress.videoId,
         progress: progress.progress,
+        lastPosition: progress.lastPosition ?? 0,
         completed: progress.completed,
         lastUpdated: formatDateTime(progress.lastUpdated),
       }

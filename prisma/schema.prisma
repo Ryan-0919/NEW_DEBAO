@@ -404,6 +404,7 @@ model UserVideoProgress {
   courseId    String
   videoId     String
   progress    Int      @default(0)
+  lastPosition Int     @default(0)
   completed   Boolean  @default(false)
   lastUpdated DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -126,6 +126,13 @@ const getCompletedLearningProgress = (existingRecord, nextProgress, duration) =>
   return Math.max(0, Number(existingRecord?.progress ?? 0), nextProgress ?? 0);
 };
 
+const normalizePlaybackPosition = (nextPosition, duration) => {
+  const position = Math.max(0, Number(nextPosition ?? 0));
+  const durationSeconds = Math.max(0, Number(duration ?? 0));
+  if (durationSeconds > 0 && position >= durationSeconds - 2) return 0;
+  return clampProgressToDuration(Math.floor(position), duration);
+};
+
 const statusForCourseAccessError = (error, fallback = 404) => {
   const message = `${error?.message ?? ""}`;
   if (message.includes("无权")) return 403;
@@ -1531,6 +1538,7 @@ userRouter.post("/video-progress", async (req, res) => {
     },
   });
   const normalizedProgress = mergeLearningProgress(existingRecord, parsedProgress, video?.duration);
+  const lastPosition = normalizePlaybackPosition(parsedProgress, video?.duration);
   const timestamp = new Date();
   const record = await saveUserVideoProgressRecord({
     userId: req.auth.userId,
@@ -1538,11 +1546,13 @@ userRouter.post("/video-progress", async (req, res) => {
     videoId,
     updateData: {
       progress: normalizedProgress,
+      lastPosition,
       ...(existingRecord?.completed ? { completed: true } : {}),
       lastUpdated: timestamp,
     },
     createData: {
       progress: normalizedProgress,
+      lastPosition,
       lastUpdated: timestamp,
     },
   });
@@ -1586,6 +1596,7 @@ userRouter.post("/video-progress/complete", async (req, res) => {
     },
   });
   const normalizedProgress = getCompletedLearningProgress(existingRecord, parsedProgress, video?.duration);
+  const lastPosition = normalizePlaybackPosition(0, video?.duration);
   const timestamp = new Date();
   const record = await saveUserVideoProgressRecord({
     userId: req.auth.userId,
@@ -1594,10 +1605,12 @@ userRouter.post("/video-progress/complete", async (req, res) => {
     updateData: {
       completed: true,
       progress: normalizedProgress,
+      lastPosition,
       lastUpdated: timestamp,
     },
     createData: {
       progress: normalizedProgress,
+      lastPosition,
       completed: true,
       lastUpdated: timestamp,
     },

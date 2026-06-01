@@ -1150,6 +1150,12 @@ textarea {
     white-space: nowrap;
   }
 
+  .debao-audio-repeat-button {
+    padding: 6px 8px !important;
+    gap: 3px !important;
+    font-size: 11px !important;
+  }
+
   .debao-courses-page {
     max-width: none !important;
     padding: 16px 12px calc(92px + env(safe-area-inset-bottom)) !important;
@@ -2424,6 +2430,10 @@ textarea {
   .debao-audio-controls > div:first-child button:nth-child(2) {
     width: 40px !important;
     height: 40px !important;
+  }
+
+  .debao-audio-repeat-button span {
+    display: none !important;
   }
 }
 

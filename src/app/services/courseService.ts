@@ -127,6 +127,7 @@ export interface LegacyUserVideoProgress {
   courseId: string;
   videoId: string;
   progress: number;
+  lastPosition?: number;
   completed: boolean;
   lastUpdated: string;
 }

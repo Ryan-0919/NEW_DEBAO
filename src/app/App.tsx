@@ -118,6 +118,7 @@ type LessonModel = {
   current: boolean;
   progressSeconds: number;
   savedProgressSeconds?: number;
+  lastPositionSeconds?: number;
   tagId?: string;
   tagName?: string;
   script?: string;
@@ -155,6 +156,7 @@ type ResolvedCourseDetail = Omit<ReturnType<typeof makeCourseDetail>, "chapters"
 };
 
 type LessonDirection = "prev" | "next";
+type AudioRepeatMode = "none" | "list" | "single";
 
 const courseColors = ["#c9973e", "#4e8ef7", "#1dc9a4", "#c97ef5", "#f76e6e", "#f7a94e"];
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.0.1";
@@ -313,6 +315,7 @@ const getMediaUrl = (media: LegacyMedia) => ("audioUrl" in media ? media.audioUr
 
 const mapLessonFromLegacy = (media: LegacyMedia, progress?: LegacyMediaProgress, options?: { current?: boolean; tagId?: string; tagName?: string }): LessonModel => {
   const savedProgressSeconds = Math.max(0, Number(progress?.progress ?? 0));
+  const lastPositionSeconds = "videoId" in (progress ?? {}) ? Math.max(0, Number((progress as LegacyUserVideoProgress | undefined)?.lastPosition ?? savedProgressSeconds)) : savedProgressSeconds;
   const completed = Boolean(progress?.completed);
 
   return {
@@ -322,8 +325,9 @@ const mapLessonFromLegacy = (media: LegacyMedia, progress?: LegacyMediaProgress,
     durationSeconds: Math.max(0, Number(media.duration ?? 0)),
     done: completed,
     current: Boolean(options?.current),
-    progressSeconds: completed ? 0 : savedProgressSeconds,
+    progressSeconds: completed ? 0 : lastPositionSeconds,
     savedProgressSeconds,
+    lastPositionSeconds,
     tagId: options?.tagId,
     tagName: options?.tagName,
     script: media.script,
@@ -500,13 +504,28 @@ const findAdjacentLesson = (chapters: ChapterModel[], lessonId: string, directio
   return lessons[nextIndex] ?? null;
 };
 
-const updateLessonProgressInChapters = (chapters: ChapterModel[], lessonId: string, progressSeconds: number, completed = false) =>
+const getPlayableLessons = (chapters: ChapterModel[]) =>
+  chapters.flatMap(chapter => chapter.lessons).filter(lesson => lesson.id !== "__empty__");
+
+const findLoopLesson = (chapters: ChapterModel[], lessonId: string, direction: LessonDirection) => {
+  const lessons = getPlayableLessons(chapters);
+  const currentIndex = lessons.findIndex(lesson => lesson.id === lessonId);
+  if (currentIndex < 0 || lessons.length === 0) return null;
+
+  const nextIndex = direction === "next"
+    ? (currentIndex + 1) % lessons.length
+    : (currentIndex - 1 + lessons.length) % lessons.length;
+  return lessons[nextIndex] ?? null;
+};
+
+const updateLessonProgressInChapters = (chapters: ChapterModel[], lessonId: string, progressSeconds: number, completed = false, savedProgressSeconds?: number) =>
   chapters.map(chapter => {
     const lessons = chapter.lessons.map(lesson => lesson.id === lessonId
       ? {
         ...lesson,
         progressSeconds,
-        savedProgressSeconds: Math.max(progressSeconds, lesson.savedProgressSeconds ?? 0),
+        savedProgressSeconds: Math.max(savedProgressSeconds ?? progressSeconds, lesson.savedProgressSeconds ?? 0),
+        lastPositionSeconds: progressSeconds,
         done: completed ? true : lesson.done,
       }
       : lesson);
@@ -2369,6 +2388,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
   const [progress, setProgress] = useState(() => calcLessonPercent(getCurrentLesson(chapters)));
   const [volume, setVolume] = useState(80);
   const [speed, setSpeed] = useState("1.0");
+  const [audioRepeatMode, setAudioRepeatMode] = useState<AudioRepeatMode>("none");
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showMobileLessonPicker, setShowMobileLessonPicker] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -2385,6 +2405,14 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
   const currentDurationSec = currentLesson.durationSeconds || parseDurationToSeconds(currentLesson.duration) || (24 * 60 + 33);
   const elapsed = Math.round((progress / 100) * currentDurationSec);
   const fmt = formatDuration;
+  const audioRepeatModeMeta = {
+    none: { label: "顺序播放", shortLabel: "顺序", title: "顺序播放：播完最后一讲后停止" },
+    list: { label: "列表循环", shortLabel: "列表", title: "列表循环：播完最后一讲后回到第一讲" },
+    single: { label: "单曲循环", shortLabel: "单曲", title: "单曲循环：当前音频播放结束后重新播放" },
+  }[audioRepeatMode];
+  const toggleAudioRepeatMode = () => {
+    setAudioRepeatMode(current => current === "none" ? "list" : current === "list" ? "single" : "none");
+  };
 
   useEffect(() => {
     currentAudioLessonRef.current = currentLesson;
@@ -2563,7 +2591,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
   };
 
   const moveAudioLesson = (direction: LessonDirection) => {
-    const adjacent = findAdjacentLesson(chapters, currentLesson.id, direction);
+    const adjacent = findAdjacentLesson(chapters, currentLesson.id, direction) || (audioRepeatMode === "list" ? findLoopLesson(chapters, currentLesson.id, direction) : null);
     if (!adjacent || adjacent.id === "__empty__") {
       notify(direction === "next" ? "已经是最后一讲" : "已经是第一讲", "info");
       return;
@@ -2579,12 +2607,31 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
   const handleAudioEnded = (event: SyntheticEvent<HTMLAudioElement>) => {
     const endedAudio = event.currentTarget;
     const duration = endedAudio.duration || currentDurationSec;
-    const adjacent = findAdjacentLesson(chapters, currentLesson.id, "next");
 
     saveAudioSeconds(duration, true, true);
 
+    if (audioRepeatMode === "single") {
+      endedAudio.currentTime = 0;
+      setProgress(0);
+      setCurrentLesson(prev => ({ ...prev, progressSeconds: 0, done: true }));
+      setIsPlaying(true);
+      void endedAudio.play().catch(() => setIsPlaying(false));
+      return;
+    }
+
+    const nextLesson = findAdjacentLesson(chapters, currentLesson.id, "next");
+    const adjacent = nextLesson || (audioRepeatMode === "list" ? findLoopLesson(chapters, currentLesson.id, "next") : null);
+
     if (adjacent && adjacent.id !== "__empty__") {
-      selectLesson(adjacent, { autoplay: true, resetPlayback: adjacent.done });
+      if (adjacent.id === currentLesson.id) {
+        endedAudio.currentTime = 0;
+        setProgress(0);
+        setCurrentLesson(prev => ({ ...prev, progressSeconds: 0, done: true }));
+        setIsPlaying(true);
+        void endedAudio.play().catch(() => setIsPlaying(false));
+        return;
+      }
+      selectLesson(adjacent, { autoplay: true, resetPlayback: adjacent.done || !nextLesson });
       return;
     }
 
@@ -2921,6 +2968,17 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
           {/* Right controls */}
           <div className="debao-audio-right-controls" style={{ display: "flex", alignItems: "center", gap: 8, width: 340, justifyContent: "flex-end", flexShrink: 0 }}>
             {syncingProgress && <span style={{ fontSize: 10, color: "#2e4260", whiteSpace: "nowrap" }}>同步中</span>}
+            <button
+              className={`debao-audio-repeat-button debao-audio-repeat-${audioRepeatMode}`}
+              type="button"
+              onClick={toggleAudioRepeatMode}
+              title={audioRepeatModeMeta.title}
+              aria-label={audioRepeatModeMeta.title}
+              style={{ padding: "6px 10px", borderRadius: 8, fontSize: 12, background: audioRepeatMode === "none" ? "rgba(255,255,255,0.06)" : `${c.color}18`, border: `1px solid ${audioRepeatMode === "none" ? "rgba(255,255,255,0.09)" : `${c.color}45`}`, cursor: "pointer", color: audioRepeatMode === "none" ? "#8fa3be" : c.color, display: "flex", alignItems: "center", gap: 5, fontWeight: 700, whiteSpace: "nowrap" }}
+            >
+              <RotateCcw size={13} />
+              <span>{audioRepeatModeMeta.shortLabel}</span>
+            </button>
             {hasLessonHandout && (
               <button className="debao-audio-handout-button" onClick={downloadCurrentHandout} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, background: "rgba(201,151,62,0.18)", border: "1px solid rgba(201,151,62,0.38)", cursor: "pointer", color: "#e8c46a", display: "flex", alignItems: "center", gap: 5, fontWeight: 700 }}>
                 <Download size={13} /> 课时讲义
@@ -2972,6 +3030,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoPlayerRef = useRef<HTMLDivElement | null>(null);
   const lastSavedVideoProgressRef = useRef(-1);
+  const pendingVideoResumeRef = useRef<{ lessonId: string; seconds: number; applied: boolean } | null>(null);
   const initialDetail = makeCourseShellDetail(appCourse, "正在读取课程目录", "课程目录同步中", "正在读取课程目录，请稍候。");
   const [detail, setDetail] = useState<ResolvedCourseDetail>(() => initialDetail);
   const [activeTab, setActiveTab] = useState<"intro" | "materials" | "notes">("intro");
@@ -2997,6 +3056,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     setDetail(initial);
     setExpandedChapters(initial.chapters.filter(chapter => chapter.expanded).map(chapter => chapter.id));
     setCurrentLesson(getCurrentLesson(initial.chapters)!);
+    pendingVideoResumeRef.current = null;
     setDetailError("");
     setVideoError("");
     setVideoReady(false);
@@ -3011,6 +3071,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
         setExpandedChapters(mapped.chapters.filter(chapter => chapter.expanded).map(chapter => chapter.id));
         const nextLesson = getCurrentLesson(mapped.chapters)!;
         setCurrentLesson(nextLesson);
+        prepareVideoResume(nextLesson);
         if (nextLesson?.source === "legacy") {
           courseService.getVideoDetail(appCourse.id, nextLesson.id)
             .then((detailPayload) => {
@@ -3023,6 +3084,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
               };
               setCurrentLesson(prev => prev.id === nextLesson.id ? { ...prev, ...enriched } : prev);
               setDetail(prev => ({ ...prev, chapters: patchLessonInChapters(prev.chapters, nextLesson.id, enriched) }));
+              prepareVideoResume({ ...nextLesson, ...enriched });
             })
             .catch((err) => {
               if (!active) return;
@@ -3038,6 +3100,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
         setDetail(shell);
         setExpandedChapters(shell.chapters.map(chapter => chapter.id));
         setCurrentLesson(getCurrentLesson(shell.chapters)!);
+        pendingVideoResumeRef.current = null;
         setIsPlaying(false);
         notify(`课程目录同步失败：${message}`, "warning");
       })
@@ -3058,6 +3121,23 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   const lessonProgressPct = calcLessonPercent(currentLesson);
   const videoSpeeds = ["0.75", "1.0", "1.25", "1.5", "2.0"];
   const videoVolumePct = Math.max(0, Math.min(100, videoVolume));
+  const getVideoResumeSeconds = (lesson: LessonModel) => {
+    const savedSeconds = Math.max(0, Number(lesson.lastPositionSeconds ?? lesson.progressSeconds ?? lesson.savedProgressSeconds ?? 0));
+    const durationSeconds = Math.max(0, Number(lesson.durationSeconds || parseDurationToSeconds(lesson.duration)));
+    if (savedSeconds <= 0) return 0;
+    if (durationSeconds > 0 && savedSeconds >= durationSeconds - 2) return 0;
+    return savedSeconds;
+  };
+  const prepareVideoResume = (lesson: LessonModel) => {
+    const seconds = getVideoResumeSeconds(lesson);
+    pendingVideoResumeRef.current = seconds > 0 ? { lessonId: lesson.id, seconds, applied: false } : null;
+  };
+  const applyPendingVideoResume = (video: HTMLVideoElement) => {
+    const pending = pendingVideoResumeRef.current;
+    if (!pending || pending.applied || pending.lessonId !== currentLesson.id || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    video.currentTime = Math.min(pending.seconds, Math.max(video.duration - 1, 0));
+    pendingVideoResumeRef.current = { ...pending, applied: true };
+  };
 
   const toggleChapter = (id: string) =>
     setExpandedChapters(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
@@ -3069,7 +3149,10 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     }
 
     lastSavedVideoProgressRef.current = -1;
-    setCurrentLesson(lesson);
+    const shouldResetPlayback = lesson.done && getVideoResumeSeconds(lesson) <= 0;
+    const nextLesson = shouldResetPlayback ? { ...lesson, progressSeconds: 0 } : lesson;
+    setCurrentLesson(nextLesson);
+    prepareVideoResume(nextLesson);
     setDetail(prev => ({ ...prev, chapters: markCurrentLesson(prev.chapters, lesson.id) }));
     setVideoError("");
     setVideoReady(false);
@@ -3087,6 +3170,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
           };
           setCurrentLesson(prev => prev.id === lesson.id ? { ...prev, ...enriched } : prev);
           setDetail(prev => ({ ...prev, chapters: patchLessonInChapters(prev.chapters, lesson.id, enriched) }));
+          prepareVideoResume({ ...nextLesson, ...enriched });
         })
         .catch(() => {
           notify("视频详情加载失败，请稍后重试", "warning");
@@ -3117,10 +3201,17 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
 
     request
       .then((record) => {
-        setCurrentLesson(prev => prev.id === lessonId ? { ...prev, progressSeconds: record.progress, done: Boolean(record.completed) } : prev);
+        const playbackSeconds = Math.max(0, Number(record.lastPosition ?? (record.completed ? 0 : record.progress)));
+        setCurrentLesson(prev => prev.id === lessonId ? {
+          ...prev,
+          progressSeconds: playbackSeconds,
+          savedProgressSeconds: Math.max(record.progress, prev.savedProgressSeconds ?? 0),
+          lastPositionSeconds: playbackSeconds,
+          done: Boolean(record.completed),
+        } : prev);
         setDetail(prev => ({
           ...prev,
-          chapters: updateLessonProgressInChapters(prev.chapters, lessonId, record.progress, Boolean(record.completed)),
+          chapters: updateLessonProgressInChapters(prev.chapters, lessonId, playbackSeconds, Boolean(record.completed), record.progress),
         }));
         notify(record.completed ? "已同步学完状态" : "已同步视频进度", "success");
       })
@@ -3134,7 +3225,6 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     if (!isLegacyCourse || currentLesson.source !== "legacy" || !currentLesson.mediaUrl || currentLesson.id === "__empty__") return;
     const lessonId = currentLesson.id;
     const progressSeconds = Math.max(0, Math.floor(seconds));
-    if (!complete && currentLesson.done) return;
     if (!complete && Math.abs(progressSeconds - lastSavedVideoProgressRef.current) < 10) return;
 
     lastSavedVideoProgressRef.current = progressSeconds;
@@ -3145,10 +3235,17 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
 
     request
       .then((record) => {
-        setCurrentLesson(prev => prev.id === lessonId ? { ...prev, progressSeconds: record.progress, done: Boolean(record.completed) } : prev);
+        const playbackSeconds = Math.max(0, Number(record.lastPosition ?? (record.completed ? 0 : record.progress)));
+        setCurrentLesson(prev => prev.id === lessonId ? {
+          ...prev,
+          progressSeconds: playbackSeconds,
+          savedProgressSeconds: Math.max(record.progress, prev.savedProgressSeconds ?? 0),
+          lastPositionSeconds: playbackSeconds,
+          done: Boolean(record.completed),
+        } : prev);
         setDetail(prev => ({
           ...prev,
-          chapters: updateLessonProgressInChapters(prev.chapters, lessonId, record.progress, Boolean(record.completed)),
+          chapters: updateLessonProgressInChapters(prev.chapters, lessonId, playbackSeconds, Boolean(record.completed), record.progress),
         }));
       })
       .catch(() => {
@@ -3172,6 +3269,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     const mediaUrl = currentLesson.mediaUrl;
     if (!video || !mediaUrl) return;
 
+    prepareVideoResume(currentLesson);
     setVideoError("");
     setVideoReady(false);
     video.removeAttribute("src");
@@ -3486,16 +3584,13 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                 onClick={toggleVideoPlayback}
                 onPlay={() => setIsPlaying(true)}
                 onLoadedMetadata={event => {
-                  const target = event.currentTarget;
-                  if (currentLesson.progressSeconds > 0 && Number.isFinite(target.duration)) {
-                    target.currentTime = Math.min(currentLesson.progressSeconds, Math.max(target.duration - 1, 0));
-                  }
+                  applyPendingVideoResume(event.currentTarget);
                 }}
                 onTimeUpdate={event => {
                   const target = event.currentTarget;
                   const duration = Number.isFinite(target.duration) && target.duration > 0 ? target.duration : currentLesson.durationSeconds;
                   const seconds = Math.floor(target.currentTime);
-                  setCurrentLesson(prev => ({ ...prev, progressSeconds: seconds }));
+                  setCurrentLesson(prev => ({ ...prev, progressSeconds: seconds, lastPositionSeconds: seconds }));
                   if (seconds > 0 && seconds % 15 === 0) saveVideoSeconds(seconds);
                   if (duration > 0) {
                     setDetail(prev => ({
@@ -3513,8 +3608,13 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                   saveVideoSeconds(event.currentTarget.duration || currentLesson.durationSeconds, true);
                 }}
                 onCanPlay={() => {
+                  if (videoRef.current) applyPendingVideoResume(videoRef.current);
                   setVideoReady(true);
                   setVideoError("");
+                }}
+                onPlaying={event => {
+                  setIsPlaying(true);
+                  applyPendingVideoResume(event.currentTarget);
                 }}
                 onError={() => {
                   setIsPlaying(false);
@@ -3567,8 +3667,9 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                   const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
                   const duration = Number.isFinite(videoRef.current.duration) && videoRef.current.duration > 0 ? videoRef.current.duration : currentLesson.durationSeconds;
                   const seconds = Math.round(ratio * duration);
+                  pendingVideoResumeRef.current = null;
                   videoRef.current.currentTime = seconds;
-                  setCurrentLesson(prev => ({ ...prev, progressSeconds: seconds }));
+                  setCurrentLesson(prev => ({ ...prev, progressSeconds: seconds, lastPositionSeconds: seconds }));
                   setDetail(prev => ({
                     ...prev,
                     chapters: updateLessonProgressInChapters(prev.chapters, currentLesson.id, seconds),
