@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { prisma } from "../lib/prisma.js";
 import { ok, fail } from "../lib/response.js";
 import { serializeAudio, serializeTag, serializeVideo } from "../lib/serializers.js";
+import { getObjectBuffer, getSignedObjectUrl } from "../lib/upload.js";
 import { formatDateTime } from "../lib/time.js";
 import { requireUserAuth } from "../middleware/auth.js";
 import { mockExamRouter } from "./mock-exams.js";
@@ -1295,7 +1296,14 @@ userRouter.get("/courses/:courseId/videos/:videoId/detail", async (req, res) => 
     });
 
     return ok(res, {
-      video: serializeVideoWithProgress(relation.video, progress),
+      video: {
+        ...serializeVideoWithProgress(relation.video, progress),
+        playbackUrl:
+          relation.video.objectKey?.endsWith(".m3u8")
+            ? `/api/user/courses/${encodeURIComponent(course.id)}/videos/${encodeURIComponent(relation.video.id)}/hls/playlist.m3u8`
+            : serializeVideo(relation.video).videoUrl,
+        playbackType: relation.video.objectKey?.endsWith(".m3u8") ? "hls" : "direct",
+      },
       tag: serializeTag(relation.tag),
       course: serializeCourseWithCounts(course),
       prev: prev ? serializeVideo(prev) : undefined,
@@ -1306,6 +1314,47 @@ userRouter.get("/courses/:courseId/videos/:videoId/detail", async (req, res) => 
     });
   } catch (error) {
     return fail(res, error.message || "视频不存在", statusForCourseAccessError(error, 500));
+  }
+});
+
+userRouter.get("/courses/:courseId/videos/:videoId/hls/playlist.m3u8", async (req, res) => {
+  try {
+    const course = await assertCoursePermission(req.auth.userId, req.params.courseId);
+    const relation = await prisma.courseVideo.findFirst({
+      where: {
+        courseId: course.id,
+        videoId: req.params.videoId,
+      },
+      include: {
+        video: true,
+      },
+    });
+
+    if (!relation) return fail(res, "视频不存在", 404);
+
+    const video = relation.video;
+    const objectKey = `${video.objectKey ?? ""}`.trim();
+    if ((video.processStatus ?? "ready") !== "ready" || !objectKey.endsWith(".m3u8")) {
+      return fail(res, "当前视频暂未生成 HLS 播放列表", 404);
+    }
+
+    const playlistBuffer = await getObjectBuffer(objectKey);
+    const playlistText = playlistBuffer.toString("utf8");
+    const basePrefix = objectKey.slice(0, objectKey.lastIndexOf("/") + 1);
+    const signedPlaylist = playlistText
+      .split(/\r?\n/)
+      .map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#") || /^https?:\/\//i.test(trimmed)) return line;
+        return getSignedObjectUrl(`${basePrefix}${trimmed}`);
+      })
+      .join("\n");
+
+    res.setHeader("Content-Type", "application/vnd.apple.mpegurl; charset=utf-8");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    return res.send(signedPlaylist);
+  } catch (error) {
+    return fail(res, error.message || "视频播放列表加载失败", statusForCourseAccessError(error, 500));
   }
 });
 

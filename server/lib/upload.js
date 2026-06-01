@@ -204,6 +204,29 @@ export const downloadObjectToFile = async ({ objectKey, filePath }) => {
   return filePath;
 };
 
+export const getObjectBuffer = async (objectKey = "") => {
+  ensureOssConfigured();
+
+  const normalizedObjectKey = `${objectKey ?? ""}`.trim();
+  if (!normalizedObjectKey) throw new Error("下载对象路径不能为空");
+
+  const result = await ossClient.get(normalizedObjectKey);
+  return Buffer.isBuffer(result.content) ? result.content : Buffer.from(result.content ?? "");
+};
+
+export const getSignedObjectUrl = (objectKey = "", expires = 24 * 60 * 60) => {
+  ensureOssConfigured();
+
+  const normalizedObjectKey = `${objectKey ?? ""}`.trim();
+  if (!normalizedObjectKey) throw new Error("签名对象路径不能为空");
+
+  return toHttpsUrl(
+    ossClient.signatureUrl(normalizedObjectKey, {
+      expires,
+    }),
+  );
+};
+
 export const deleteObject = async (objectKey = "") => {
   ensureOssConfigured();
 

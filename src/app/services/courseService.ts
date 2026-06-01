@@ -105,6 +105,8 @@ export interface LegacyVideo {
   hasHandout?: boolean;
   uploadedAt?: string;
   videoUrl?: string;
+  playbackUrl?: string;
+  playbackType?: "hls" | "direct";
   progress?: number;
   progressPercent?: number;
   completed?: boolean;

@@ -7,7 +7,7 @@ import {
   Scale, Swords, ChevronRight, FileText, Target,
   Flame, Clock, TrendingUp, Play, Star, ChevronLeft, Zap,
   Search, Users, CheckCircle2, Lock, Download, PenLine,
-  ChevronDown, PlayCircle, Volume2, Maximize2, SkipForward,
+  ChevronDown, Loader2, PlayCircle, Volume2, Maximize2, SkipForward,
   SkipBack, AlignLeft, Paperclip, ListVideo,
   Bookmark, Flag, RotateCcw, CheckCheck, X, Shuffle, Trash2,
   ListFilter, Circle, Menu, House, UserRound, Moon, Sun, QrCode,
@@ -49,6 +49,9 @@ import { userService } from "./services/userService";
 import type { LegacyUser, UserStudySummary } from "./services/userService";
 import { mockApi, type UserHomeConfig } from "./lib/mockData";
 import { AppLogo } from "./components/branding/AppLogo";
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+const buildApiUrl = (path = "") => (path && API_BASE_URL && path.startsWith("/") ? `${API_BASE_URL}${path}` : path);
 
 /* ══════════════════════ SHARED DATA ══════════════════════ */
 
@@ -2951,6 +2954,8 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   const [videoVolume, setVideoVolume] = useState(80);
   const [videoSpeed, setVideoSpeed] = useState("1.0");
   const [showVideoSpeedMenu, setShowVideoSpeedMenu] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
+  const [videoError, setVideoError] = useState("");
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [savingVideoProgress, setSavingVideoProgress] = useState(false);
   const [detailError, setDetailError] = useState("");
@@ -2963,6 +2968,8 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     setExpandedChapters(initial.chapters.filter(chapter => chapter.expanded).map(chapter => chapter.id));
     setCurrentLesson(getCurrentLesson(initial.chapters)!);
     setDetailError("");
+    setVideoError("");
+    setVideoReady(false);
     setIsPlaying(false);
     setLoadingDetail(true);
 
@@ -2982,7 +2989,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                 script: detailPayload.video.script,
                 handoutUrl: detailPayload.video.handoutUrl,
                 handoutName: detailPayload.video.handoutName,
-                mediaUrl: detailPayload.video.videoUrl,
+                mediaUrl: detailPayload.video.playbackUrl || detailPayload.video.videoUrl,
               };
               setCurrentLesson(prev => prev.id === nextLesson.id ? { ...prev, ...enriched } : prev);
               setDetail(prev => ({ ...prev, chapters: patchLessonInChapters(prev.chapters, nextLesson.id, enriched) }));
@@ -3034,6 +3041,8 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     lastSavedVideoProgressRef.current = -1;
     setCurrentLesson(lesson);
     setDetail(prev => ({ ...prev, chapters: markCurrentLesson(prev.chapters, lesson.id) }));
+    setVideoError("");
+    setVideoReady(false);
     setIsPlaying(false);
     setShowMobileVideoLessonPicker(false);
 
@@ -3044,7 +3053,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
             script: payload.video.script,
             handoutUrl: payload.video.handoutUrl,
             handoutName: payload.video.handoutName,
-            mediaUrl: payload.video.videoUrl,
+            mediaUrl: payload.video.playbackUrl || payload.video.videoUrl,
           };
           setCurrentLesson(prev => prev.id === lesson.id ? { ...prev, ...enriched } : prev);
           setDetail(prev => ({ ...prev, chapters: patchLessonInChapters(prev.chapters, lesson.id, enriched) }));
@@ -3133,18 +3142,29 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     const mediaUrl = currentLesson.mediaUrl;
     if (!video || !mediaUrl) return;
 
-    if (!mediaUrl.includes(".m3u8")) {
-      video.src = mediaUrl;
+    setVideoError("");
+    setVideoReady(false);
+    video.removeAttribute("src");
+    video.load();
+
+    const resolvedMediaUrl = buildApiUrl(mediaUrl);
+
+    if (!resolvedMediaUrl.includes(".m3u8")) {
+      video.src = resolvedMediaUrl;
+      setVideoReady(true);
       return;
     }
 
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = mediaUrl;
+      video.src = resolvedMediaUrl;
+      setVideoReady(true);
       return;
     }
 
     if (!Hls.isSupported()) {
-      notify("当前浏览器暂不支持 HLS 视频播放，请使用最新版 Chrome、Edge 或 Safari", "warning");
+      const message = "当前浏览器暂不支持 HLS 视频播放，请使用最新版 Chrome、Edge 或 Safari";
+      setVideoError(message);
+      notify(message, "warning");
       return;
     }
 
@@ -3152,9 +3172,27 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
       enableWorker: true,
       lowLatencyMode: false,
       backBufferLength: 90,
+      xhrSetup: (xhr, url) => {
+        const token = getUserToken();
+        if (token && (url.startsWith("/") || url.startsWith(API_BASE_URL))) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      },
     });
-    hls.loadSource(mediaUrl);
+    hls.loadSource(resolvedMediaUrl);
     hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      setVideoReady(true);
+    });
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (!data.fatal) return;
+      const message = data.type === Hls.ErrorTypes.NETWORK_ERROR
+        ? "视频分片加载失败，请稍后重试"
+        : "视频解码失败，请联系教务老师处理";
+      setVideoError(message);
+      setVideoReady(false);
+      setIsPlaying(false);
+      notify(message, "warning");
+      hls.destroy();
+    });
 
     return () => {
       hls.destroy();
@@ -3216,6 +3254,11 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
       return;
     }
 
+    if (!videoReady) {
+      notify(videoError || "视频正在加载，请稍后再试", "info");
+      return;
+    }
+
     if (!video) {
       setIsPlaying(p => !p);
       return;
@@ -3229,9 +3272,13 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
 
     void video.play()
       .then(() => setIsPlaying(true))
-      .catch(() => {
+      .catch((error) => {
         setIsPlaying(false);
-        notify("视频播放失败，请稍后重试", "warning");
+        const message = error instanceof Error && error.name === "NotAllowedError"
+          ? "浏览器阻止了自动播放，请再次点击播放"
+          : "视频播放失败，请稍后重试";
+        setVideoError(message);
+        notify(message, "warning");
       });
   };
 
@@ -3316,11 +3363,15 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     if (!video) return;
 
     if (isPlaying && currentLesson.mediaUrl) {
-      void video.play().catch(() => setIsPlaying(false));
+      if (!videoReady) return;
+      void video.play().catch((error) => {
+        setIsPlaying(false);
+        setVideoError(error instanceof Error && error.name === "NotAllowedError" ? "浏览器阻止了自动播放，请再次点击播放" : "视频播放失败，请稍后重试");
+      });
     } else {
       video.pause();
     }
-  }, [isPlaying, currentLesson.mediaUrl]);
+  }, [isPlaying, currentLesson.mediaUrl, videoReady]);
 
   return (
     <div className="debao-video-page debao-themed-page" style={{ minHeight: "100vh", background: "#090e1a" }}>
@@ -3431,6 +3482,15 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                   setIsPlaying(false);
                   saveVideoSeconds(event.currentTarget.duration || currentLesson.durationSeconds, true);
                 }}
+                onCanPlay={() => {
+                  setVideoReady(true);
+                  setVideoError("");
+                }}
+                onError={() => {
+                  setIsPlaying(false);
+                  setVideoReady(false);
+                  setVideoError("视频加载失败，请稍后重试");
+                }}
               />
             )}
             {/* Fake video bg */}
@@ -3450,10 +3510,15 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                 <button
                   className="debao-video-big-play"
                   onClick={toggleVideoPlayback}
-                  style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(255,255,255,0.12)", border: "2px solid rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", cursor: currentLesson.mediaUrl ? "pointer" : "not-allowed", backdropFilter: "blur(8px)", transition: "all 0.2s", zIndex: 2, pointerEvents: "auto" }}>
-                  <Play size={28} color="#fff" fill="#fff" style={{ marginLeft: 4 }} />
+                  style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(255,255,255,0.12)", border: "2px solid rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", cursor: currentLesson.mediaUrl && videoReady ? "pointer" : "not-allowed", backdropFilter: "blur(8px)", transition: "all 0.2s", zIndex: 2, pointerEvents: "auto" }}>
+                  {currentLesson.mediaUrl && !videoReady && !videoError ? <Loader2 size={28} color="#fff" style={{ animation: "spin 1s linear infinite" }} /> : <Play size={28} color="#fff" fill="#fff" style={{ marginLeft: 4 }} />}
                 </button>
               )}
+              {currentLesson.mediaUrl && (!videoReady || videoError) ? (
+                <div style={{ position: "relative", zIndex: 2, marginTop: 14, maxWidth: "80%", padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(201,151,62,0.35)", background: "rgba(9,14,26,0.78)", color: "#e8c46a", fontSize: 13, fontWeight: 700, textAlign: "center" }}>
+                  {videoError || "视频正在加载，请稍候"}
+                </div>
+              ) : null}
               {/* Duration badge */}
               <div className="debao-video-duration-badge" style={{ position: "absolute", bottom: 60, right: 20, fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono',monospace" }}>
                 {currentLesson.duration}
@@ -3485,7 +3550,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                 <div className="debao-video-progress-knob" style={{ position: "absolute", left: `${lessonProgressPct}%`, top: "50%", transform: "translate(-50%,-50%)", width: 10, height: 10, borderRadius: "50%", background: c.color, boxShadow: `0 0 6px ${c.color}` }} />
               </div>
               <div className="debao-video-controls-row" style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <button className="debao-video-control-button debao-video-play-button" onClick={toggleVideoPlayback} style={{ background: "none", border: "none", cursor: currentLesson.mediaUrl ? "pointer" : "not-allowed", color: "#fff", display: "flex" }}>
+                <button className="debao-video-control-button debao-video-play-button" onClick={toggleVideoPlayback} style={{ background: "none", border: "none", cursor: currentLesson.mediaUrl && videoReady ? "pointer" : "not-allowed", color: "#fff", display: "flex" }}>
                   {isPlaying ? <div style={{ display: "flex", gap: 3 }}><div style={{ width: 3, height: 14, background: "#fff", borderRadius: 1 }} /><div style={{ width: 3, height: 14, background: "#fff", borderRadius: 1 }} /></div> : <Play size={16} fill="#fff" color="#fff" />}
                 </button>
                 <button className="debao-video-control-button debao-video-prev-button" onClick={() => moveVideoLesson("prev")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 0 }}><SkipBack size={15} color="rgba(255,255,255,0.6)" /></button>

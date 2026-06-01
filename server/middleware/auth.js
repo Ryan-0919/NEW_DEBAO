@@ -5,10 +5,26 @@ import { fail } from "../lib/response.js";
 
 const INVALID_DEVICE_ERROR_CODE = 10032;
 
+const readCookieToken = (req, key = "userToken") => {
+  const rawCookie = `${req.headers.cookie ?? ""}`;
+  if (!rawCookie) return "";
+
+  const encodedKey = encodeURIComponent(key);
+  const segments = rawCookie.split(";").map((segment) => segment.trim());
+  const matched = segments.find((segment) => segment.startsWith(`${encodedKey}=`));
+  if (!matched) return "";
+
+  try {
+    return decodeURIComponent(matched.slice(encodedKey.length + 1)).trim();
+  } catch {
+    return "";
+  }
+};
+
 const readToken = (req) => {
   const value = req.headers.authorization;
-  if (!value?.startsWith("Bearer ")) return "";
-  return value.slice(7).trim();
+  if (value?.startsWith("Bearer ")) return value.slice(7).trim();
+  return readCookieToken(req);
 };
 
 export const requireAdminAuth = async (req, res, next) => {
