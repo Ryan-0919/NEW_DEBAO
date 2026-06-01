@@ -1321,23 +1321,6 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
           <p style={{ fontSize: 13, lineHeight: 1.8, color: "#5a7898", margin: 0 }}>{authSubtitle || subtitle}</p>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, padding: 4, borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", marginBottom: 20 }}>
-          {(["login", "register"] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => {
-                setMode(item);
-                if (item === "register") setLoginMethod("password");
-                setError("");
-              }}
-              style={{ padding: "9px 12px", borderRadius: 9, border: "none", cursor: "pointer", background: mode === item ? "linear-gradient(90deg,#c9973e,#e8c46a)" : "transparent", color: mode === item ? "#090e1a" : "#5a7898", fontWeight: 700 }}
-            >
-              {item === "login" ? "登录" : "注册"}
-            </button>
-          ))}
-        </div>
-
         {mode === "login" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, padding: 4, borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 }}>
             {(["password", "sms"] as const).map((item) => (
@@ -1399,6 +1382,20 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
             <span style={{ fontSize: 12, color: "#5a7898" }}>默认密码为 <strong style={{ color: "#e8c46a", fontFamily: "'JetBrains Mono',monospace" }}>den2024</strong></span>
             <button type="button" onClick={openLoginSupport} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(78,142,247,0.24)", background: "rgba(78,142,247,0.08)", color: "#8ab4ff", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
               处理登录问题
+            </button>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                const nextMode = mode === "register" ? "login" : "register";
+                setMode(nextMode);
+                setLoginMethod("password");
+                setError("");
+              }}
+              style={{ border: "none", background: "transparent", color: "#e8c46a", cursor: "pointer", fontSize: 12, fontWeight: 800, padding: "4px 0" }}
+            >
+              {mode === "register" ? "返回登录" : "注册新账号"}
             </button>
           </div>
         </form>
