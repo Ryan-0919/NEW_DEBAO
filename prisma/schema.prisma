@@ -145,6 +145,14 @@ enum ShopBannerLinkType {
   custom
 }
 
+enum UserRegistrationSource {
+  legacy_unknown
+  self_register
+  sms_auto_created
+  admin_created
+  admin_imported
+}
+
 model Admin {
   id           String   @id @default(cuid())
   account      String   @unique @db.VarChar(50)
@@ -164,6 +172,7 @@ model User {
   avatarObjectKey String?               @db.VarChar(255)
   passwordHash   String                 @db.VarChar(255)
   status         UserStatus             @default(active)
+  registrationSource UserRegistrationSource @default(legacy_unknown)
   registeredAt   DateTime               @default(now())
   lastLoginAt    DateTime?
   createdAt      DateTime               @default(now())

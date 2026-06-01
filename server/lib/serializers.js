@@ -131,6 +131,16 @@ export const serializeVideoListItem = (video) => ({
 });
 
 const USER_DEVICE_LIMIT = 5;
+const USER_REGISTRATION_SOURCE_LABELS = {
+  legacy_unknown: "历史未知",
+  self_register: "自主注册",
+  sms_auto_created: "验证码自动创建",
+  admin_created: "后台添加",
+  admin_imported: "后台批量导入",
+};
+
+const normalizeUserRegistrationSource = (value) =>
+  Object.prototype.hasOwnProperty.call(USER_REGISTRATION_SOURCE_LABELS, value) ? value : "legacy_unknown";
 
 export const serializeUser = (user) => {
   const latestDevice = Array.isArray(user.devices) && user.devices.length > 0 ? user.devices[0] : null;
@@ -139,6 +149,7 @@ export const serializeUser = (user) => {
   const mockExamPermissions = (user.mockExamSeriesPermissions ?? []).map((item) => item.seriesId);
   const mockExamPaperPermissions = (user.mockExamPermissions ?? []).map((item) => item.paperId);
   const deviceCount = user._count?.devices ?? user.devices?.length ?? 0;
+  const registrationSource = normalizeUserRegistrationSource(user.registrationSource);
 
   return {
     id: user.id,
@@ -153,6 +164,8 @@ export const serializeUser = (user) => {
     avatarObjectKey: user.avatarObjectKey ?? "",
     password: "",
     status: user.status,
+    registrationSource,
+    registrationSourceLabel: USER_REGISTRATION_SOURCE_LABELS[registrationSource],
     registeredAt: formatDate(user.registeredAt),
     lastLogin: user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "",
     deviceCount,

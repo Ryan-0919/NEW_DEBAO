@@ -550,6 +550,7 @@ adminOperationsRouter.get("/dashboard/summary", requireAdminRoles(...ALL_ADMIN_R
   const thirtyDaysStart = addDays(todayStart, -29);
   const onlineWindowMinutes = 30;
   const onlineSince = new Date(now.getTime() - onlineWindowMinutes * 60 * 1000);
+  const selfRegistrationWhere = { registrationSource: { in: ["self_register", "sms_auto_created"] } };
 
   const [
     totalUsers,
@@ -579,8 +580,8 @@ adminOperationsRouter.get("/dashboard/summary", requireAdminRoles(...ALL_ADMIN_R
     prisma.user.count(),
     prisma.user.count({ where: { status: "active" } }),
     prisma.user.count({ where: { status: "disabled" } }),
-    prisma.user.count({ where: { registeredAt: { gte: todayStart } } }),
-    prisma.user.count({ where: { registeredAt: { gte: sevenDaysStart } } }),
+    prisma.user.count({ where: { ...selfRegistrationWhere, registeredAt: { gte: todayStart } } }),
+    prisma.user.count({ where: { ...selfRegistrationWhere, registeredAt: { gte: sevenDaysStart } } }),
     prisma.user.count({ where: { lastLoginAt: { gte: thirtyDaysStart } } }),
     prisma.userDevice.findMany({ where: { updatedAt: { gte: onlineSince } }, distinct: ["userId"], select: { userId: true } }),
     prisma.userDevice.findMany({ where: { updatedAt: { gte: todayStart } }, distinct: ["userId"], select: { userId: true } }),

@@ -1,6 +1,8 @@
 import { adminDelete, adminPatchJson, adminPostJson, adminRequest, buildAdminQueryString } from "./adminApiClient";
 
 export type AdminUserStatus = "active" | "disabled";
+export type AdminUserRegistrationSource = "legacy_unknown" | "self_register" | "sms_auto_created" | "admin_created" | "admin_imported";
+export type AdminUserRegistrationSourceFilter = "all" | "self_registered" | AdminUserRegistrationSource;
 
 export type AdminPagedResult<T> = {
   items: T[];
@@ -14,6 +16,9 @@ export type AdminUserSummary = {
   total: number;
   active: number;
   disabled: number;
+  selfRegistered: number;
+  adminAdded: number;
+  legacyUnknown: number;
   fullDevices: number;
 };
 
@@ -63,6 +68,8 @@ export type AdminUser = {
   displayName: string;
   avatarUrl: string;
   status: AdminUserStatus;
+  registrationSource: AdminUserRegistrationSource;
+  registrationSourceLabel: string;
   registeredAt: string;
   lastLogin: string;
   deviceCount: number;
@@ -110,6 +117,8 @@ export type AdminUserDetail = {
     phone: string;
     nickname: string;
     status: AdminUserStatus;
+    registrationSource: AdminUserRegistrationSource;
+    registrationSourceLabel: string;
     registeredAt: string;
     lastLogin: string;
   };
@@ -263,11 +272,12 @@ export type BatchImportResult = {
 
 export const adminUserService = {
   getSummary: () => adminRequest<AdminUserSummary>("/api/admin/users/summary"),
-  getUsers: (params?: { keyword?: string; status?: AdminUserStatus | "all"; courseId?: string; page?: number; pageSize?: number }) =>
+  getUsers: (params?: { keyword?: string; status?: AdminUserStatus | "all"; registrationSource?: AdminUserRegistrationSourceFilter; courseId?: string; page?: number; pageSize?: number }) =>
     adminRequest<AdminPagedResult<AdminUser>>(
       `/api/admin/users${buildAdminQueryString({
         keyword: params?.keyword,
         status: params?.status && params.status !== "all" ? params.status : undefined,
+        registrationSource: params?.registrationSource && params.registrationSource !== "all" ? params.registrationSource : undefined,
         courseId: params?.courseId && params.courseId !== "all" ? params.courseId : undefined,
         page: params?.page,
         pageSize: params?.pageSize,

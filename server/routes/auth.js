@@ -603,6 +603,7 @@ authRouter.post("/user/sms/login", async (req, res, next) => {
           avatarObjectKey: null,
           passwordHash: newUserPasswordHash,
           status: "active",
+          registrationSource: "sms_auto_created",
           registeredAt: now,
         },
         select: {
@@ -745,6 +746,7 @@ authRouter.post("/user/register", async (req, res, next) => {
           avatarObjectKey: null,
           passwordHash,
           status: "active",
+          registrationSource: "self_register",
           lastLoginAt: now,
         },
       });

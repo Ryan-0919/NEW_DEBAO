@@ -35,6 +35,7 @@ import {
   AdminMockExamSeriesOption,
   AdminQuestionBank,
   AdminUser,
+  AdminUserRegistrationSourceFilter,
   AdminUserDetail,
   AdminUserStatus,
   AdminUserSummary,
@@ -43,6 +44,7 @@ import {
 } from "../../services/adminUserService";
 
 type UserStatusFilter = AdminUserStatus | "all";
+type UserSourceFilter = AdminUserRegistrationSourceFilter;
 
 const DEVICE_LIMIT = 5;
 const PAGE_SIZE = 20;
@@ -68,6 +70,17 @@ const statusMeta = {
   active: { label: "启用", className: "bg-emerald-100 text-emerald-700" },
   disabled: { label: "停用", className: "bg-slate-100 text-slate-700" },
 } as const;
+
+const registrationSourceMeta = {
+  legacy_unknown: { label: "历史未知", className: "border-slate-200 bg-slate-50 text-slate-600" },
+  self_register: { label: "自主注册", className: "border-emerald-100 bg-emerald-50 text-emerald-700" },
+  sms_auto_created: { label: "验证码创建", className: "border-cyan-100 bg-cyan-50 text-cyan-700" },
+  admin_created: { label: "后台添加", className: "border-amber-100 bg-amber-50 text-amber-700" },
+  admin_imported: { label: "批量导入", className: "border-violet-100 bg-violet-50 text-violet-700" },
+} as const;
+
+const getRegistrationSourceMeta = (source?: string) =>
+  registrationSourceMeta[(source as keyof typeof registrationSourceMeta) || "legacy_unknown"] ?? registrationSourceMeta.legacy_unknown;
 
 const examStatusMeta: Record<string, string> = {
   in_progress: "进行中",
@@ -174,12 +187,13 @@ export function UserList() {
   const [mockExamPapers, setMockExamPapers] = useState<AdminMockExamPaperSummary[]>([]);
   const [questionBanks, setQuestionBanks] = useState<AdminQuestionBank[]>([]);
   const [devices, setDevices] = useState<AdminDevice[]>([]);
-  const [summary, setSummary] = useState<AdminUserSummary>({ total: 0, active: 0, disabled: 0, fullDevices: 0 });
+  const [summary, setSummary] = useState<AdminUserSummary>({ total: 0, active: 0, disabled: 0, selfRegistered: 0, adminAdded: 0, legacyUnknown: 0, fullDevices: 0 });
   const [loading, setLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
   const [deviceLoading, setDeviceLoading] = useState(false);
   const [searchPhone, setSearchPhone] = useState("");
   const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState<UserSourceFilter>("all");
   const [courseFilter, setCourseFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
@@ -245,7 +259,7 @@ export function UserList() {
   const loadUsers = async (
     initial = false,
     nextPage = page,
-    overrides?: { keyword?: string; status?: UserStatusFilter; courseId?: string },
+    overrides?: { keyword?: string; status?: UserStatusFilter; registrationSource?: UserSourceFilter; courseId?: string },
   ) => {
     if (initial) setLoading(true);
     else setListLoading(true);
@@ -254,6 +268,7 @@ export function UserList() {
       const result = await adminUserService.getUsers({
         keyword: overrides?.keyword ?? searchPhone.trim(),
         status: overrides?.status ?? statusFilter,
+        registrationSource: overrides?.registrationSource ?? sourceFilter,
         courseId: overrides?.courseId ?? courseFilter,
         page: nextPage,
         pageSize: PAGE_SIZE,
@@ -276,7 +291,7 @@ export function UserList() {
 
   useEffect(() => {
     if (!loading) void loadUsers();
-  }, [page, statusFilter, courseFilter]);
+  }, [page, statusFilter, sourceFilter, courseFilter]);
 
   const handleSearch = () => {
     setPage(1);
@@ -286,9 +301,10 @@ export function UserList() {
   const handleResetFilters = () => {
     setSearchPhone("");
     setStatusFilter("all");
+    setSourceFilter("all");
     setCourseFilter("all");
     setPage(1);
-    void loadUsers(false, 1, { keyword: "", status: "all", courseId: "all" });
+    void loadUsers(false, 1, { keyword: "", status: "all", registrationSource: "all", courseId: "all" });
   };
 
   const refreshUsers = async () => {
@@ -946,9 +962,12 @@ export function UserList() {
   return (
     <>
       <div className="space-y-6">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
           {[
             { label: "用户总数", value: summary.total, icon: Users },
+            { label: "自主注册", value: summary.selfRegistered, icon: UserPlus },
+            { label: "后台添加", value: summary.adminAdded, icon: Fingerprint },
+            { label: "历史未知", value: summary.legacyUnknown, icon: Search },
             { label: "启用中", value: summary.active, icon: ShieldCheck },
             { label: "已停用", value: summary.disabled, icon: ShieldOff },
             { label: "设备满额", value: summary.fullDevices, icon: Laptop },
@@ -999,6 +1018,26 @@ export function UserList() {
                     <SelectItem value="all">全部状态</SelectItem>
                     <SelectItem value="active">启用</SelectItem>
                     <SelectItem value="disabled">停用</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={sourceFilter}
+                  onValueChange={(value) => {
+                    setSourceFilter(value as UserSourceFilter);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className={`w-40 ${adminUi.selectTrigger}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={adminUi.selectContent}>
+                    <SelectItem value="all">全部来源</SelectItem>
+                    <SelectItem value="self_registered">自主注册</SelectItem>
+                    <SelectItem value="self_register">主动注册</SelectItem>
+                    <SelectItem value="sms_auto_created">验证码创建</SelectItem>
+                    <SelectItem value="admin_created">后台添加</SelectItem>
+                    <SelectItem value="admin_imported">批量导入</SelectItem>
+                    <SelectItem value="legacy_unknown">历史未知</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -1112,6 +1151,7 @@ export function UserList() {
                   const counts = getPermissionCounts(user);
                   const deviceLimit = getDeviceLimit(user);
                   const deviceFull = isDeviceFull(user);
+                  const sourceMeta = getRegistrationSourceMeta(user.registrationSource);
                   return (
                     <tr key={user.id} className="bg-white hover:bg-slate-50/70">
                       <td className="px-4 py-3">
@@ -1128,6 +1168,7 @@ export function UserList() {
                                 {getUserDisplayName(user)}
                               </button>
                               <Badge className={statusMeta[user.status].className}>{statusMeta[user.status].label}</Badge>
+                              <Badge variant="outline" className={sourceMeta.className}>{user.registrationSourceLabel || sourceMeta.label}</Badge>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
                               <span>{user.phone}</span>
@@ -1263,6 +1304,7 @@ export function UserList() {
               <div className="grid gap-3 sm:grid-cols-4">
                 {[
                   { label: "账号状态", value: statusMeta[selectedUser.status].label },
+                  { label: "用户来源", value: selectedUser.registrationSourceLabel || getRegistrationSourceMeta(selectedUser.registrationSource).label },
                   { label: "注册时间", value: selectedUser.registeredAt || "-" },
                   { label: "最近登录", value: selectedUser.lastLogin || "从未登录" },
                   { label: "设备占用", value: `${selectedUser.deviceCount}/${getDeviceLimit(selectedUser)}` },
@@ -1296,6 +1338,10 @@ export function UserList() {
                   <div>
                     <p className="text-xs text-slate-500">手机号</p>
                     <p className="mt-1 text-slate-900">{selectedUser.phone}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">用户来源</p>
+                    <p className="mt-1 text-slate-900">{selectedUser.registrationSourceLabel || getRegistrationSourceMeta(selectedUser.registrationSource).label}</p>
                   </div>
                   <div className="sm:col-span-2">
                     <p className="text-xs text-slate-500">完整用户ID</p>

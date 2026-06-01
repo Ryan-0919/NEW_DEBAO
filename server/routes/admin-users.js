@@ -12,6 +12,14 @@ import { sanitizeAuditDetailText, writeAdminAuditLog } from "../lib/admin-audit.
 const DEFAULT_USER_PASSWORD = "den2024";
 const DEVICE_LIMIT = 5;
 const USER_MANAGER_ROLES = ["super_admin", "user_admin"];
+const SELF_REGISTRATION_SOURCES = ["self_register", "sms_auto_created"];
+const USER_REGISTRATION_SOURCE_LABELS = {
+  legacy_unknown: "历史未知",
+  self_register: "自主注册",
+  sms_auto_created: "验证码自动创建",
+  admin_created: "后台添加",
+  admin_imported: "后台批量导入",
+};
 
 export const adminUsersRouter = Router();
 
@@ -48,6 +56,9 @@ const getLatestDate = (values = []) => {
 };
 
 const sanitizeAuditDetail = (value) => sanitizeAuditDetailText(value);
+
+const normalizeRegistrationSource = (value) =>
+  Object.prototype.hasOwnProperty.call(USER_REGISTRATION_SOURCE_LABELS, value) ? value : "legacy_unknown";
 
 const parseJsonStringArray = (value) => {
   if (!value) return [];
@@ -173,6 +184,7 @@ const createOrAppendUser = async ({ phone, courseIds, mockExamSeriesIds, questio
       phone: normalizedPhone,
       passwordHash: defaultPasswordHash ?? (await hashPassword(DEFAULT_USER_PASSWORD)),
       status: "active",
+      registrationSource: "admin_created",
     },
   });
   await createCoursePermissionLinks(user.id, courseIds);
@@ -224,6 +236,7 @@ const batchCreateOrAppendUsers = async ({ phones, courseIds, mockExamSeriesIds, 
         phone,
         passwordHash: defaultPasswordHash,
         status: "active",
+        registrationSource: "admin_imported",
       })),
       skipDuplicates: true,
     });
@@ -345,10 +358,13 @@ adminUsersRouter.get("/question-banks", requireAdminRoles(...USER_MANAGER_ROLES)
 });
 
 adminUsersRouter.get("/users/summary", async (_req, res) => {
-  const [total, active, disabled, usersWithDeviceCount] = await Promise.all([
+  const [total, active, disabled, selfRegistered, adminAdded, legacyUnknown, usersWithDeviceCount] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { status: "active" } }),
     prisma.user.count({ where: { status: "disabled" } }),
+    prisma.user.count({ where: { registrationSource: { in: SELF_REGISTRATION_SOURCES } } }),
+    prisma.user.count({ where: { registrationSource: { in: ["admin_created", "admin_imported"] } } }),
+    prisma.user.count({ where: { registrationSource: "legacy_unknown" } }),
     prisma.user.findMany({
       select: {
         id: true,
@@ -365,6 +381,9 @@ adminUsersRouter.get("/users/summary", async (_req, res) => {
     total,
     active,
     disabled,
+    selfRegistered,
+    adminAdded,
+    legacyUnknown,
     fullDevices: usersWithDeviceCount.filter((user) => user._count.devices >= DEVICE_LIMIT).length,
   });
 });
@@ -372,6 +391,7 @@ adminUsersRouter.get("/users/summary", async (_req, res) => {
 adminUsersRouter.get("/users", async (req, res) => {
   const keyword = `${req.query?.keyword ?? ""}`.trim();
   const status = `${req.query?.status ?? "all"}`.trim();
+  const registrationSource = `${req.query?.registrationSource ?? "all"}`.trim();
   const courseId = `${req.query?.courseId ?? ""}`.trim();
   const page = toPositiveInt(req.query?.page, 1);
   const pageSize = Math.min(toPositiveInt(req.query?.pageSize, 20), 100);
@@ -382,6 +402,11 @@ adminUsersRouter.get("/users", async (req, res) => {
         }
       : {}),
     ...(status === "active" || status === "disabled" ? { status } : {}),
+    ...(registrationSource === "self_registered"
+      ? { registrationSource: { in: SELF_REGISTRATION_SOURCES } }
+      : Object.prototype.hasOwnProperty.call(USER_REGISTRATION_SOURCE_LABELS, registrationSource)
+        ? { registrationSource }
+        : {}),
     ...(courseId && courseId !== "all"
       ? {
           permissions: {
@@ -463,6 +488,7 @@ adminUsersRouter.get("/users/:userId/detail", async (req, res) => {
       phone: true,
       nickname: true,
       status: true,
+      registrationSource: true,
       registeredAt: true,
       lastLoginAt: true,
     },
@@ -877,6 +903,8 @@ adminUsersRouter.get("/users/:userId/detail", async (req, res) => {
       phone: user.phone,
       nickname: user.nickname ?? "",
       status: user.status,
+      registrationSource: normalizeRegistrationSource(user.registrationSource),
+      registrationSourceLabel: USER_REGISTRATION_SOURCE_LABELS[normalizeRegistrationSource(user.registrationSource)],
       registeredAt: formatDateTime(user.registeredAt),
       lastLogin: formatOptionalDateTime(user.lastLoginAt),
     },
