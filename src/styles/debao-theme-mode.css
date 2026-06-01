@@ -337,6 +337,27 @@
     #f5f7fb !important;
 }
 
+.debao-auth-logo {
+  justify-content: center;
+  max-width: 260px;
+}
+
+.debao-auth-logo img {
+  object-position: center;
+}
+
+.debao-auth-logo > div:first-child {
+  justify-content: center;
+}
+
+.debao-auth-logo p:first-of-type {
+  color: #f0e6d0;
+}
+
+.debao-theme-light .debao-auth-logo p:first-of-type {
+  color: #172033;
+}
+
 .debao-theme-light .debao-audio-breadcrumb,
 .debao-theme-light .debao-video-breadcrumb {
   background: rgba(255,255,255,0.76) !important;

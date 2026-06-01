@@ -1181,9 +1181,32 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [customerServiceUrl, setCustomerServiceUrl] = useState("");
 
   const title = mode === "register" ? "注册得宝账号" : "登录得宝";
   const subtitle = mode === "register" ? "使用手机号创建得宝账号，注册后会自动进入学习中心。" : "使用手机号和密码登录得宝，继续学习课程、题库和模考。";
+
+  useEffect(() => {
+    let active = true;
+    mockApi.getBrandingConfig()
+      .then((config) => {
+        if (active) setCustomerServiceUrl(config.customerServiceUrl?.trim() ?? "");
+      })
+      .catch(() => {
+        if (active) setCustomerServiceUrl("");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const openLoginSupport = () => {
+    if (!customerServiceUrl) {
+      notify("暂未配置客服链接，请联系教务老师处理登录问题", "warning");
+      return;
+    }
+    window.open(customerServiceUrl, "_blank", "noopener,noreferrer");
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -1233,12 +1256,8 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
   return (
     <div className="debao-auth-page debao-themed-page" style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: "radial-gradient(circle at 20% 15%,rgba(78,142,247,0.16),transparent 28%),radial-gradient(circle at 80% 20%,rgba(29,201,164,0.12),transparent 26%),#090e1a" }}>
       <div style={{ width: "100%", maxWidth: 430, background: "#0f1826", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: "28px 30px", boxShadow: "0 22px 70px rgba(0,0,0,0.35)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 26 }}>
-          <div style={{ width: 42, height: 42, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(145deg,#c9973e,#e8c46a)", fontFamily: "'Noto Serif SC',serif", fontWeight: 700, fontSize: 18, color: "#080d18" }}>律</div>
-          <div>
-            <div style={{ fontFamily: "'Noto Serif SC',serif", fontWeight: 700, fontSize: 20, color: "#f0e6d0" }}>得宝</div>
-            <div style={{ fontSize: 11, color: "#4a6a88", letterSpacing: "0.08em" }}>得恩法考 · 用户系统</div>
-          </div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+          <AppLogo className="debao-auth-logo" />
         </div>
 
         <div style={{ marginBottom: 22 }}>
@@ -1289,6 +1308,12 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
           <button disabled={loading} type="submit" style={{ marginTop: 4, padding: "12px", borderRadius: 12, border: "none", cursor: loading ? "wait" : "pointer", background: loading ? "rgba(201,151,62,0.45)" : "linear-gradient(90deg,#c9973e,#e8c46a)", color: "#090e1a", fontSize: 14, fontWeight: 800 }}>
             {loading ? "正在处理..." : mode === "register" ? "注册并进入得宝" : "登录并进入得宝"}
           </button>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 2 }}>
+            <span style={{ fontSize: 12, color: "#5a7898" }}>默认密码为 <strong style={{ color: "#e8c46a", fontFamily: "'JetBrains Mono',monospace" }}>den2024</strong></span>
+            <button type="button" onClick={openLoginSupport} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(78,142,247,0.24)", background: "rgba(78,142,247,0.08)", color: "#8ab4ff", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+              处理登录问题
+            </button>
+          </div>
         </form>
 
       </div>
