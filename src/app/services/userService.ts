@@ -86,15 +86,16 @@ export const userService = {
   login: (phone: string, password: string, deviceInfo: DeviceInfo) =>
     postJson<AuthResult>("/api/auth/user/login", { phone, password, ...deviceInfo }),
 
-  sendLoginSmsCode: (phone: string) =>
-    postJson<{ success: boolean; expiresIn: number; retryAfter: number }>("/api/auth/user/sms/send", { phone }),
+  sendLoginSmsCode: (phone: string, scene: "login" | "register" = "login") =>
+    postJson<{ success: boolean; expiresIn: number; retryAfter: number }>("/api/auth/user/sms/send", { phone, scene }),
 
   loginWithSmsCode: (phone: string, code: string, deviceInfo: DeviceInfo) =>
     postJson<AuthResult>("/api/auth/user/sms/login", { phone, code, ...deviceInfo }),
 
-  register: (phone: string, password: string, confirmPassword: string, agreeTerms: boolean, deviceInfo: DeviceInfo) =>
+  register: (phone: string, code: string, password: string, confirmPassword: string, agreeTerms: boolean, deviceInfo: DeviceInfo) =>
     postJson<AuthResult>("/api/auth/user/register", {
       phone,
+      code,
       password,
       confirmPassword,
       agreeTerms,

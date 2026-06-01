@@ -1236,7 +1236,7 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
     setError("");
 
     try {
-      const result = await userService.sendLoginSmsCode(normalizedPhone);
+      const result = await userService.sendLoginSmsCode(normalizedPhone, mode === "register" ? "register" : "login");
       setSmsCountdown(Math.max(Number(result.retryAfter ?? 60), 1));
       notify("验证码已发送，请注意查收", "success");
     } catch (err) {
@@ -1259,7 +1259,7 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
       return;
     }
 
-    if (mode === "login" && loginMethod === "sms" && !normalizedSmsCode) {
+    if ((mode === "register" || loginMethod === "sms") && !normalizedSmsCode) {
       setError("请输入短信验证码");
       return;
     }
@@ -1286,7 +1286,7 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
     try {
       const result =
         mode === "register"
-          ? await userService.register(normalizedPhone, normalizedPassword, confirmPassword.trim(), agreeTerms, getDeviceInfo())
+          ? await userService.register(normalizedPhone, normalizedSmsCode, normalizedPassword, confirmPassword.trim(), agreeTerms, getDeviceInfo())
           : loginMethod === "sms"
             ? await userService.loginWithSmsCode(normalizedPhone, normalizedSmsCode, getDeviceInfo())
             : await userService.login(normalizedPhone, normalizedPassword, getDeviceInfo());
@@ -1344,6 +1344,17 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
             手机号
             <input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="numeric" autoComplete="tel" style={{ padding: "12px 14px", borderRadius: 11, border: "1px solid rgba(255,255,255,0.09)", background: "#0a1020", color: "#dde4f0", outline: "none", fontSize: 14 }} />
           </label>
+          {mode === "register" && (
+            <label style={{ display: "flex", flexDirection: "column", gap: 7, fontSize: 12, color: "#3a5570", fontWeight: 700 }}>
+              短信验证码
+              <span style={{ display: "grid", gridTemplateColumns: "1fr 118px", gap: 8 }}>
+                <input value={smsCode} onChange={(event) => setSmsCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" style={{ minWidth: 0, padding: "12px 14px", borderRadius: 11, border: "1px solid rgba(255,255,255,0.09)", background: "#0a1020", color: "#dde4f0", outline: "none", fontSize: 14 }} />
+                <button type="button" disabled={smsSending || smsCountdown > 0} onClick={handleSendSmsCode} style={{ borderRadius: 11, border: "1px solid rgba(78,142,247,0.25)", background: smsSending || smsCountdown > 0 ? "rgba(78,142,247,0.08)" : "rgba(78,142,247,0.16)", color: smsSending || smsCountdown > 0 ? "#5a7898" : "#8ab4ff", cursor: smsSending || smsCountdown > 0 ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 800 }}>
+                  {smsSending ? "发送中" : smsCountdown > 0 ? `${smsCountdown}s` : "获取验证码"}
+                </button>
+              </span>
+            </label>
+          )}
           {(mode === "register" || loginMethod === "password") ? (
             <label style={{ display: "flex", flexDirection: "column", gap: 7, fontSize: 12, color: "#3a5570", fontWeight: 700 }}>
               密码

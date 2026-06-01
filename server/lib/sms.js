@@ -5,6 +5,7 @@ import { RuntimeOptions } from "@alicloud/tea-util";
 import { config, isConfiguredValue } from "./config.js";
 
 const SMS_SCENE_LOGIN = "login";
+const SMS_SCENE_REGISTER = "register";
 const SMS_CODE_LENGTH = 6;
 const SMS_CODE_PATTERN = /^\d{6}$/;
 
@@ -32,6 +33,13 @@ const getSmsClient = () => {
 };
 
 export const getSmsLoginScene = () => SMS_SCENE_LOGIN;
+
+export const getSmsRegisterScene = () => SMS_SCENE_REGISTER;
+
+const getTemplateCodeByScene = (scene = SMS_SCENE_LOGIN) =>
+  scene === SMS_SCENE_REGISTER
+    ? config.aliyunSms.registerTemplateCode || config.aliyunSms.templateCode
+    : config.aliyunSms.templateCode;
 
 export const isAliyunSmsConfigured = () =>
   Boolean(
@@ -84,13 +92,13 @@ export const isSmsCodeMatched = ({ phone, code, codeHash, scene = SMS_SCENE_LOGI
   return crypto.timingSafeEqual(expectedBuffer, currentBuffer);
 };
 
-export const sendLoginSmsCode = async ({ phone, code }) => {
+export const sendSmsCode = async ({ phone, code, scene = SMS_SCENE_LOGIN }) => {
   assertAliyunSmsConfigured();
 
   const request = new SendSmsRequest({
     phoneNumbers: phone,
     signName: config.aliyunSms.signName,
-    templateCode: config.aliyunSms.templateCode,
+    templateCode: getTemplateCodeByScene(scene),
     templateParam: JSON.stringify({ code }),
   });
 
@@ -116,3 +124,5 @@ export const sendLoginSmsCode = async ({ phone, code }) => {
     requestId: body.requestId || "",
   };
 };
+
+export const sendLoginSmsCode = ({ phone, code }) => sendSmsCode({ phone, code, scene: SMS_SCENE_LOGIN });

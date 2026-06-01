@@ -22,9 +22,10 @@ import {
   assertAliyunSmsConfigured,
   generateSmsCode,
   getSmsLoginScene,
+  getSmsRegisterScene,
   hashSmsCode,
   isSmsCodeMatched,
-  sendLoginSmsCode,
+  sendSmsCode,
   validateSmsCodeOrThrow,
 } from "../lib/sms.js";
 import { requireUserAuth } from "../middleware/auth.js";
@@ -342,6 +343,7 @@ authRouter.post("/user/login", async (req, res, next) => {
 
 authRouter.post("/user/sms/send", async (req, res, next) => {
   const rawPhone = `${req.body?.phone ?? ""}`;
+  const rawScene = `${req.body?.scene ?? ""}`.trim().toLowerCase();
 
   if (!rawPhone) {
     return fail(res, "请输入手机号", 400);
@@ -352,7 +354,7 @@ authRouter.post("/user/sms/send", async (req, res, next) => {
 
     const phone = validatePhoneOrThrow(rawPhone);
     const ip = getClientIp(req);
-    const scene = getSmsLoginScene();
+    const scene = rawScene === getSmsRegisterScene() ? getSmsRegisterScene() : getSmsLoginScene();
     const now = new Date();
     const cooldownSince = new Date(now.getTime() - config.aliyunSms.sendCooldownSeconds * 1000);
 
@@ -411,7 +413,7 @@ authRouter.post("/user/sms/send", async (req, res, next) => {
     });
 
     try {
-      const sendResult = await sendLoginSmsCode({ phone, code });
+      const sendResult = await sendSmsCode({ phone, code, scene });
       await prisma.smsVerificationCode.update({
         where: { id: record.id },
         data: {
@@ -589,6 +591,7 @@ authRouter.post("/user/sms/login", async (req, res, next) => {
 
 authRouter.post("/user/register", async (req, res, next) => {
   const rawPhone = `${req.body?.phone ?? ""}`;
+  const rawCode = `${req.body?.code ?? ""}`;
   const rawPassword = `${req.body?.password ?? ""}`;
   const rawConfirmPassword = `${req.body?.confirmPassword ?? ""}`;
   const agreeTerms =
@@ -598,12 +601,13 @@ authRouter.post("/user/register", async (req, res, next) => {
     req.body?.agreeTerms === "1";
   const { deviceKey, type, model } = req.body ?? {};
 
-  if (!rawPhone || !rawPassword || !deviceKey) {
+  if (!rawPhone || !rawCode || !rawPassword || !deviceKey) {
     return fail(res, "请输入完整的注册信息", 400);
   }
 
   try {
     const phone = validatePhoneOrThrow(rawPhone);
+    const code = validateSmsCodeOrThrow(rawCode);
     const password = validatePasswordOrThrow(rawPassword);
     const confirmPassword = validatePasswordOrThrow(rawConfirmPassword, "确认密码");
 
@@ -616,6 +620,7 @@ authRouter.post("/user/register", async (req, res, next) => {
     }
 
     const ip = getClientIp(req);
+    const scene = getSmsRegisterScene();
     const rateLimitResult = consumeUserRegisterAttempt({ ip, phone });
 
     if (!rateLimitResult.ok) {
@@ -630,8 +635,62 @@ authRouter.post("/user/register", async (req, res, next) => {
     const passwordHash = await hashPassword(password);
     const deviceInfo = getNormalizedDeviceInfo(req, { type, model });
     const now = new Date();
+    const smsCodeRecord = await prisma.smsVerificationCode.findFirst({
+      where: {
+        phone,
+        scene,
+        sendStatus: "sent",
+        consumedAt: null,
+        expiresAt: {
+          gt: now,
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    if (!smsCodeRecord) {
+      return fail(res, "验证码已失效，请重新获取", 400);
+    }
+
+    if (smsCodeRecord.verifyAttempts >= config.aliyunSms.verifyMaxAttempts) {
+      await prisma.smsVerificationCode.update({
+        where: { id: smsCodeRecord.id },
+        data: {
+          consumedAt: now,
+        },
+      });
+      return fail(res, "验证码错误次数过多，请重新获取", 400);
+    }
+
+    if (!isSmsCodeMatched({ phone, code, codeHash: smsCodeRecord.codeHash, scene })) {
+      await prisma.smsVerificationCode.update({
+        where: { id: smsCodeRecord.id },
+        data: {
+          verifyAttempts: {
+            increment: 1,
+          },
+        },
+      });
+      return fail(res, "验证码错误，请重新输入", 400);
+    }
 
     const createdUser = await prisma.$transaction(async (tx) => {
+      const consumedResult = await tx.smsVerificationCode.updateMany({
+        where: {
+          id: smsCodeRecord.id,
+          consumedAt: null,
+        },
+        data: {
+          consumedAt: now,
+        },
+      });
+
+      if (consumedResult.count !== 1) {
+        throw createHttpError("验证码已失效，请重新获取", 400);
+      }
+
       const user = await tx.user.create({
         data: {
           phone,

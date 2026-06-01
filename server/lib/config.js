@@ -103,6 +103,7 @@ export const config = {
     regionId: optional("ALIYUN_SMS_REGION_ID") || "cn-hangzhou",
     signName: optional("ALIYUN_SMS_SIGN_NAME"),
     templateCode: optional("ALIYUN_SMS_TEMPLATE_CODE"),
+    registerTemplateCode: optional("ALIYUN_SMS_REGISTER_TEMPLATE_CODE"),
     codeExpiresSeconds: optionalPositiveInt("ALIYUN_SMS_CODE_EXPIRES_SECONDS", 5 * 60),
     sendCooldownSeconds: optionalPositiveInt("ALIYUN_SMS_SEND_COOLDOWN_SECONDS", 60),
     sendWindowSeconds: optionalPositiveInt("ALIYUN_SMS_SEND_WINDOW_SECONDS", 10 * 60),
