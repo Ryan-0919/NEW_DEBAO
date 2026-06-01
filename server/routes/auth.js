@@ -178,6 +178,26 @@ const resolveMemberHomeBannerUrls = (portalConfig) => {
       objectKey: item.imageObjectKey ?? "",
       fallbackUrl: item.imageUrl ?? "",
     }),
+    primaryButtonTargetImageUrl: getReadableObjectUrl({
+      objectKey: item.primaryButtonTargetImageObjectKey ?? "",
+      fallbackUrl: item.primaryButtonTargetImageUrl ?? "",
+    }),
+    primaryButtonTarget: item.primaryButtonTargetType === "image"
+      ? getReadableObjectUrl({
+          objectKey: item.primaryButtonTargetImageObjectKey ?? "",
+          fallbackUrl: item.primaryButtonTarget ?? item.primaryButtonTargetImageUrl ?? "",
+        })
+      : item.primaryButtonTarget,
+    secondaryButtonTargetImageUrl: getReadableObjectUrl({
+      objectKey: item.secondaryButtonTargetImageObjectKey ?? "",
+      fallbackUrl: item.secondaryButtonTargetImageUrl ?? "",
+    }),
+    secondaryButtonTarget: item.secondaryButtonTargetType === "image"
+      ? getReadableObjectUrl({
+          objectKey: item.secondaryButtonTargetImageObjectKey ?? "",
+          fallbackUrl: item.secondaryButtonTarget ?? item.secondaryButtonTargetImageUrl ?? "",
+        })
+      : item.secondaryButtonTarget,
   }));
 
   portalConfig.memberHome.sideAds = {
@@ -187,6 +207,16 @@ const resolveMemberHomeBannerUrls = (portalConfig) => {
         objectKey: portalConfig.memberHome.sideAds?.left?.imageObjectKey ?? "",
         fallbackUrl: portalConfig.memberHome.sideAds?.left?.imageUrl ?? "",
       }),
+      targetImageUrl: getReadableObjectUrl({
+        objectKey: portalConfig.memberHome.sideAds?.left?.targetImageObjectKey ?? "",
+        fallbackUrl: portalConfig.memberHome.sideAds?.left?.targetImageUrl ?? "",
+      }),
+      target: portalConfig.memberHome.sideAds?.left?.targetType === "image"
+        ? getReadableObjectUrl({
+            objectKey: portalConfig.memberHome.sideAds?.left?.targetImageObjectKey ?? "",
+            fallbackUrl: portalConfig.memberHome.sideAds?.left?.target ?? portalConfig.memberHome.sideAds?.left?.targetImageUrl ?? "",
+          })
+        : portalConfig.memberHome.sideAds?.left?.target,
     },
     right: {
       ...(portalConfig.memberHome.sideAds?.right ?? {}),
@@ -194,6 +224,16 @@ const resolveMemberHomeBannerUrls = (portalConfig) => {
         objectKey: portalConfig.memberHome.sideAds?.right?.imageObjectKey ?? "",
         fallbackUrl: portalConfig.memberHome.sideAds?.right?.imageUrl ?? "",
       }),
+      targetImageUrl: getReadableObjectUrl({
+        objectKey: portalConfig.memberHome.sideAds?.right?.targetImageObjectKey ?? "",
+        fallbackUrl: portalConfig.memberHome.sideAds?.right?.targetImageUrl ?? "",
+      }),
+      target: portalConfig.memberHome.sideAds?.right?.targetType === "image"
+        ? getReadableObjectUrl({
+            objectKey: portalConfig.memberHome.sideAds?.right?.targetImageObjectKey ?? "",
+            fallbackUrl: portalConfig.memberHome.sideAds?.right?.target ?? portalConfig.memberHome.sideAds?.right?.targetImageUrl ?? "",
+          })
+        : portalConfig.memberHome.sideAds?.right?.target,
     },
   };
 

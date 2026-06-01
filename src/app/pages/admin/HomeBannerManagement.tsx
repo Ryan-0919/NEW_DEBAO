@@ -10,6 +10,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { AdminSystemConfig, PortalConfig, adminOperationsService } from "../../services/adminOperationsService";
 
 type FieldPath = (string | number)[];
+type TargetType = "link" | "image";
 
 type BannerItem = {
   id: string;
@@ -19,9 +20,15 @@ type BannerItem = {
   imageUrl: string;
   imageObjectKey: string;
   primaryButtonText: string;
+  primaryButtonTargetType: TargetType;
   primaryButtonTarget: string;
+  primaryButtonTargetImageUrl: string;
+  primaryButtonTargetImageObjectKey: string;
   secondaryButtonText: string;
+  secondaryButtonTargetType: TargetType;
   secondaryButtonTarget: string;
+  secondaryButtonTargetImageUrl: string;
+  secondaryButtonTargetImageObjectKey: string;
   isVisible: boolean;
   sortOrder: number;
 };
@@ -34,7 +41,10 @@ type SideAdItem = {
   imageUrl: string;
   imageObjectKey: string;
   buttonText: string;
+  targetType: TargetType;
   target: string;
+  targetImageUrl: string;
+  targetImageObjectKey: string;
   isVisible: boolean;
 };
 
@@ -58,7 +68,10 @@ const emptySideAds: Record<SideAdPosition, SideAdItem> = {
     imageUrl: "",
     imageObjectKey: "",
     buttonText: "",
+    targetType: "link",
     target: "",
+    targetImageUrl: "",
+    targetImageObjectKey: "",
     isVisible: false,
   },
   right: {
@@ -67,7 +80,10 @@ const emptySideAds: Record<SideAdPosition, SideAdItem> = {
     imageUrl: "",
     imageObjectKey: "",
     buttonText: "",
+    targetType: "link",
     target: "",
+    targetImageUrl: "",
+    targetImageObjectKey: "",
     isVisible: false,
   },
 };
@@ -96,21 +112,27 @@ const bannerTargetOptions = [
 ];
 const SIDE_AD_EMPTY_TARGET_VALUE = "__none__";
 const CUSTOM_TARGET_VALUE = "__custom__";
+const IMAGE_TARGET_VALUE = "__image__";
 
 const normalizeTarget = (value = "", fallback = "/courses") => {
   const normalized = value.trim();
   return normalized || fallback;
 };
+const normalizeTargetType = (value: unknown): TargetType => (value === "image" ? "image" : "link");
+const normalizeTargetByType = (value = "", fallback = "/courses", targetType: TargetType = "link") =>
+  targetType === "image" ? value.trim() : normalizeTarget(value, fallback);
 
 const isPresetTarget = (value = "") => bannerTargetOptions.some((item) => item.value === value);
-const getTargetLabel = (value = "") => {
+const getTargetLabel = (value = "", targetType: TargetType = "link") => {
+  if (targetType === "image") return value.trim() ? "跳转图片" : "跳转图片（未上传）";
   if (!value.trim()) return "未设置";
   const preset = bannerTargetOptions.find((item) => item.value === value);
   if (preset) return preset.label;
   if (/^https?:\/\//i.test(value) || /^\/\//.test(value) || /^www\./i.test(value)) return "外部链接";
   return "自定义路径";
 };
-const toTargetSelectValue = (value = "", allowEmpty = false) => {
+const toTargetSelectValue = (value = "", allowEmpty = false, targetType: TargetType = "link") => {
+  if (targetType === "image") return IMAGE_TARGET_VALUE;
   if (!value.trim() && allowEmpty) return SIDE_AD_EMPTY_TARGET_VALUE;
   if (isPresetTarget(value)) return value;
   return CUSTOM_TARGET_VALUE;
@@ -147,9 +169,15 @@ const emptyBanner = (sortOrder = 0): BannerItem => ({
   imageUrl: "",
   imageObjectKey: "",
   primaryButtonText: "继续学习",
+  primaryButtonTargetType: "link",
   primaryButtonTarget: "/courses",
+  primaryButtonTargetImageUrl: "",
+  primaryButtonTargetImageObjectKey: "",
   secondaryButtonText: "进入题库",
+  secondaryButtonTargetType: "link",
   secondaryButtonTarget: "/question-bank",
+  secondaryButtonTargetImageUrl: "",
+  secondaryButtonTargetImageObjectKey: "",
   isVisible: true,
   sortOrder,
 });
@@ -162,9 +190,15 @@ const readLegacyBanner = (portalConfig: PortalConfig = {}): BannerItem => ({
   imageUrl: `${getPathValue(portalConfig, ["memberHome", "bannerImageUrl"], "/portal/home-hero-banner.png")}`,
   imageObjectKey: `${getPathValue(portalConfig, ["memberHome", "bannerImageObjectKey"], "")}`,
   primaryButtonText: "继续学习",
+  primaryButtonTargetType: "link",
   primaryButtonTarget: "/courses",
+  primaryButtonTargetImageUrl: "",
+  primaryButtonTargetImageObjectKey: "",
   secondaryButtonText: "进入题库",
+  secondaryButtonTargetType: "link",
   secondaryButtonTarget: "/question-bank",
+  secondaryButtonTargetImageUrl: "",
+  secondaryButtonTargetImageObjectKey: "",
   isVisible: true,
   sortOrder: 0,
 });
@@ -183,9 +217,15 @@ const readBannerItems = (portalConfig: PortalConfig = {}): BannerItem[] => {
       imageUrl: `${item.imageUrl ?? ""}`,
       imageObjectKey: `${item.imageObjectKey ?? ""}`,
       primaryButtonText: `${item.primaryButtonText ?? "继续学习"}`,
-      primaryButtonTarget: normalizeTarget(`${item.primaryButtonTarget ?? "/courses"}`, "/courses"),
+      primaryButtonTargetType: normalizeTargetType(item.primaryButtonTargetType),
+      primaryButtonTarget: normalizeTargetByType(`${item.primaryButtonTarget ?? "/courses"}`, "/courses", normalizeTargetType(item.primaryButtonTargetType)),
+      primaryButtonTargetImageUrl: `${item.primaryButtonTargetImageUrl ?? ""}`,
+      primaryButtonTargetImageObjectKey: `${item.primaryButtonTargetImageObjectKey ?? ""}`,
       secondaryButtonText: `${item.secondaryButtonText ?? "进入题库"}`,
-      secondaryButtonTarget: normalizeTarget(`${item.secondaryButtonTarget ?? "/question-bank"}`, "/question-bank"),
+      secondaryButtonTargetType: normalizeTargetType(item.secondaryButtonTargetType),
+      secondaryButtonTarget: normalizeTargetByType(`${item.secondaryButtonTarget ?? "/question-bank"}`, "/question-bank", normalizeTargetType(item.secondaryButtonTargetType)),
+      secondaryButtonTargetImageUrl: `${item.secondaryButtonTargetImageUrl ?? ""}`,
+      secondaryButtonTargetImageObjectKey: `${item.secondaryButtonTargetImageObjectKey ?? ""}`,
       isVisible: item.isVisible !== false,
       sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : index,
     }))
@@ -201,7 +241,10 @@ const readSideAd = (portalConfig: PortalConfig = {}, position: SideAdPosition): 
     imageUrl: `${raw.imageUrl ?? ""}`,
     imageObjectKey: `${raw.imageObjectKey ?? ""}`,
     buttonText: `${raw.buttonText ?? ""}`,
-    target: normalizeTarget(`${raw.target ?? ""}`, ""),
+    targetType: normalizeTargetType(raw.targetType),
+    target: normalizeTargetByType(`${raw.target ?? ""}`, "", normalizeTargetType(raw.targetType)),
+    targetImageUrl: `${raw.targetImageUrl ?? ""}`,
+    targetImageObjectKey: `${raw.targetImageObjectKey ?? ""}`,
     isVisible: raw.isVisible === true,
   };
 };
@@ -233,7 +276,10 @@ const buildSideAds = (sideAds: Record<SideAdPosition, SideAdItem>) => ({
     imageUrl: sideAds.left.imageUrl.trim(),
     imageObjectKey: sideAds.left.imageObjectKey.trim(),
     buttonText: sideAds.left.buttonText.trim(),
-    target: normalizeTarget(sideAds.left.target.trim(), ""),
+    targetType: sideAds.left.targetType,
+    target: normalizeTargetByType(sideAds.left.target.trim(), "", sideAds.left.targetType),
+    targetImageUrl: sideAds.left.targetImageUrl.trim(),
+    targetImageObjectKey: sideAds.left.targetImageObjectKey.trim(),
   },
   right: {
     ...sideAds.right,
@@ -242,7 +288,10 @@ const buildSideAds = (sideAds: Record<SideAdPosition, SideAdItem>) => ({
     imageUrl: sideAds.right.imageUrl.trim(),
     imageObjectKey: sideAds.right.imageObjectKey.trim(),
     buttonText: sideAds.right.buttonText.trim(),
-    target: normalizeTarget(sideAds.right.target.trim(), ""),
+    targetType: sideAds.right.targetType,
+    target: normalizeTargetByType(sideAds.right.target.trim(), "", sideAds.right.targetType),
+    targetImageUrl: sideAds.right.targetImageUrl.trim(),
+    targetImageObjectKey: sideAds.right.targetImageObjectKey.trim(),
   },
 });
 
@@ -266,9 +315,15 @@ const buildPortalConfig = (portalConfig: PortalConfig, items: BannerItem[], side
     imageUrl: item.imageUrl.trim(),
     imageObjectKey: item.imageObjectKey.trim(),
     primaryButtonText: item.primaryButtonText.trim(),
-    primaryButtonTarget: normalizeTarget(item.primaryButtonTarget, "/courses"),
+    primaryButtonTargetType: item.primaryButtonTargetType,
+    primaryButtonTarget: normalizeTargetByType(item.primaryButtonTargetImageUrl || item.primaryButtonTarget, "/courses", item.primaryButtonTargetType),
+    primaryButtonTargetImageUrl: item.primaryButtonTargetImageUrl.trim(),
+    primaryButtonTargetImageObjectKey: item.primaryButtonTargetImageObjectKey.trim(),
     secondaryButtonText: item.secondaryButtonText.trim(),
-    secondaryButtonTarget: normalizeTarget(item.secondaryButtonTarget, "/question-bank"),
+    secondaryButtonTargetType: item.secondaryButtonTargetType,
+    secondaryButtonTarget: normalizeTargetByType(item.secondaryButtonTargetImageUrl || item.secondaryButtonTarget, "/question-bank", item.secondaryButtonTargetType),
+    secondaryButtonTargetImageUrl: item.secondaryButtonTargetImageUrl.trim(),
+    secondaryButtonTargetImageObjectKey: item.secondaryButtonTargetImageObjectKey.trim(),
     sortOrder: index,
   }));
   const primary = normalizedItems.find((item) => item.isVisible !== false) || normalizedItems[0] || emptyBanner(0);
@@ -287,19 +342,47 @@ const buildPortalConfig = (portalConfig: PortalConfig, items: BannerItem[], side
 
 function TargetField({
   label,
+  targetType = "link",
   value,
+  imageUrl = "",
+  imageObjectKey = "",
   allowEmpty = false,
   emptyLabel = "不跳转",
+  uploading = false,
+  saving = false,
+  onTypeChange,
   onChange,
+  onImageChange,
+  onImageUpload,
 }: {
   label: string;
+  targetType?: TargetType;
   value: string;
+  imageUrl?: string;
+  imageObjectKey?: string;
   allowEmpty?: boolean;
   emptyLabel?: string;
+  uploading?: boolean;
+  saving?: boolean;
+  onTypeChange?: (value: TargetType) => void;
   onChange: (value: string) => void;
+  onImageChange?: (patch: { imageUrl: string; imageObjectKey: string }) => void;
+  onImageUpload?: (event: ChangeEvent<HTMLInputElement>) => void;
 }) {
   const options = allowEmpty ? [{ label: emptyLabel, value: SIDE_AD_EMPTY_TARGET_VALUE }, ...bannerTargetOptions] : bannerTargetOptions;
-  const selectValue = toTargetSelectValue(value, allowEmpty);
+  const selectValue = toTargetSelectValue(value, allowEmpty, targetType);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const displayImageUrl = imageUrl || (targetType === "image" ? value : "");
+  const handleLinkChange = (nextValue: string) => {
+    onTypeChange?.("link");
+    onImageChange?.({ imageUrl: "", imageObjectKey: "" });
+    onChange(nextValue);
+  };
+  const handleImageTarget = (patch: { imageUrl: string; imageObjectKey: string }) => {
+    onTypeChange?.("image");
+    onImageChange?.(patch);
+    onChange(patch.imageUrl);
+  };
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
@@ -307,7 +390,12 @@ function TargetField({
         value={selectValue}
         onValueChange={(nextValue) => {
           if (nextValue === CUSTOM_TARGET_VALUE) return;
-          onChange(fromSideAdSelectValue(nextValue));
+          if (nextValue === IMAGE_TARGET_VALUE) {
+            onTypeChange?.("image");
+            onChange(displayImageUrl);
+            return;
+          }
+          handleLinkChange(fromSideAdSelectValue(nextValue));
         }}
       >
         <SelectTrigger className={selectTriggerClass}>
@@ -322,15 +410,50 @@ function TargetField({
           <SelectItem value={CUSTOM_TARGET_VALUE} className="focus:bg-amber-50 focus:text-amber-800">
             自定义链接
           </SelectItem>
+          <SelectItem value={IMAGE_TARGET_VALUE} className="focus:bg-amber-50 focus:text-amber-800">
+            上传图片并跳转
+          </SelectItem>
         </SelectContent>
       </Select>
-      <Input
-        className={inputClass}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={allowEmpty ? "可留空，或填写 /courses、https://example.com" : "填写 /courses、https://example.com 或 www.example.com"}
-      />
-      <p className="text-xs text-slate-400">当前：{getTargetLabel(value)}。外部链接会在新窗口打开，本站路径会在当前站内跳转。</p>
+      {targetType === "image" ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={onImageUpload} />
+          {displayImageUrl ? (
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <img src={displayImageUrl} alt="跳转图片预览" className="max-h-52 w-full object-contain" />
+            </div>
+          ) : (
+            <div className="grid min-h-28 place-items-center rounded-lg border border-dashed border-slate-300 bg-white px-4 text-center text-xs text-slate-400">
+              上传后，用户点击按钮或广告位会打开这张图片
+            </div>
+          )}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Button type="button" variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={uploading || saving} onClick={() => imageInputRef.current?.click()}>
+              {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+              上传跳转图片
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+              disabled={uploading || saving || !displayImageUrl}
+              onClick={() => handleImageTarget({ imageUrl: "", imageObjectKey: "" })}
+            >
+              <Trash2 className="size-4" />
+              清空跳转图片
+            </Button>
+          </div>
+          {displayImageUrl ? <p className="mt-2 break-all text-xs text-slate-400">{displayImageUrl}</p> : null}
+        </div>
+      ) : (
+        <Input
+          className={inputClass}
+          value={value}
+          onChange={(event) => handleLinkChange(event.target.value)}
+          placeholder={allowEmpty ? "可留空，或填写 /courses、https://example.com" : "填写 /courses、https://example.com 或 www.example.com"}
+        />
+      )}
+      <p className="text-xs text-slate-400">当前：{getTargetLabel(value, targetType)}。外部链接和跳转图片会在新窗口打开，本站路径会在当前站内跳转。</p>
     </div>
   );
 }
@@ -339,18 +462,22 @@ function SideAdEditor({
   position,
   item,
   uploading,
+  uploadingTargetImage,
   saving,
   inputRef,
   onPatch,
   onUpload,
+  onTargetImageUpload,
 }: {
   position: SideAdPosition;
   item: SideAdItem;
   uploading: boolean;
+  uploadingTargetImage: boolean;
   saving: boolean;
   inputRef: (node: HTMLInputElement | null) => void;
   onPatch: (patch: Partial<SideAdItem>) => void;
   onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onTargetImageUpload: (event: ChangeEvent<HTMLInputElement>) => void;
 }) {
   const label = position === "left" ? "左侧广告位" : "右侧广告位";
   const localFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -413,7 +540,20 @@ function SideAdEditor({
               <Input className={inputClass} value={item.buttonText} onChange={(event) => onPatch({ buttonText: event.target.value })} placeholder="例如：立即查看" />
             </div>
             <div className="space-y-2">
-              <TargetField label="跳转链接" value={item.target} allowEmpty onChange={(target) => onPatch({ target })} />
+              <TargetField
+                label="跳转链接"
+                targetType={item.targetType}
+                value={item.target}
+                imageUrl={item.targetImageUrl}
+                imageObjectKey={item.targetImageObjectKey}
+                allowEmpty
+                uploading={uploadingTargetImage}
+                saving={saving}
+                onTypeChange={(targetType) => onPatch({ targetType })}
+                onChange={(target) => onPatch({ target })}
+                onImageChange={({ imageUrl, imageObjectKey }) => onPatch({ targetImageUrl: imageUrl, targetImageObjectKey: imageObjectKey })}
+                onImageUpload={onTargetImageUpload}
+              />
             </div>
           </div>
         </div>
@@ -521,11 +661,12 @@ export function HomeBannerManagement() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingSideAd, setUploadingSideAd] = useState<SideAdPosition | "">("");
+  const [uploadingSideAdTargetImage, setUploadingSideAdTargetImage] = useState<SideAdPosition | "">("");
   const [uploadingJoinGroupQr, setUploadingJoinGroupQr] = useState(false);
 
   const selectedItem = items.find((item) => item.id === selectedId) || items[0] || emptyBanner(0);
   const visibleCount = items.filter((item) => item.isVisible !== false).length;
-  const isBusy = saving || uploading || Boolean(uploadingSideAd) || uploadingJoinGroupQr;
+  const isBusy = saving || uploading || Boolean(uploadingSideAd) || Boolean(uploadingSideAdTargetImage) || uploadingJoinGroupQr;
   const previewStyle = useMemo(
     () => ({
       backgroundImage: selectedItem.imageUrl
@@ -666,6 +807,35 @@ export function HomeBannerManagement() {
       toast.error(error instanceof Error ? error.message : "广告图片上传失败");
     } finally {
       setUploadingSideAd("");
+    }
+  };
+
+  const handleTargetImageUpload = async (
+    event: ChangeEvent<HTMLInputElement>,
+    onUploaded: (uploaded: { url: string; objectKey: string }) => void,
+    options: { sideAdPosition?: SideAdPosition } = {},
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !config) return;
+
+    if (options.sideAdPosition) {
+      setUploadingSideAdTargetImage(options.sideAdPosition);
+    } else {
+      setUploading(true);
+    }
+    try {
+      const uploaded = await adminOperationsService.uploadSystemImage(file);
+      onUploaded({ url: uploaded.url, objectKey: uploaded.objectKey });
+      toast.success("跳转图片已上传，请保存配置");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "跳转图片上传失败");
+    } finally {
+      if (options.sideAdPosition) {
+        setUploadingSideAdTargetImage("");
+      } else {
+        setUploading(false);
+      }
     }
   };
 
@@ -849,13 +1019,47 @@ export function HomeBannerManagement() {
                 <Label>主按钮文字</Label>
                 <Input className={inputClass} value={selectedItem.primaryButtonText} placeholder="例如：继续学习" onChange={(event) => patchSelected({ primaryButtonText: event.target.value })} />
               </div>
-              <TargetField label="主按钮跳转链接" value={selectedItem.primaryButtonTarget} onChange={(primaryButtonTarget) => patchSelected({ primaryButtonTarget })} />
+              <TargetField
+                label="主按钮跳转链接"
+                targetType={selectedItem.primaryButtonTargetType}
+                value={selectedItem.primaryButtonTarget}
+                imageUrl={selectedItem.primaryButtonTargetImageUrl}
+                imageObjectKey={selectedItem.primaryButtonTargetImageObjectKey}
+                uploading={uploading}
+                saving={saving}
+                onTypeChange={(primaryButtonTargetType) => patchSelected({ primaryButtonTargetType })}
+                onChange={(primaryButtonTarget) => patchSelected({ primaryButtonTarget })}
+                onImageChange={({ imageUrl, imageObjectKey }) => patchSelected({ primaryButtonTargetImageUrl: imageUrl, primaryButtonTargetImageObjectKey: imageObjectKey })}
+                onImageUpload={(event) => void handleTargetImageUpload(event, (uploaded) => patchSelected({
+                  primaryButtonTargetType: "image",
+                  primaryButtonTarget: uploaded.url,
+                  primaryButtonTargetImageUrl: uploaded.url,
+                  primaryButtonTargetImageObjectKey: uploaded.objectKey,
+                }))}
+              />
               <div className="border-t border-slate-100 pt-4" />
               <div className="space-y-2">
                 <Label>次按钮文字</Label>
                 <Input className={inputClass} value={selectedItem.secondaryButtonText} placeholder="例如：进入题库" onChange={(event) => patchSelected({ secondaryButtonText: event.target.value })} />
               </div>
-              <TargetField label="次按钮跳转链接" value={selectedItem.secondaryButtonTarget} onChange={(secondaryButtonTarget) => patchSelected({ secondaryButtonTarget })} />
+              <TargetField
+                label="次按钮跳转链接"
+                targetType={selectedItem.secondaryButtonTargetType}
+                value={selectedItem.secondaryButtonTarget}
+                imageUrl={selectedItem.secondaryButtonTargetImageUrl}
+                imageObjectKey={selectedItem.secondaryButtonTargetImageObjectKey}
+                uploading={uploading}
+                saving={saving}
+                onTypeChange={(secondaryButtonTargetType) => patchSelected({ secondaryButtonTargetType })}
+                onChange={(secondaryButtonTarget) => patchSelected({ secondaryButtonTarget })}
+                onImageChange={({ imageUrl, imageObjectKey }) => patchSelected({ secondaryButtonTargetImageUrl: imageUrl, secondaryButtonTargetImageObjectKey: imageObjectKey })}
+                onImageUpload={(event) => void handleTargetImageUpload(event, (uploaded) => patchSelected({
+                  secondaryButtonTargetType: "image",
+                  secondaryButtonTarget: uploaded.url,
+                  secondaryButtonTargetImageUrl: uploaded.url,
+                  secondaryButtonTargetImageObjectKey: uploaded.objectKey,
+                }))}
+              />
             </div>
           </div>
 
@@ -879,12 +1083,23 @@ export function HomeBannerManagement() {
               position={position}
               item={sideAds[position]}
               uploading={uploadingSideAd === position}
+              uploadingTargetImage={uploadingSideAdTargetImage === position}
               saving={isBusy}
               inputRef={(node) => {
                 sideAdFileInputRefs.current[position] = node;
               }}
               onPatch={(patch) => patchSideAd(position, patch)}
               onUpload={(event) => void handleSideAdUpload(position, event)}
+              onTargetImageUpload={(event) => void handleTargetImageUpload(
+                event,
+                (uploaded) => patchSideAd(position, {
+                  targetType: "image",
+                  target: uploaded.url,
+                  targetImageUrl: uploaded.url,
+                  targetImageObjectKey: uploaded.objectKey,
+                }),
+                { sideAdPosition: position },
+              )}
             />
           ))}
         </div>

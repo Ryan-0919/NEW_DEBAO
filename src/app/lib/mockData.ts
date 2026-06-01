@@ -60,9 +60,15 @@ export interface PortalMemberHomeConfig {
     imageUrl: string;
     imageObjectKey: string;
     primaryButtonText?: string;
+    primaryButtonTargetType?: "link" | "image";
     primaryButtonTarget?: string;
+    primaryButtonTargetImageUrl?: string;
+    primaryButtonTargetImageObjectKey?: string;
     secondaryButtonText?: string;
+    secondaryButtonTargetType?: "link" | "image";
     secondaryButtonTarget?: string;
+    secondaryButtonTargetImageUrl?: string;
+    secondaryButtonTargetImageObjectKey?: string;
     isVisible?: boolean;
     sortOrder?: number;
   }>;
@@ -108,7 +114,10 @@ export interface PortalMemberHomeSideAd {
   imageUrl: string;
   imageObjectKey: string;
   buttonText: string;
+  targetType?: "link" | "image";
   target: string;
+  targetImageUrl?: string;
+  targetImageObjectKey?: string;
   isVisible: boolean;
 }
 

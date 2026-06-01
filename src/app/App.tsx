@@ -1444,6 +1444,7 @@ function HomePage({
   const [joinGroupOpen, setJoinGroupOpen] = useState(false);
   const [joinGroupQrLoadFailed, setJoinGroupQrLoadFailed] = useState(false);
   const [closedSideAds, setClosedSideAds] = useState<Record<string, boolean>>({});
+  const bannerTouchRef = useRef<{ startX: number; startY: number } | null>(null);
   const activeCourses = courses;
   const activeHomeCourses = activeCourses.slice(0, 3).map(mapHomeCourse);
   const memberBanners = (homeConfig.memberHome.banners || [])
@@ -1487,9 +1488,13 @@ function HomePage({
     : "完成练习后，这里会根据练习记录提示错题和收藏复习重点。";
   const goQuestionBank = () => { setPage("questionBankHome"); setActiveNav(2); };
   const goSubjective = () => { setPage("subjectiveGrading"); setActiveNav(2); };
-  const openBannerTarget = (target = "") => {
-    const normalizedTarget = target.trim();
+  const openBannerTarget = (target = "", targetType: "link" | "image" = "link", imageUrl = "") => {
+    const normalizedTarget = (targetType === "image" ? imageUrl || target : target).trim();
     if (!normalizedTarget) return;
+    if (targetType === "image") {
+      window.open(normalizedTarget, "_blank", "noopener,noreferrer");
+      return;
+    }
     if (/^(https?:)?\/\//i.test(normalizedTarget) || /^www\./i.test(normalizedTarget)) {
       const url = /^www\./i.test(normalizedTarget) ? `https://${normalizedTarget}` : normalizedTarget;
       window.open(url, "_blank", "noopener,noreferrer");
@@ -1499,13 +1504,17 @@ function HomePage({
     window.history.pushState({ page: pathToPage(nextPath) }, "", nextPath);
     setPage(pathToPage(nextPath));
   };
-  const openSideAdTarget = (target = "") => {
-    if (!target) return;
-    openBannerTarget(target);
+  const openSideAdTarget = (item: UserHomeConfig["memberHome"]["sideAds"]["left"]) => {
+    if (!item) return;
+    openBannerTarget(item.target || "", item.targetType === "image" ? "image" : "link", item.targetImageUrl || "");
   };
   const openJoinGroup = () => {
     setJoinGroupQrLoadFailed(false);
     setJoinGroupOpen(true);
+  };
+  const moveBanner = (direction: -1 | 1) => {
+    if (visibleMemberBanners.length <= 1) return;
+    setBannerIdx((current) => (current + direction + visibleMemberBanners.length) % visibleMemberBanners.length);
   };
   const openModule = (title: string, page?: string) => {
     if (page === "courses") { setPage("courses"); setActiveNav(1); return; }
@@ -1546,7 +1555,7 @@ function HomePage({
             <button
               type="button"
               className={`debao-home-side-ad-card${hasTarget ? "" : " debao-home-side-ad-card-static"}`}
-              onClick={() => openSideAdTarget(item.target)}
+              onClick={() => openSideAdTarget(item)}
               disabled={!hasTarget}
             >
               <img src={item.imageUrl} alt={item.title || "得宝首页广告位"} />
@@ -1569,7 +1578,28 @@ function HomePage({
 
       {/* Banner */}
       <div className="debao-home-hero-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 18, alignItems: "stretch" }}>
-        <div className="debao-home-hero" style={{ position: "relative", borderRadius: 20, overflow: "hidden", minHeight: 330, background: "#101828" }}>
+        <div
+          className="debao-home-hero"
+          onTouchStart={(event) => {
+            if (visibleMemberBanners.length <= 1) return;
+            const touch = event.touches[0];
+            if (!touch) return;
+            bannerTouchRef.current = { startX: touch.clientX, startY: touch.clientY };
+          }}
+          onTouchEnd={(event) => {
+            const touchStart = bannerTouchRef.current;
+            bannerTouchRef.current = null;
+            if (!touchStart || visibleMemberBanners.length <= 1) return;
+            const touch = event.changedTouches[0];
+            if (!touch) return;
+            const deltaX = touch.clientX - touchStart.startX;
+            const deltaY = touch.clientY - touchStart.startY;
+            const isHorizontalSwipe = Math.abs(deltaX) >= 45 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+            if (!isHorizontalSwipe) return;
+            moveBanner(deltaX < 0 ? 1 : -1);
+          }}
+          style={{ position: "relative", borderRadius: 20, overflow: "hidden", minHeight: 330, background: "#101828", touchAction: "pan-y" }}
+        >
           <img key={memberBannerImageUrl} src={memberBannerImageUrl} alt={memberHero.title || "得宝学习首页"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(105deg,rgba(4,8,20,0.95) 0%,rgba(4,8,20,0.8) 45%,rgba(4,8,20,0.15) 100%)" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(4,8,20,0.7) 0%, transparent 40%)" }} />
@@ -1583,10 +1613,10 @@ function HomePage({
             {memberHero?.primaryButtonText || memberHero?.secondaryButtonText ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
                 {memberHero?.primaryButtonText ? (
-                  <button onClick={() => openBannerTarget(memberHero.primaryButtonTarget || "/courses")} style={{ padding: "11px 26px", borderRadius: 11, fontSize: 13, fontWeight: 700, color: "#090e1a", background: "linear-gradient(90deg,#c9973e,#e8c46a)", border: "none", cursor: "pointer", boxShadow: "0 6px 20px rgba(201,151,62,0.4)" }}>{memberHero.primaryButtonText}</button>
+                  <button onClick={() => openBannerTarget(memberHero.primaryButtonTarget || "/courses", memberHero.primaryButtonTargetType === "image" ? "image" : "link", memberHero.primaryButtonTargetImageUrl || "")} style={{ padding: "11px 26px", borderRadius: 11, fontSize: 13, fontWeight: 700, color: "#090e1a", background: "linear-gradient(90deg,#c9973e,#e8c46a)", border: "none", cursor: "pointer", boxShadow: "0 6px 20px rgba(201,151,62,0.4)" }}>{memberHero.primaryButtonText}</button>
                 ) : null}
                 {memberHero?.secondaryButtonText ? (
-                  <button onClick={() => openBannerTarget(memberHero.secondaryButtonTarget || "/question-bank")} style={{ padding: "11px 20px", borderRadius: 11, fontSize: 13, color: "rgba(210,228,255,0.82)", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)", cursor: "pointer" }}>{memberHero.secondaryButtonText}</button>
+                  <button onClick={() => openBannerTarget(memberHero.secondaryButtonTarget || "/question-bank", memberHero.secondaryButtonTargetType === "image" ? "image" : "link", memberHero.secondaryButtonTargetImageUrl || "")} style={{ padding: "11px 20px", borderRadius: 11, fontSize: 13, color: "rgba(210,228,255,0.82)", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)", cursor: "pointer" }}>{memberHero.secondaryButtonText}</button>
                 ) : null}
               </div>
             ) : null}
@@ -1594,7 +1624,7 @@ function HomePage({
           {visibleMemberBanners.length > 1 ? (
             <>
               {([{ dir: -1 as const, Icon: ChevronLeft, pos: { left: 16 } }, { dir: 1 as const, Icon: ChevronRight, pos: { right: 16 } }]).map(({ dir, Icon, pos }) => (
-                <button key={dir} className="debao-home-hero-arrow" onClick={() => setBannerIdx((activeBannerIndex + dir + visibleMemberBanners.length) % visibleMemberBanners.length)} style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", zIndex: 3, width: 38, height: 38, borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff", backdropFilter: "blur(8px)", ...pos }}><Icon size={17} /></button>
+                <button key={dir} className="debao-home-hero-arrow" onClick={() => moveBanner(dir)} style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", zIndex: 3, width: 38, height: 38, borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff", backdropFilter: "blur(8px)", ...pos }}><Icon size={17} /></button>
               ))}
               <div className="debao-home-hero-dots" style={{ position: "absolute", bottom: 20, left: 44, display: "flex", gap: 7, zIndex: 3 }}>
                 {visibleMemberBanners.map((_, i) => (

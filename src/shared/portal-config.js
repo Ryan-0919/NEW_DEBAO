@@ -73,9 +73,25 @@ const normalizeBannerItems = (value, fallbackItems) => {
         imageUrl: toTrimmedString(item.imageUrl, fallback.imageUrl ?? ""),
         imageObjectKey: toTrimmedString(item.imageObjectKey, fallback.imageObjectKey ?? ""),
         primaryButtonText: toOptionalTrimmedString(item.primaryButtonText, fallback.primaryButtonText ?? "继续学习"),
-        primaryButtonTarget: toTrimmedString(item.primaryButtonTarget, fallback.primaryButtonTarget ?? "/courses"),
+        primaryButtonTargetType: (item.primaryButtonTargetType ?? fallback.primaryButtonTargetType) === "image" ? "image" : "link",
+        primaryButtonTarget: (item.primaryButtonTargetType ?? fallback.primaryButtonTargetType) === "image"
+          ? toOptionalTrimmedString(item.primaryButtonTargetImageUrl ?? item.primaryButtonTarget, fallback.primaryButtonTargetImageUrl ?? "")
+          : toTrimmedString(item.primaryButtonTarget, fallback.primaryButtonTarget ?? "/courses"),
+        primaryButtonTargetImageUrl: toOptionalTrimmedString(item.primaryButtonTargetImageUrl, fallback.primaryButtonTargetImageUrl ?? ""),
+        primaryButtonTargetImageObjectKey: toOptionalTrimmedString(
+          item.primaryButtonTargetImageObjectKey,
+          fallback.primaryButtonTargetImageObjectKey ?? "",
+        ),
         secondaryButtonText: toOptionalTrimmedString(item.secondaryButtonText, fallback.secondaryButtonText ?? "进入题库"),
-        secondaryButtonTarget: toTrimmedString(item.secondaryButtonTarget, fallback.secondaryButtonTarget ?? "/question-bank"),
+        secondaryButtonTargetType: (item.secondaryButtonTargetType ?? fallback.secondaryButtonTargetType) === "image" ? "image" : "link",
+        secondaryButtonTarget: (item.secondaryButtonTargetType ?? fallback.secondaryButtonTargetType) === "image"
+          ? toOptionalTrimmedString(item.secondaryButtonTargetImageUrl ?? item.secondaryButtonTarget, fallback.secondaryButtonTargetImageUrl ?? "")
+          : toTrimmedString(item.secondaryButtonTarget, fallback.secondaryButtonTarget ?? "/question-bank"),
+        secondaryButtonTargetImageUrl: toOptionalTrimmedString(item.secondaryButtonTargetImageUrl, fallback.secondaryButtonTargetImageUrl ?? ""),
+        secondaryButtonTargetImageObjectKey: toOptionalTrimmedString(
+          item.secondaryButtonTargetImageObjectKey,
+          fallback.secondaryButtonTargetImageObjectKey ?? "",
+        ),
         isVisible: toBoolean(item.isVisible, fallback.isVisible ?? true),
         sortOrder: toFiniteNumber(item.sortOrder, fallback.sortOrder ?? index),
       };
@@ -91,7 +107,12 @@ const normalizeSideAd = (value, fallback = {}) => {
     imageUrl: toOptionalTrimmedString(source.imageUrl, fallback.imageUrl ?? ""),
     imageObjectKey: toOptionalTrimmedString(source.imageObjectKey, fallback.imageObjectKey ?? ""),
     buttonText: toOptionalTrimmedString(source.buttonText, fallback.buttonText ?? ""),
-    target: toOptionalTrimmedString(source.target, fallback.target ?? ""),
+    targetType: (source.targetType ?? fallback.targetType) === "image" ? "image" : "link",
+    target: (source.targetType ?? fallback.targetType) === "image"
+      ? toOptionalTrimmedString(source.targetImageUrl ?? source.target, fallback.targetImageUrl ?? "")
+      : toOptionalTrimmedString(source.target, fallback.target ?? ""),
+    targetImageUrl: toOptionalTrimmedString(source.targetImageUrl, fallback.targetImageUrl ?? ""),
+    targetImageObjectKey: toOptionalTrimmedString(source.targetImageObjectKey, fallback.targetImageObjectKey ?? ""),
     isVisible: toBoolean(source.isVisible, fallback.isVisible ?? false),
   };
 };
@@ -177,9 +198,15 @@ export const DEFAULT_PORTAL_CONFIG = {
         imageUrl: "/portal/home-hero-banner.png",
         imageObjectKey: "",
         primaryButtonText: "继续学习",
+        primaryButtonTargetType: "link",
         primaryButtonTarget: "/courses",
+        primaryButtonTargetImageUrl: "",
+        primaryButtonTargetImageObjectKey: "",
         secondaryButtonText: "进入题库",
+        secondaryButtonTargetType: "link",
         secondaryButtonTarget: "/question-bank",
+        secondaryButtonTargetImageUrl: "",
+        secondaryButtonTargetImageObjectKey: "",
         isVisible: true,
         sortOrder: 0,
       },
@@ -201,7 +228,10 @@ export const DEFAULT_PORTAL_CONFIG = {
         imageUrl: "",
         imageObjectKey: "",
         buttonText: "",
+        targetType: "link",
         target: "",
+        targetImageUrl: "",
+        targetImageObjectKey: "",
         isVisible: false,
       },
       right: {
@@ -210,7 +240,10 @@ export const DEFAULT_PORTAL_CONFIG = {
         imageUrl: "",
         imageObjectKey: "",
         buttonText: "",
+        targetType: "link",
         target: "",
+        targetImageUrl: "",
+        targetImageObjectKey: "",
         isVisible: false,
       },
     },
@@ -530,6 +563,12 @@ export const normalizePortalConfig = (value, options = {}) => {
       description: toTrimmedString(memberHomeHeroSource.description, fallback.memberHome.hero.description),
       imageUrl: toTrimmedString(memberHomeSource.bannerImageUrl, fallback.memberHome.bannerImageUrl),
       imageObjectKey: toTrimmedString(memberHomeSource.bannerImageObjectKey, fallback.memberHome.bannerImageObjectKey),
+      primaryButtonTargetType: "link",
+      primaryButtonTargetImageUrl: "",
+      primaryButtonTargetImageObjectKey: "",
+      secondaryButtonTargetType: "link",
+      secondaryButtonTargetImageUrl: "",
+      secondaryButtonTargetImageObjectKey: "",
       isVisible: true,
       sortOrder: 0,
     },
