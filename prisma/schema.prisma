@@ -440,6 +440,7 @@ model SystemConfig {
   playerDiscImageUrl String?  @db.VarChar(500)
   customerServiceUrl String?  @db.VarChar(500)
   portalConfigJson   String?  @db.LongText
+  smsConfigJson      String?  @db.LongText
   mockExamAiReviewConfigJson String? @db.LongText
   mockExamLaunchConfigJson String? @db.LongText
   typingPracticeDifficultyConfigJson String? @db.LongText

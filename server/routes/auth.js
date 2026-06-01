@@ -28,6 +28,7 @@ import {
   sendSmsCode,
   validateSmsCodeOrThrow,
 } from "../lib/sms.js";
+import { readSmsConfigFromSystemConfig } from "../lib/sms-config.js";
 import { requireUserAuth } from "../middleware/auth.js";
 import { getReadableObjectUrl, uploadBuffer } from "../lib/upload.js";
 import { cleanupObjectIfUnused } from "../lib/assets.js";
@@ -350,7 +351,12 @@ authRouter.post("/user/sms/send", async (req, res, next) => {
   }
 
   try {
-    assertAliyunSmsConfigured();
+    const systemConfig = await prisma.systemConfig.findUnique({
+      where: { id: 1 },
+      select: { smsConfigJson: true },
+    });
+    const smsConfig = readSmsConfigFromSystemConfig(systemConfig);
+    assertAliyunSmsConfigured(smsConfig);
 
     const phone = validatePhoneOrThrow(rawPhone);
     const ip = getClientIp(req);
@@ -413,7 +419,7 @@ authRouter.post("/user/sms/send", async (req, res, next) => {
     });
 
     try {
-      const sendResult = await sendSmsCode({ phone, code, scene });
+      const sendResult = await sendSmsCode({ phone, code, scene, smsConfig });
       await prisma.smsVerificationCode.update({
         where: { id: record.id },
         data: {

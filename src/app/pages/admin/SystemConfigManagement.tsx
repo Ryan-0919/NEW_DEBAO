@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ImagePlus, Loader2, RefreshCw, Save, Send, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, MessageSquareText, RefreshCw, Save, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -122,6 +122,7 @@ export function SystemConfigManagement() {
             brandLogoObjectKey: config.brandLogoObjectKey,
             playerDiscImageUrl: config.playerDiscImageUrl,
             playerDiscImageObjectKey: config.playerDiscImageObjectKey,
+            smsConfig: config.smsConfig,
             portalConfig,
           }
         : null,
@@ -147,6 +148,20 @@ export function SystemConfigManagement() {
 
   const patchConfig = (patch: Partial<AdminSystemConfig>) => {
     setConfig((current) => (current ? { ...current, ...patch } : current));
+  };
+
+  const patchSmsConfig = (patch: Partial<AdminSystemConfig["smsConfig"]>) => {
+    setConfig((current) =>
+      current
+        ? {
+            ...current,
+            smsConfig: {
+              ...current.smsConfig,
+              ...patch,
+            },
+          }
+        : current,
+    );
   };
 
   const updatePortalPath = (path: FieldPath, value: string) => {
@@ -230,6 +245,7 @@ export function SystemConfigManagement() {
           <TabsTrigger value="portal">门户文案</TabsTrigger>
           <TabsTrigger value="member">会员首页</TabsTrigger>
           <TabsTrigger value="exam">考试倒计时</TabsTrigger>
+          <TabsTrigger value="sms">短信模板</TabsTrigger>
           <TabsTrigger value="images">图片资源</TabsTrigger>
           <TabsTrigger value="legal">协议页脚</TabsTrigger>
         </TabsList>
@@ -333,6 +349,60 @@ export function SystemConfigManagement() {
                   onChange={(event) => updatePortalPath(["examCountdown", "subjective", "targetDate"], event.target.value)}
                 />
               </div>
+            </div>
+          </section>
+        </TabsContent>
+
+        <TabsContent value="sms" className="space-y-5">
+          <section className="rounded-lg border border-blue-100 bg-blue-50 p-5">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-white text-blue-700">
+                <MessageSquareText className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-slate-950">阿里云短信模板配置</div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  这里只配置短信签名和模板 Code，短信 AccessKey 仍然放在服务器环境变量里。注册模板 Code 不填时会自动复用登录验证码模板。
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 lg:grid-cols-2">
+            <div className="lg:col-span-2 flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <div>
+                <Label>启用短信验证码</Label>
+                <p className="mt-1 text-xs leading-5 text-slate-500">关闭后，登录和注册的短信验证码发送接口会直接拒绝请求。</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => patchSmsConfig({ enabled: !config.smsConfig.enabled })}
+                className={`h-7 w-12 rounded-full p-1 transition ${config.smsConfig.enabled ? "bg-blue-600" : "bg-slate-300"}`}
+                aria-label="启用短信验证码"
+              >
+                <span className={`block size-5 rounded-full bg-white transition ${config.smsConfig.enabled ? "translate-x-5" : "translate-x-0"}`} />
+              </button>
+            </div>
+            <TextField
+              label="短信签名"
+              value={config.smsConfig.signName}
+              onChange={(value) => patchSmsConfig({ signName: value })}
+              placeholder={config.smsConfig.hasEnvSignName ? "留空则使用服务器环境变量" : "例如：北京得恩麒麟文化传媒"}
+            />
+            <TextField
+              label="登录验证码模板 Code"
+              value={config.smsConfig.loginTemplateCode}
+              onChange={(value) => patchSmsConfig({ loginTemplateCode: value })}
+              placeholder={config.smsConfig.hasEnvLoginTemplateCode ? "留空则使用服务器环境变量" : "例如：SMS_507380087"}
+            />
+            <TextField
+              label="注册验证码模板 Code"
+              value={config.smsConfig.registerTemplateCode}
+              onChange={(value) => patchSmsConfig({ registerTemplateCode: value })}
+              placeholder={config.smsConfig.hasEnvRegisterTemplateCode ? "留空则使用服务器环境变量" : "不填则复用登录模板"}
+            />
+            <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-xs leading-6 text-amber-800">
+              阿里云模板变量必须包含 <code className="rounded bg-white px-1 py-0.5">code</code>。示例：您的验证码为：${"{code}"}，该验证码5分钟内有效，请勿泄露给他人。
             </div>
           </section>
         </TabsContent>

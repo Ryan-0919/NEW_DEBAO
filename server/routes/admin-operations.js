@@ -13,6 +13,7 @@ import { sanitizeAuditDetailText, writeAdminAuditLog } from "../lib/admin-audit.
 import { cleanupObjectIfReplaced } from "../lib/assets.js";
 import { getReadableObjectUrl, uploadBuffer } from "../lib/upload.js";
 import { getMockExamAiReviewConfigForAdmin, saveMockExamAiReviewConfig } from "../lib/mock-exam-ai-review-config.js";
+import { readSmsConfigForAdmin, normalizeSmsConfig } from "../lib/sms-config.js";
 import { normalizeCourseQuestionBankLinks, normalizePortalConfig } from "../../src/shared/portal-config.js";
 
 const ALL_ADMIN_ROLES = ["super_admin", "operations_admin", "user_admin", "review_admin"];
@@ -211,6 +212,7 @@ const serializeSystemConfig = (config) => {
     brandLogoObjectKey: config?.brandLogoObjectKey ?? "",
     playerDiscImageUrl,
     playerDiscImageObjectKey: config?.playerDiscImageObjectKey ?? "",
+    smsConfig: readSmsConfigForAdmin(config),
     portalConfig,
     createdAt: config?.createdAt ? formatDateTime(config.createdAt) : "",
     updatedAt: config?.updatedAt ? formatDateTime(config.updatedAt) : "",
@@ -257,6 +259,9 @@ const readSystemConfigPayload = (body = {}, currentConfig = null) => {
   if (body.playerDiscImageUrl !== undefined) data.playerDiscImageUrl = `${body.playerDiscImageUrl ?? ""}`.trim() || null;
   if (body.playerDiscImageObjectKey !== undefined) {
     data.playerDiscImageObjectKey = `${body.playerDiscImageObjectKey ?? ""}`.trim() || null;
+  }
+  if (body.smsConfig !== undefined) {
+    data.smsConfigJson = JSON.stringify(normalizeSmsConfig(body.smsConfig));
   }
 
   if (body.portalConfig !== undefined) {

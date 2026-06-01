@@ -36,10 +36,12 @@ export const getSmsLoginScene = () => SMS_SCENE_LOGIN;
 
 export const getSmsRegisterScene = () => SMS_SCENE_REGISTER;
 
-const getTemplateCodeByScene = (scene = SMS_SCENE_LOGIN) =>
+const getTemplateCodeByScene = (scene = SMS_SCENE_LOGIN, smsConfig = {}) =>
   scene === SMS_SCENE_REGISTER
-    ? config.aliyunSms.registerTemplateCode || config.aliyunSms.templateCode
-    : config.aliyunSms.templateCode;
+    ? smsConfig.registerTemplateCode || config.aliyunSms.registerTemplateCode || smsConfig.loginTemplateCode || config.aliyunSms.templateCode
+    : smsConfig.loginTemplateCode || config.aliyunSms.templateCode;
+
+const getSignName = (smsConfig = {}) => smsConfig.signName || config.aliyunSms.signName;
 
 export const isAliyunSmsConfigured = () =>
   Boolean(
@@ -50,12 +52,17 @@ export const isAliyunSmsConfigured = () =>
       isConfiguredValue(config.aliyunSms.templateCode),
   );
 
-export const assertAliyunSmsConfigured = () => {
-  if (!config.aliyunSms.enabled) {
+export const assertAliyunSmsConfigured = (smsConfig = {}) => {
+  if (smsConfig.enabled === false || !config.aliyunSms.enabled) {
     throw new Error("短信验证码登录暂未启用");
   }
 
-  if (!isAliyunSmsConfigured()) {
+  if (
+    !isConfiguredValue(config.aliyunSms.accessKeyId) ||
+    !isConfiguredValue(config.aliyunSms.accessKeySecret) ||
+    !isConfiguredValue(getSignName(smsConfig)) ||
+    !isConfiguredValue(getTemplateCodeByScene(SMS_SCENE_LOGIN, smsConfig))
+  ) {
     throw new Error("短信服务未配置完整，请联系管理员处理");
   }
 };
@@ -92,13 +99,13 @@ export const isSmsCodeMatched = ({ phone, code, codeHash, scene = SMS_SCENE_LOGI
   return crypto.timingSafeEqual(expectedBuffer, currentBuffer);
 };
 
-export const sendSmsCode = async ({ phone, code, scene = SMS_SCENE_LOGIN }) => {
-  assertAliyunSmsConfigured();
+export const sendSmsCode = async ({ phone, code, scene = SMS_SCENE_LOGIN, smsConfig = {} }) => {
+  assertAliyunSmsConfigured(smsConfig);
 
   const request = new SendSmsRequest({
     phoneNumbers: phone,
-    signName: config.aliyunSms.signName,
-    templateCode: getTemplateCodeByScene(scene),
+    signName: getSignName(smsConfig),
+    templateCode: getTemplateCodeByScene(scene, smsConfig),
     templateParam: JSON.stringify({ code }),
   });
 
@@ -125,4 +132,4 @@ export const sendSmsCode = async ({ phone, code, scene = SMS_SCENE_LOGIN }) => {
   };
 };
 
-export const sendLoginSmsCode = ({ phone, code }) => sendSmsCode({ phone, code, scene: SMS_SCENE_LOGIN });
+export const sendLoginSmsCode = ({ phone, code, smsConfig = {} }) => sendSmsCode({ phone, code, scene: SMS_SCENE_LOGIN, smsConfig });

@@ -108,6 +108,15 @@ export type AdminSystemConfig = {
   brandLogoObjectKey: string;
   playerDiscImageUrl: string;
   playerDiscImageObjectKey: string;
+  smsConfig: {
+    enabled: boolean;
+    signName: string;
+    loginTemplateCode: string;
+    registerTemplateCode: string;
+    hasEnvSignName?: boolean;
+    hasEnvLoginTemplateCode?: boolean;
+    hasEnvRegisterTemplateCode?: boolean;
+  };
   portalConfig: PortalConfig;
   createdAt: string;
   updatedAt: string;
