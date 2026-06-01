@@ -44,20 +44,20 @@ const lawStyles = `
 .debao-law-fullscreen img{display:block;width:12px;height:12px}
 .debao-law-close{float:right;margin-top:9px;height:22px;border:1px solid #dfdfdf;border-radius:4px;background:#fafafa;color:#41485d;font-size:12px;line-height:20px;cursor:pointer}
 .debao-law-body{display:flex;position:relative;height:calc(100% - 40px);border-top:1px solid #dfdfdf}
-.debao-law-left{flex-shrink:0;height:100%;border-right:1px solid #dfdfdf;overflow:hidden;background:#fff}
+.debao-law-left{flex-shrink:0;display:flex;flex-direction:column;height:100%;min-width:0;border-right:1px solid #dfdfdf;overflow:hidden;background:#fff}
 .debao-law-left-collapsed{position:absolute;left:0;top:0;bottom:0;width:12px;border-right:1px solid #d7dbe5;background:linear-gradient(180deg,#f8f8f8 0%,#f1f1f1 100%);cursor:col-resize;z-index:3}
 .debao-law-nav{height:33px;width:100%;display:flex;align-items:center;justify-content:space-between;padding:0 13px;font-size:14px;line-height:33px;background:#fafafa;border-bottom:1px solid #dfdfdf}
 .debao-law-nav div{color:#333;font-family:"Songti SC","STSong",serif}
 .debao-law-nav-button{flex-shrink:0;padding:11px;margin:-11px;border:0;background:transparent;cursor:pointer;color:#666f83}
 .debao-law-inline-icon{display:block;width:16px;height:16px;color:#666f83;fill:currentColor}
-.debao-law-searchbar{flex-shrink:0;display:flex;align-items:center;height:44px}
+.debao-law-searchbar{position:relative;z-index:5;flex-shrink:0;display:flex;align-items:center;height:44px;background:#fff;border-bottom:1px solid #f0f0f0}
 .debao-law-searchbox{display:flex;align-items:center;height:32px;margin:0 13px}
 .debao-law-searchbox input{width:177px;height:30px;background:#fafafa;border:1px solid #dfdfdf;border-radius:4px;padding:0 10px;outline:none;font-family:"Songti SC","STSong",serif;color:#404040}
 .debao-law-searchbox input::placeholder{color:#aaa}
 .debao-law-search-button{margin-left:16px;width:16px;height:16px;border:0;background:transparent;cursor:pointer;padding:0;color:#666f83}
 .debao-law-search-right{margin-left:3px;display:flex;align-items:center;justify-content:space-between;padding-right:10px;width:60px;height:100%}
 .debao-law-search-nav{display:flex;align-items:center;justify-content:center;width:20px;height:30px;border:1px solid #dfdfdf;border-radius:4px;background:#fff;cursor:pointer}
-.debao-law-list-area{height:calc(100% - 77px);overflow:auto;padding:5px;font-family:"Songti SC","STSong",serif}
+.debao-law-list-area{flex:1;min-height:0;height:auto;overflow:auto;padding:5px;font-family:"Songti SC","STSong",serif}
 .debao-law-list-area::-webkit-scrollbar-thumb,.debao-law-right::-webkit-scrollbar-thumb{background:#cdcdcd!important;border-radius:2px}
 .debao-law-list-area::-webkit-scrollbar{width:12px}
 .debao-law-right::-webkit-scrollbar{width:18px}
@@ -81,7 +81,7 @@ const lawStyles = `
 .debao-law-selected-file{margin-left:-1px;padding:0 4px 0 0;background:#f2d493!important;z-index:3}
 .debao-law-movebar{flex-shrink:0;margin:0;width:12px;height:100%;cursor:col-resize;position:relative;z-index:2;background:linear-gradient(90deg,transparent 0,transparent 5px,#d7dbe5 5px,#d7dbe5 7px,transparent 7px,transparent 100%)}
 .debao-law-movebar:hover{background:linear-gradient(90deg,transparent 0,transparent 4px,#9fb3d9 4px,#9fb3d9 8px,transparent 8px,transparent 100%)}
-.debao-law-right{width:100%;height:100%;line-height:22px;white-space:pre-wrap;user-select:text;overflow-y:auto;background:#fff;color:#404040}
+.debao-law-right{flex:1;min-width:0;width:auto;height:100%;line-height:22px;white-space:pre-wrap;user-select:text;overflow-y:auto;background:#fff;color:#404040}
 .debao-law-section{padding:20px 25px;font-family:"Songti SC","STSong",serif;line-height:28px;font-size:14px;color:#404040}
 .debao-law-section h4{text-align:center;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-weight:800}
 .debao-law-placeholder{padding:0!important;display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:#fff;font-size:46px;font-family:"Songti SC","STSong",serif;font-weight:700;text-align:left;color:#454545;line-height:46px}
@@ -222,6 +222,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [internalFullscreen, setInternalFullscreen] = useState(false);
   const dragRef = useRef<{ x: number; width: number } | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const treeRef = useRef<HTMLDivElement | null>(null);
   const rightRef = useRef<HTMLDivElement | null>(null);
   const matchIndexRef = useRef(0);
@@ -399,10 +400,12 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
   const findMatches = (rawKeyword: string) => {
     const query = rawKeyword.trim();
     setKeyword(query);
+    setLeftCollapsed(false);
     if (!query) {
       setMatches([]);
       matchIndexRef.current = 0;
       setMatchIndex(0);
+      requestAnimationFrame(() => searchInputRef.current?.focus());
       return;
     }
 
@@ -446,8 +449,11 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
         setContentNodeId(first.id);
         requestAnimationFrame(() => {
           treeRef.current?.querySelector(`[data-law-node-id="${CSS.escape(first.id)}"]`)?.scrollIntoView({ block: "nearest" });
+          searchInputRef.current?.focus();
         });
       }
+    } else {
+      requestAnimationFrame(() => searchInputRef.current?.focus());
     }
   };
 
@@ -527,6 +533,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
                   <div className="debao-law-searchbar">
                     <div className="debao-law-searchbox">
                       <input
+                        ref={searchInputRef}
                         type="text"
                         value={keyword}
                         onChange={(event) => setKeyword(event.target.value)}
