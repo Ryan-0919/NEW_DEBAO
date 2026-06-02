@@ -1047,13 +1047,37 @@ adminMockExamReviewRouter.post("/records/:recordId/ai-review", async (req, res) 
     await prisma.$transaction(async (tx) => {
       const record = await getAdminReviewRecord(tx, recordId);
       assertReviewableRecord(record);
-      await ensurePublishedReviewSnapshot({ tx, record });
 
       const lock = getLockInfo(record, req, currentTime);
       if (lock.active && !lock.ownedByMe) {
         const error = new Error(`该记录已被 ${record.manualReviewerName || "其他老师"} 领取，不能重新批改`);
         error.statusCode = 409;
         throw error;
+      }
+
+      // AI重批时清空已发布的批改快照，避免显示旧数据
+      const subjectiveQuestionIds = new Set(
+        (getRecordPaper(record)?.questions ?? [])
+          .filter(isSubjectiveQuestion)
+          .map((question) => question.id)
+      );
+
+      const subjectiveAnswers = (record.answers ?? []).filter((answer) =>
+        subjectiveQuestionIds.has(answer.questionId)
+      );
+
+      if (subjectiveAnswers.length > 0) {
+        await Promise.all(
+          subjectiveAnswers.map((answer) =>
+            tx.mockExamAnswer.update({
+              where: { id: answer.id },
+              data: {
+                publishedReviewJson: null,
+                publishedScore: null,
+              },
+            })
+          )
+        );
       }
 
       return record.id;
@@ -1098,13 +1122,37 @@ adminMockExamReviewRouter.post("/records/batch-ai-review", async (req, res) => {
       await prisma.$transaction(async (tx) => {
         const record = await getAdminReviewRecord(tx, recordId);
         assertReviewableRecord(record);
-        await ensurePublishedReviewSnapshot({ tx, record });
 
         const lock = getLockInfo(record, req, currentTime);
         if (lock.active && !lock.ownedByMe) {
           const error = new Error(`该记录已被 ${record.manualReviewerName || "其他老师"} 领取，不能重新批改`);
           error.statusCode = 409;
           throw error;
+        }
+
+        // AI重批时清空已发布的批改快照，避免显示旧数据
+        const subjectiveQuestionIds = new Set(
+          (getRecordPaper(record)?.questions ?? [])
+            .filter(isSubjectiveQuestion)
+            .map((question) => question.id)
+        );
+
+        const subjectiveAnswers = (record.answers ?? []).filter((answer) =>
+          subjectiveQuestionIds.has(answer.questionId)
+        );
+
+        if (subjectiveAnswers.length > 0) {
+          await Promise.all(
+            subjectiveAnswers.map((answer) =>
+              tx.mockExamAnswer.update({
+                where: { id: answer.id },
+                data: {
+                  publishedReviewJson: null,
+                  publishedScore: null,
+                },
+              })
+            )
+          );
         }
 
         return record.id;
