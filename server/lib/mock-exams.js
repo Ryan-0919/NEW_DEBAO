@@ -1318,6 +1318,10 @@ const normalizeReturnedAiSubQuestion = ({ item, fallback, index, runtimeConfig }
     answerMarks,
     rubricPoints,
   });
+  const positiveAnswerMarkScore = (Array.isArray(syncedAnswerMarks) ? syncedAnswerMarks : [])
+    .filter((mark) => mark.status === "score" || mark.status === "correct")
+    .reduce((sum, mark) => sum + Math.max(0, Number(mark.score ?? 0) || 0), 0);
+  const visibleScore = clampScore(positiveAnswerMarkScore, 0, maxScore);
   if (strictValidation) {
     assertPositiveAnswerMarksMatchScore({
       answerMarks: syncedAnswerMarks,
@@ -1330,7 +1334,7 @@ const normalizeReturnedAiSubQuestion = ({ item, fallback, index, runtimeConfig }
     id: fallback.id,
     title: fallback.title,
     answer: fallback.answer,
-    score: normalizedScore,
+    score: visibleScore,
     maxScore,
     reviewComment: normalizeReviewCommentText(item?.reviewComment ?? item?.review_comment ?? item?.comment ?? "") || buildSubjectiveReviewComment({
       answerText: fallback.answer,

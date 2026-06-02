@@ -91,6 +91,37 @@ const sumPositiveAnswerMarkScores = (marks = []) =>
     0,
   );
 
+const getReviewItemMarkScore = (reviewItem, maxScore = 0) => {
+  const answerMarks = normalizeAnswerMarks(reviewItem?.answerMarks);
+  return clampScore(sumPositiveAnswerMarkScores(answerMarks), 0, Math.max(0, Number(maxScore ?? reviewItem?.maxScore ?? 0) || 0));
+};
+
+const getAnswerReviewMarkScore = ({ answer, question }) => {
+  const reviewJson = parseJsonSafely(answer?.reviewJson, null);
+  if (!reviewJson || !Array.isArray(reviewJson.subQuestions)) {
+    return Number(answer?.score ?? 0) || 0;
+  }
+
+  const questionMeta = getQuestionMeta(question);
+  return questionMeta.subQuestions.reduce((sum, subQuestion) => {
+    const reviewItem = reviewJson.subQuestions.find((item) => `${item?.id ?? ""}` === subQuestion.id);
+    const maxScore = getSubjectiveMaxScore(question, subQuestion, questionMeta.subQuestions.length);
+    return sum + getReviewItemMarkScore(reviewItem, maxScore);
+  }, 0);
+};
+
+const getRecordReviewMarkScore = (record) => {
+  const paper = getRecordPaper(record);
+  const answerMap = new Map((record?.answers ?? []).map((answer) => [answer.questionId, answer]));
+  return (paper?.questions ?? []).reduce((sum, question) => {
+    const answer = answerMap.get(question.id);
+    if (isSubjectiveQuestion(question)) {
+      return sum + getAnswerReviewMarkScore({ answer, question });
+    }
+    return sum + (Number(answer?.score ?? 0) || 0);
+  }, 0);
+};
+
 const normalizeReviewCommentText = (value = "") =>
   normalizeText(value)
     .replace(/(?:本问|本小问|这一问|这问)?\s*(?:得分|得了|拿到|拿了|取得|获得)\s*[：:为是]?\s*\d+(?:\.\d+)?\s*分[，,。；;、]?\s*/gu, "")
@@ -269,6 +300,7 @@ const serializeRecordListItem = (record, req, currentTime = new Date()) => {
   const reviewedSubjectiveCount = subjectiveQuestions.filter((question) => Boolean(answerMap.get(question.id)?.reviewJson)).length;
   const publishedSubjectiveCount = subjectiveQuestions.filter((question) => Boolean(answerMap.get(question.id)?.publishedReviewJson)).length;
   const lock = getLockInfo(record, req, currentTime);
+  const reviewMarkScore = getRecordReviewMarkScore(record);
 
   return {
     id: record.id,
@@ -278,7 +310,7 @@ const serializeRecordListItem = (record, req, currentTime = new Date()) => {
     attemptNo: record.attemptNo,
     status: record.status,
     reviewWorkflowStatus: record.reviewWorkflowStatus,
-    totalScore: record.totalScore,
+    totalScore: reviewMarkScore,
     answeredCount: record.answeredCount,
     questionCount: record.questionCount || questions.length,
     subjectiveQuestionCount: subjectiveQuestions.length,
