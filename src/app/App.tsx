@@ -52,6 +52,34 @@ import { AppLogo } from "./components/branding/AppLogo";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 const buildApiUrl = (path = "") => (path && API_BASE_URL && path.startsWith("/") ? `${API_BASE_URL}${path}` : path);
+const IMAGE_TARGET_PREVIEW_PATH = "/image-preview";
+
+const isSafePreviewImageUrl = (value = "") => {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return true;
+  try {
+    const url = new URL(trimmed, typeof window === "undefined" ? "https://denlaw.cn" : window.location.origin);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const buildImageTargetPreviewUrl = (imageUrl = "") => {
+  const src = imageUrl.trim();
+  if (!src) return "";
+  if (typeof window === "undefined") return `${IMAGE_TARGET_PREVIEW_PATH}?src=${encodeURIComponent(src)}`;
+  const previewUrl = new URL(IMAGE_TARGET_PREVIEW_PATH, window.location.origin);
+  previewUrl.searchParams.set("src", src);
+  return previewUrl.toString();
+};
+
+const getImageTargetPreviewSource = () => {
+  if (typeof window === "undefined") return "";
+  const src = new URLSearchParams(window.location.search).get("src")?.trim() || "";
+  return isSafePreviewImageUrl(src) ? src : "";
+};
 
 /* ══════════════════════ SHARED DATA ══════════════════════ */
 
@@ -1511,7 +1539,7 @@ function HomePage({
     const normalizedTarget = (targetType === "image" ? imageUrl || target : target).trim();
     if (!normalizedTarget) return;
     if (targetType === "image") {
-      window.open(normalizedTarget, "_blank", "noopener,noreferrer");
+      window.open(buildImageTargetPreviewUrl(normalizedTarget), "_blank", "noopener,noreferrer");
       return;
     }
     if (/^(https?:)?\/\//i.test(normalizedTarget) || /^www\./i.test(normalizedTarget)) {
@@ -8574,6 +8602,43 @@ function CourseRouteState({ loading, routeCourseId, accessState, setPage }: { lo
   );
 }
 
+function ImageTargetPreviewPage() {
+  const imageUrl = getImageTargetPreviewSource();
+
+  return (
+    <div className="debao-image-preview-page" style={{ minHeight: "100vh", background: "#0b1020", color: "#dde4f0", fontFamily: "'Noto Sans SC',sans-serif", display: "flex", flexDirection: "column" }}>
+      <header style={{ height: 64, padding: "0 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, background: "rgba(11,16,32,0.92)", backdropFilter: "blur(12px)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+          <AppLogo compact />
+          <span style={{ fontSize: 14, color: "#8fa3be", whiteSpace: "nowrap" }}>图片预览</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => window.close()}
+          style={{ height: 36, padding: "0 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.06)", color: "#dde4f0", display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}
+        >
+          <X size={15} />
+          关闭
+        </button>
+      </header>
+      <main style={{ flex: 1, minHeight: 0, padding: 24, display: "grid", placeItems: "center" }}>
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt="跳转图片"
+            style={{ maxWidth: "100%", maxHeight: "calc(100vh - 112px)", objectFit: "contain", borderRadius: 12, boxShadow: "0 24px 70px rgba(0,0,0,0.38)", background: "#fff" }}
+          />
+        ) : (
+          <div style={{ maxWidth: 460, textAlign: "center", padding: "42px 28px", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)" }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#f0e6d0", marginBottom: 8 }}>图片地址无效</div>
+            <div style={{ fontSize: 13, lineHeight: 1.8, color: "#8fa3be" }}>请回到后台 Banner 管理，重新上传跳转图片后保存配置。</div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
 function DebaoAppShell() {
   const [locationPath, setLocationPath] = useState(() => (typeof window !== "undefined" ? window.location.pathname : "/"));
   const initialPage = pathToPage(locationPath);
@@ -9014,6 +9079,7 @@ export default function App() {
   }
   if (pathname.startsWith("/adminpg")) return <ReviewRouter />;
   if (pathname.startsWith("/admin")) return <AdminRouter />;
+  if (pathname.startsWith(IMAGE_TARGET_PREVIEW_PATH)) return <ImageTargetPreviewPage />;
   if (pathname.startsWith("/user/typing-practice")) return <DebaoAppShell />;
   return isLegacyMockExamPath(pathname) ? <LegacyMockExamRouter /> : <DebaoAppShell />;
 }

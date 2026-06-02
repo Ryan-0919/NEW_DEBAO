@@ -113,6 +113,9 @@ const bannerTargetOptions = [
 const SIDE_AD_EMPTY_TARGET_VALUE = "__none__";
 const CUSTOM_TARGET_VALUE = "__custom__";
 const IMAGE_TARGET_VALUE = "__image__";
+const BANNER_IMAGE_HINT = "建议上传 1920 x 520 px 横图；PC 首页约按 1340 x 330 px 展示，手机端会自动裁切，主体内容尽量放在中间安全区。";
+const SIDE_AD_IMAGE_HINT = "前端固定 140 px 宽，按 7:11 比例裁切展示；建议上传 280 x 440 px 竖图。";
+const TARGET_IMAGE_HINT = "跳转图片会在新窗口打开图片预览页，不会直接下载；建议宽度 1080-1600 px，长图可用竖版。";
 
 const normalizeTarget = (value = "", fallback = "/courses") => {
   const normalized = value.trim();
@@ -417,6 +420,7 @@ function TargetField({
       </Select>
       {targetType === "image" ? (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-3 text-xs leading-5 text-slate-500">{TARGET_IMAGE_HINT}</p>
           <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={onImageUpload} />
           {displayImageUrl ? (
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -486,7 +490,7 @@ function SideAdEditor({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-950">{label}</h3>
-          <p className="mt-1 text-xs leading-5 text-slate-500">PC 大屏首页主体内容外侧显示，不占用首页内容宽度。建议图片 280 x 440 px 竖图。</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">PC 大屏首页主体内容外侧显示，不占用首页内容宽度。{SIDE_AD_IMAGE_HINT}</p>
         </div>
         <div className="flex items-center gap-2">
           <Switch checked={item.isVisible} onCheckedChange={(checked) => onPatch({ isVisible: checked })} />
@@ -888,7 +892,7 @@ export function HomeBannerManagement() {
       <section className="space-y-4">
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <h3 className="text-sm font-semibold text-slate-950">Banner 轮播图</h3>
-          <p className="mt-1 text-xs leading-5 text-slate-500">管理首页顶部轮播内容、展示顺序、主按钮和次按钮跳转。</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">管理首页顶部轮播内容、展示顺序、主按钮和次按钮跳转。{BANNER_IMAGE_HINT}</p>
         </div>
         <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
         <div className="rounded-lg border border-slate-200 bg-white">
@@ -979,6 +983,7 @@ export function HomeBannerManagement() {
 
           <div className="rounded-lg border border-slate-200 bg-white p-5">
             <Label>Banner 图片</Label>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{BANNER_IMAGE_HINT}</p>
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
             <div className="mt-3 grid gap-2">
               <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={uploading || saving} onClick={() => fileInputRef.current?.click()}>
