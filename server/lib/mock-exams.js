@@ -1726,9 +1726,16 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
   const answerMap = new Map((record.answers ?? []).map((answer) => [answer.questionId, answer]));
   const reviewUpdates = [];
   let subjectiveTotalScore = 0;
+
+  const { reviewWithV2 } = await import("./ai-review-v2/index.js");
+
   for (const question of subjectiveQuestions) {
     const existingAnswer = answerMap.get(question.id) ?? null;
-    const reviewJson = await buildSubjectiveReviewJson({ question, answer: existingAnswer, runtimeConfig });
+
+    const result = await reviewWithV2({ question, answer: existingAnswer, recordId: record.id });
+    const reviewJson = result.reviewJson;
+    console.log(`[AI批改V2] 批改成功 questionId=${question.id}, logId=${result.logId}`);
+
     const score = clampScore(reviewJson.totalScore, 0, Number(question.score ?? reviewJson.maxScore ?? 0) || 0);
     subjectiveTotalScore += score;
     reviewUpdates.push({

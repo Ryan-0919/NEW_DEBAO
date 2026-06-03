@@ -159,6 +159,34 @@ export type AdminMockExamAiReviewConfig = {
   userPromptTemplate: string;
 };
 
+export type AdminAiReviewV2Strategy = {
+  id: number;
+  name: string;
+  version: string;
+  isActive: boolean;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  timeoutMs: number;
+  requireErrorMarks: boolean;
+  minErrorMarksCount: number;
+  minCoverageRate: number;
+  strictValidation: boolean;
+  systemPrompt: string;
+  gradingPrinciples: string;
+  errorEmphasis: string;
+  commentTemplate: string;
+  phase1OutputRequirements: string;
+  phase2OutputRequirements: string;
+  defaults: {
+    systemPrompt: string;
+    phase1OutputRequirements: string;
+    phase2OutputRequirements: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AdminLearningAnnouncementItem = {
   id?: string;
   title: string;
@@ -293,6 +321,9 @@ export const adminOperationsService = {
   getMockExamAiReviewConfig: () => adminRequest<AdminMockExamAiReviewConfig>("/api/admin/mock-exam-ai-review-config"),
   updateMockExamAiReviewConfig: (payload: AdminMockExamAiReviewConfig) =>
     adminPatchJson<AdminMockExamAiReviewConfig>("/api/admin/mock-exam-ai-review-config", payload),
+  getAiReviewV2Strategy: () => adminRequest<AdminAiReviewV2Strategy>("/api/admin/ai-review-v2/strategy"),
+  updateAiReviewV2Strategy: (payload: AdminAiReviewV2Strategy) =>
+    adminPatchJson<AdminAiReviewV2Strategy>("/api/admin/ai-review-v2/strategy", payload),
   uploadSystemImage: (file: File) => {
     const formData = new FormData();
     formData.set("file", file);

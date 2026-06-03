@@ -154,46 +154,46 @@ enum UserRegistrationSource {
 }
 
 model Admin {
-  id           String   @id @default(cuid())
-  account      String   @unique @db.VarChar(50)
-  passwordHash String   @db.VarChar(255)
-  name         String   @db.VarChar(100)
-  role         String   @default("super_admin") @db.VarChar(50)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id           String     @id @default(cuid())
+  account      String     @unique @db.VarChar(50)
+  passwordHash String     @db.VarChar(255)
+  name         String     @db.VarChar(100)
+  role         String     @default("super_admin") @db.VarChar(50)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   auditLogs    AuditLog[]
 }
 
 model User {
-  id             String                 @id @default(cuid())
-  phone          String                 @unique @db.VarChar(20)
-  nickname       String?                @db.VarChar(100)
-  avatarUrl      String?                @db.VarChar(500)
-  avatarObjectKey String?               @db.VarChar(255)
-  passwordHash   String                 @db.VarChar(255)
-  status         UserStatus             @default(active)
-  registrationSource UserRegistrationSource @default(legacy_unknown)
-  registeredAt   DateTime               @default(now())
-  lastLoginAt    DateTime?
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
-  permissions    UserCoursePermission[]
-  devices        UserDevice[]
-  progresses     UserProgress[]
-  videoProgresses UserVideoProgress[]
-  courseNotes    UserCourseNote[]
-  addresses      UserAddress[]
-  cartItems      ShopCartItem[]
-  shopOrders     ShopOrder[]
-  digitalFulfillments ShopDigitalFulfillment[]
-  mockExamRecords MockExamRecord[]
-  mockExamPermissions UserMockExamPermission[]
-  mockExamSeriesPermissions UserMockExamSeriesPermission[]
-  mockExamLeaderboardEntries MockExamLeaderboardEntry[]
+  id                          String                           @id @default(cuid())
+  phone                       String                           @unique @db.VarChar(20)
+  nickname                    String?                          @db.VarChar(100)
+  avatarUrl                   String?                          @db.VarChar(500)
+  avatarObjectKey             String?                          @db.VarChar(255)
+  passwordHash                String                           @db.VarChar(255)
+  status                      UserStatus                       @default(active)
+  registrationSource          UserRegistrationSource           @default(legacy_unknown)
+  registeredAt                DateTime                         @default(now())
+  lastLoginAt                 DateTime?
+  createdAt                   DateTime                         @default(now())
+  updatedAt                   DateTime                         @updatedAt
+  permissions                 UserCoursePermission[]
+  devices                     UserDevice[]
+  progresses                  UserProgress[]
+  videoProgresses             UserVideoProgress[]
+  courseNotes                 UserCourseNote[]
+  addresses                   UserAddress[]
+  cartItems                   ShopCartItem[]
+  shopOrders                  ShopOrder[]
+  digitalFulfillments         ShopDigitalFulfillment[]
+  mockExamRecords             MockExamRecord[]
+  mockExamPermissions         UserMockExamPermission[]
+  mockExamSeriesPermissions   UserMockExamSeriesPermission[]
+  mockExamLeaderboardEntries  MockExamLeaderboardEntry[]
   bookQuestionBankPermissions UserBookQuestionBankPermission[]
-  bookQuestionBankProgresses UserBookQuestionBankProgress[]
-  bookQuestionBankItemStates UserBookQuestionBankItemState[]
-  typingPracticeRecords TypingPracticeRecord[]
+  bookQuestionBankProgresses  UserBookQuestionBankProgress[]
+  bookQuestionBankItemStates  UserBookQuestionBankItemState[]
+  typingPracticeRecords       TypingPracticeRecord[]
 }
 
 model UserDevice {
@@ -263,13 +263,13 @@ model Course {
 }
 
 model Tag {
-  id           String       @id @default(cuid())
+  id           String        @id @default(cuid())
   courseId     String
-  name         String       @db.VarChar(100)
-  order        Int          @default(0)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  course       Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  name         String        @db.VarChar(100)
+  order        Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  course       Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
   courseAudios CourseAudio[]
   courseVideos CourseVideo[]
 
@@ -286,25 +286,25 @@ model AudioFolder {
 }
 
 model Audio {
-  id             String             @id @default(cuid())
-  name           String             @db.VarChar(191)
-  folderId       String
-  duration       Int                @default(0)
-  scriptText     String?            @db.LongText
-  handoutUrl     String?            @db.VarChar(500)
-  handoutObjectKey String?          @db.VarChar(255)
-  handoutName    String?            @db.VarChar(255)
-  objectKey      String?            @unique @db.VarChar(255)
-  objectUrl      String?            @db.VarChar(500)
-  mimeType       String?            @db.VarChar(100)
-  processStatus  AudioProcessStatus @default(pending)
-  processMessage String?            @db.VarChar(500)
-  uploadedAt     DateTime           @default(now())
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  folder         AudioFolder        @relation(fields: [folderId], references: [id], onDelete: Restrict)
-  courseAudios CourseAudio[]
-  progresses  UserProgress[]
+  id               String             @id @default(cuid())
+  name             String             @db.VarChar(191)
+  folderId         String
+  duration         Int                @default(0)
+  scriptText       String?            @db.LongText
+  handoutUrl       String?            @db.VarChar(500)
+  handoutObjectKey String?            @db.VarChar(255)
+  handoutName      String?            @db.VarChar(255)
+  objectKey        String?            @unique @db.VarChar(255)
+  objectUrl        String?            @db.VarChar(500)
+  mimeType         String?            @db.VarChar(100)
+  processStatus    AudioProcessStatus @default(pending)
+  processMessage   String?            @db.VarChar(500)
+  uploadedAt       DateTime           @default(now())
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  folder           AudioFolder        @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  courseAudios     CourseAudio[]
+  progresses       UserProgress[]
 
   @@index([folderId, uploadedAt])
   @@index([processStatus, uploadedAt])
@@ -319,23 +319,23 @@ model VideoFolder {
 }
 
 model Video {
-  id               String            @id @default(cuid())
-  name             String            @db.VarChar(191)
+  id               String              @id @default(cuid())
+  name             String              @db.VarChar(191)
   folderId         String
-  duration         Int               @default(0)
-  scriptText       String?           @db.LongText
-  handoutUrl       String?           @db.VarChar(500)
-  handoutObjectKey String?           @db.VarChar(255)
-  handoutName      String?           @db.VarChar(255)
-  objectKey        String?           @unique @db.VarChar(255)
-  objectUrl        String?           @db.VarChar(500)
-  mimeType         String?           @db.VarChar(100)
-  processStatus    AudioProcessStatus @default(ready)
-  processMessage   String?           @db.VarChar(500)
-  uploadedAt       DateTime          @default(now())
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  folder           VideoFolder       @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  duration         Int                 @default(0)
+  scriptText       String?             @db.LongText
+  handoutUrl       String?             @db.VarChar(500)
+  handoutObjectKey String?             @db.VarChar(255)
+  handoutName      String?             @db.VarChar(255)
+  objectKey        String?             @unique @db.VarChar(255)
+  objectUrl        String?             @db.VarChar(500)
+  mimeType         String?             @db.VarChar(100)
+  processStatus    AudioProcessStatus  @default(ready)
+  processMessage   String?             @db.VarChar(500)
+  uploadedAt       DateTime            @default(now())
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  folder           VideoFolder         @relation(fields: [folderId], references: [id], onDelete: Restrict)
   courseVideos     CourseVideo[]
   progresses       UserVideoProgress[]
 
@@ -408,16 +408,16 @@ model UserProgress {
 }
 
 model UserVideoProgress {
-  id          String   @id @default(cuid())
-  userId      String
-  courseId    String
-  videoId     String
-  progress    Int      @default(0)
-  lastPosition Int     @default(0)
-  completed   Boolean  @default(false)
-  lastUpdated DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  userId       String
+  courseId     String
+  videoId      String
+  progress     Int      @default(0)
+  lastPosition Int      @default(0)
+  completed    Boolean  @default(false)
+  lastUpdated  DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video        Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@unique([userId, courseId, videoId])
   @@index([courseId])
@@ -443,21 +443,21 @@ model UserCourseNote {
 }
 
 model SystemConfig {
-  id                 Int      @id @default(1)
-  webhookUrl         String?  @db.VarChar(500)
-  brandLogoUrl       String?  @db.VarChar(500)
-  brandLogoObjectKey String?  @db.VarChar(255)
-  playerDiscImageUrl String?  @db.VarChar(500)
-  customerServiceUrl String?  @db.VarChar(500)
-  portalConfigJson   String?  @db.LongText
-  smsConfigJson      String?  @db.LongText
-  mockExamAiReviewConfigJson String? @db.LongText
-  mockExamLaunchConfigJson String? @db.LongText
-  typingPracticeDifficultyConfigJson String? @db.LongText
-  typingPracticeHomeConfigJson String? @db.LongText
-  playerDiscImageObjectKey String? @db.VarChar(255)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                                 Int      @id @default(1)
+  webhookUrl                         String?  @db.VarChar(500)
+  brandLogoUrl                       String?  @db.VarChar(500)
+  brandLogoObjectKey                 String?  @db.VarChar(255)
+  playerDiscImageUrl                 String?  @db.VarChar(500)
+  customerServiceUrl                 String?  @db.VarChar(500)
+  portalConfigJson                   String?  @db.LongText
+  smsConfigJson                      String?  @db.LongText
+  mockExamAiReviewConfigJson         String?  @db.LongText
+  mockExamLaunchConfigJson           String?  @db.LongText
+  typingPracticeDifficultyConfigJson String?  @db.LongText
+  typingPracticeHomeConfigJson       String?  @db.LongText
+  playerDiscImageObjectKey           String?  @db.VarChar(255)
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
 }
 
 enum WebhookLogStatus {
@@ -485,17 +485,17 @@ model AuditLog {
 }
 
 model WebhookLog {
-  id               String           @id @default(cuid())
-  scene            String           @db.VarChar(100)
-  status           WebhookLogStatus
-  title            String?          @db.VarChar(191)
-  webhookUrl       String?          @db.VarChar(500)
-  messagePreview   String?          @db.LongText
-  responseCode     Int?
-  errorMessage     String?          @db.VarChar(500)
-  relatedEntityType String?         @db.VarChar(50)
-  relatedEntityId  String?          @db.VarChar(191)
-  createdAt        DateTime         @default(now())
+  id                String           @id @default(cuid())
+  scene             String           @db.VarChar(100)
+  status            WebhookLogStatus
+  title             String?          @db.VarChar(191)
+  webhookUrl        String?          @db.VarChar(500)
+  messagePreview    String?          @db.LongText
+  responseCode      Int?
+  errorMessage      String?          @db.VarChar(500)
+  relatedEntityType String?          @db.VarChar(50)
+  relatedEntityId   String?          @db.VarChar(191)
+  createdAt         DateTime         @default(now())
 
   @@index([createdAt])
   @@index([scene, createdAt])
@@ -503,22 +503,22 @@ model WebhookLog {
 }
 
 model LawEntry {
-  id               String   @id @default(cuid())
-  sourceLawId      Int      @unique
+  id               String    @id @default(cuid())
+  sourceLawId      Int       @unique
   topCategoryId    Int
-  topCategoryTitle String   @db.VarChar(191)
-  bookTitle        String?  @db.VarChar(255)
-  title            String   @db.VarChar(255)
-  pathString       String   @db.VarChar(1000)
-  pathTitlesJson   String   @db.LongText
-  content          String   @db.LongText
-  type             Int      @default(0)
+  topCategoryTitle String    @db.VarChar(191)
+  bookTitle        String?   @db.VarChar(255)
+  title            String    @db.VarChar(255)
+  pathString       String    @db.VarChar(1000)
+  pathTitlesJson   String    @db.LongText
+  content          String    @db.LongText
+  type             Int       @default(0)
   sourceParentId   Int?
   sourceTopId      Int?
-  position         Int      @default(0)
+  position         Int       @default(0)
   sourceCreatedAt  DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([topCategoryId, position])
   @@index([topCategoryTitle])
@@ -527,65 +527,65 @@ model LawEntry {
 }
 
 model LawEntryOperation {
-  id             String   @id @default(cuid())
-  sourceLawId    Int      @unique
-  isPublished    Boolean  @default(true)
-  isPinned       Boolean  @default(false)
-  manualSortOrder Int     @default(0)
-  tagsJson       String?  @db.LongText
-  operatorNote   String?  @db.LongText
-  customTitle    String?  @db.VarChar(255)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  sourceLawId     Int      @unique
+  isPublished     Boolean  @default(true)
+  isPinned        Boolean  @default(false)
+  manualSortOrder Int      @default(0)
+  tagsJson        String?  @db.LongText
+  operatorNote    String?  @db.LongText
+  customTitle     String?  @db.VarChar(255)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([isPublished, updatedAt])
   @@index([isPinned, manualSortOrder])
 }
 
 model MockExamSeries {
-  id          String                       @id @default(cuid())
-  name        String                       @unique @db.VarChar(191)
-  description String?                      @db.VarChar(255)
-  sortOrder   Int                          @default(0)
-  createdAt   DateTime                     @default(now())
-  updatedAt   DateTime                     @updatedAt
+  id          String   @id @default(cuid())
+  name        String   @unique @db.VarChar(191)
+  description String?  @db.VarChar(255)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  papers       MockExamPaper[]
-  permissions  UserMockExamSeriesPermission[]
+  papers      MockExamPaper[]
+  permissions UserMockExamSeriesPermission[]
 
   @@index([sortOrder, createdAt])
 }
 
 model MockExamPaper {
-  id              String                @id @default(cuid())
-  seriesId        String?
-  code            String                @unique @db.VarChar(64)
-  title           String                @db.VarChar(191)
-  subtitle        String?               @db.VarChar(255)
-  coverUrl        String?               @db.VarChar(500)
-  coverObjectKey  String?               @db.VarChar(255)
-  paperType       QuestionBankPaperType?
-  year            Int?
-  phase           String?               @db.VarChar(50)
-  durationMinutes Int                   @default(180)
-  maxAttempts     Int                   @default(0)
-  reviewEnabled   Boolean               @default(true)
-  reviewAttemptLimit Int                @default(0)
-  permissionRequired Boolean            @default(false)
-  totalScore      Int                   @default(0)
-  questionCount   Int                   @default(0)
-  passScore       Int                   @default(0)
-  description     String?               @db.LongText
-  status          MockExamPaperStatus   @default(published)
-  openTime        DateTime?
-  sortOrder       Int                   @default(0)
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  id                 String                 @id @default(cuid())
+  seriesId           String?
+  code               String                 @unique @db.VarChar(64)
+  title              String                 @db.VarChar(191)
+  subtitle           String?                @db.VarChar(255)
+  coverUrl           String?                @db.VarChar(500)
+  coverObjectKey     String?                @db.VarChar(255)
+  paperType          QuestionBankPaperType?
+  year               Int?
+  phase              String?                @db.VarChar(50)
+  durationMinutes    Int                    @default(180)
+  maxAttempts        Int                    @default(0)
+  reviewEnabled      Boolean                @default(true)
+  reviewAttemptLimit Int                    @default(0)
+  permissionRequired Boolean                @default(false)
+  totalScore         Int                    @default(0)
+  questionCount      Int                    @default(0)
+  passScore          Int                    @default(0)
+  description        String?                @db.LongText
+  status             MockExamPaperStatus    @default(published)
+  openTime           DateTime?
+  sortOrder          Int                    @default(0)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
-  series          MockExamSeries?       @relation(fields: [seriesId], references: [id], onDelete: Restrict)
-  questions       MockExamQuestion[]
-  records         MockExamRecord[]
-  permissions     UserMockExamPermission[]
+  series             MockExamSeries?            @relation(fields: [seriesId], references: [id], onDelete: Restrict)
+  questions          MockExamQuestion[]
+  records            MockExamRecord[]
+  permissions        UserMockExamPermission[]
   leaderboardEntries MockExamLeaderboardEntry[]
 
   @@index([seriesId, sortOrder])
@@ -595,15 +595,15 @@ model MockExamPaper {
 }
 
 model MockExamLeaderboardEntry {
-  id              String        @id @default(cuid())
-  paperId          String
-  userId           String
-  manualRank       Int?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id         String   @id @default(cuid())
+  paperId    String
+  userId     String
+  manualRank Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  paper            MockExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
-  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paper MockExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([paperId, userId])
   @@index([paperId, manualRank])
@@ -611,16 +611,16 @@ model MockExamLeaderboardEntry {
 }
 
 model UserMockExamPermission {
-  id                    String        @id @default(cuid())
-  userId                String
-  paperId               String
-  manualAttemptLimit    Int?
-  manualAttemptUsed     Int           @default(0)
+  id                     String        @id @default(cuid())
+  userId                 String
+  paperId                String
+  manualAttemptLimit     Int?
+  manualAttemptUsed      Int           @default(0)
   currentRecordStartedAt DateTime?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @default(now()) @updatedAt
-  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  paper                 MockExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @default(now()) @updatedAt
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paper                  MockExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 
   @@unique([userId, paperId])
   @@index([paperId])
@@ -646,33 +646,33 @@ model QuestionBankFolder {
   createdAt DateTime              @default(now())
   updatedAt DateTime              @updatedAt
 
-  items     QuestionBankItem[]
+  items QuestionBankItem[]
 
   @@unique([paperType, name])
   @@index([paperType, updatedAt])
 }
 
 model QuestionBankItem {
-  id                String                   @id @default(cuid())
-  folderId          String
-  type              MockExamQuestionType
-  stem              String                   @db.LongText
-  material          String?                  @db.LongText
-  analysis          String?                  @db.LongText
-  lessonAudioUrl    String?                  @db.LongText
-  lessonAudioObjectKey String?               @db.VarChar(255)
-  lessonAudioDurationSeconds Int             @default(0)
-  score             Int                      @default(2)
-  sortOrder         Int                      @default(0)
-  correctAnswerJson String                   @db.LongText
-  questionMetaJson  String?                  @db.LongText
-  createdAt         DateTime                 @default(now())
-  updatedAt         DateTime                 @updatedAt
+  id                         String               @id @default(cuid())
+  folderId                   String
+  type                       MockExamQuestionType
+  stem                       String               @db.LongText
+  material                   String?              @db.LongText
+  analysis                   String?              @db.LongText
+  lessonAudioUrl             String?              @db.LongText
+  lessonAudioObjectKey       String?              @db.VarChar(255)
+  lessonAudioDurationSeconds Int                  @default(0)
+  score                      Int                  @default(2)
+  sortOrder                  Int                  @default(0)
+  correctAnswerJson          String               @db.LongText
+  questionMetaJson           String?              @db.LongText
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
 
-  folder            QuestionBankFolder       @relation(fields: [folderId], references: [id], onDelete: Restrict)
-  options           QuestionBankItemOption[]
-  sourceQuestions   MockExamQuestion[]       @relation("QuestionBankSource")
-  bookQuestionBankItems BookQuestionBankItem[]
+  folder                     QuestionBankFolder              @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  options                    QuestionBankItemOption[]
+  sourceQuestions            MockExamQuestion[]              @relation("QuestionBankSource")
+  bookQuestionBankItems      BookQuestionBankItem[]
   bookQuestionBankItemStates UserBookQuestionBankItemState[]
 
   @@index([folderId, sortOrder])
@@ -680,25 +680,25 @@ model QuestionBankItem {
 }
 
 model BookQuestionBank {
-  id             String                        @id @default(cuid())
-  name           String                        @db.VarChar(191)
-  code           String                        @unique @db.VarChar(64)
-  coverUrl       String?                       @db.VarChar(500)
-  coverObjectKey String?                       @db.VarChar(255)
-  description    String?                       @db.LongText
-  status         BookQuestionBankStatus        @default(draft)
-  accessType     BookQuestionBankAccessType    @default(authorized)
-  paperType      QuestionBankPaperType         @default(objective)
-  isVisible      Boolean                       @default(true)
-  sortOrder      Int                           @default(0)
-  createdAt      DateTime                      @default(now())
-  updatedAt      DateTime                      @updatedAt
+  id             String                     @id @default(cuid())
+  name           String                     @db.VarChar(191)
+  code           String                     @unique @db.VarChar(64)
+  coverUrl       String?                    @db.VarChar(500)
+  coverObjectKey String?                    @db.VarChar(255)
+  description    String?                    @db.LongText
+  status         BookQuestionBankStatus     @default(draft)
+  accessType     BookQuestionBankAccessType @default(authorized)
+  paperType      QuestionBankPaperType      @default(objective)
+  isVisible      Boolean                    @default(true)
+  sortOrder      Int                        @default(0)
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
 
-  subjects       BookQuestionBankSubject[]
-  items          BookQuestionBankItem[]
-  permissions    UserBookQuestionBankPermission[]
-  progresses     UserBookQuestionBankProgress[]
-  itemStates     UserBookQuestionBankItemState[]
+  subjects    BookQuestionBankSubject[]
+  items       BookQuestionBankItem[]
+  permissions UserBookQuestionBankPermission[]
+  progresses  UserBookQuestionBankProgress[]
+  itemStates  UserBookQuestionBankItemState[]
 
   @@index([status, isVisible, sortOrder])
   @@index([accessType, paperType, status, isVisible, sortOrder])
@@ -706,17 +706,17 @@ model BookQuestionBank {
 }
 
 model BookQuestionBankSubject {
-  id          String                     @id @default(cuid())
+  id          String   @id @default(cuid())
   bookId      String
-  name        String                     @db.VarChar(100)
-  code        String                     @db.VarChar(64)
-  description String?                    @db.VarChar(255)
-  sortOrder   Int                        @default(0)
-  createdAt   DateTime                   @default(now())
-  updatedAt   DateTime                   @updatedAt
+  name        String   @db.VarChar(100)
+  code        String   @db.VarChar(64)
+  description String?  @db.VarChar(255)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  book          BookQuestionBank         @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  items         BookQuestionBankItem[]
+  book           BookQuestionBank               @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  items          BookQuestionBankItem[]
   lastProgresses UserBookQuestionBankProgress[] @relation("BookQuestionProgressLastSubject")
 
   @@unique([bookId, name])
@@ -725,14 +725,14 @@ model BookQuestionBankSubject {
 }
 
 model BookQuestionLibraryFolder {
-  id        String                    @id @default(cuid())
-  name      String                    @db.VarChar(100)
+  id         String                     @id @default(cuid())
+  name       String                     @db.VarChar(100)
   accessType BookQuestionBankAccessType @default(public)
-  paperType QuestionBankPaperType     @default(objective)
-  createdAt DateTime                  @default(now())
-  updatedAt DateTime                  @updatedAt
+  paperType  QuestionBankPaperType      @default(objective)
+  createdAt  DateTime                   @default(now())
+  updatedAt  DateTime                   @updatedAt
 
-  items     BookQuestionLibraryItem[]
+  items BookQuestionLibraryItem[]
 
   @@index([accessType, paperType, name])
   @@index([accessType, paperType, updatedAt])
@@ -742,25 +742,25 @@ model BookQuestionLibraryFolder {
 }
 
 model BookQuestionLibraryItem {
-  id                String                         @id @default(cuid())
-  folderId          String
-  type              MockExamQuestionType
-  stem              String                         @db.LongText
-  material          String?                        @db.LongText
-  analysis          String?                        @db.LongText
-  lessonAudioUrl    String?                        @db.LongText
-  lessonAudioObjectKey String?                     @db.VarChar(255)
-  lessonAudioDurationSeconds Int                   @default(0)
-  score             Int                            @default(2)
-  sortOrder         Int                            @default(0)
-  correctAnswerJson String                         @db.LongText
-  questionMetaJson  String?                        @db.LongText
-  createdAt         DateTime                       @default(now())
-  updatedAt         DateTime                       @updatedAt
+  id                         String               @id @default(cuid())
+  folderId                   String
+  type                       MockExamQuestionType
+  stem                       String               @db.LongText
+  material                   String?              @db.LongText
+  analysis                   String?              @db.LongText
+  lessonAudioUrl             String?              @db.LongText
+  lessonAudioObjectKey       String?              @db.VarChar(255)
+  lessonAudioDurationSeconds Int                  @default(0)
+  score                      Int                  @default(2)
+  sortOrder                  Int                  @default(0)
+  correctAnswerJson          String               @db.LongText
+  questionMetaJson           String?              @db.LongText
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
 
-  folder            BookQuestionLibraryFolder      @relation(fields: [folderId], references: [id], onDelete: Restrict)
-  options           BookQuestionLibraryItemOption[]
-  bookQuestionBankItems BookQuestionBankItem[]
+  folder                     BookQuestionLibraryFolder       @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  options                    BookQuestionLibraryItemOption[]
+  bookQuestionBankItems      BookQuestionBankItem[]
   bookQuestionBankItemStates UserBookQuestionBankItemState[]
 
   @@index([folderId, sortOrder])
@@ -768,50 +768,50 @@ model BookQuestionLibraryItem {
 }
 
 model BookQuestionLibraryItemOption {
-  id        String                  @id @default(cuid())
+  id        String @id @default(cuid())
   itemId    String
-  optionKey String                  @db.VarChar(10)
-  content   String                  @db.LongText
-  sortOrder Int                     @default(0)
+  optionKey String @db.VarChar(10)
+  content   String @db.LongText
+  sortOrder Int    @default(0)
 
-  item      BookQuestionLibraryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item BookQuestionLibraryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@index([itemId, sortOrder])
 }
 
 model BookQuestionBankItem {
-  id                 String                         @id @default(cuid())
-  bookId             String
-  subjectId          String
-  questionBankItemId String?
-  bookQuestionLibraryItemId String?
-  title              String?                        @db.VarChar(191)
-  questionNo         String?                        @db.VarChar(50)
-  yearLabel          String?                        @db.VarChar(50)
-  pageLabel          String?                        @db.VarChar(50)
-  tagsJson           String?                        @db.LongText
-  type               MockExamQuestionType?
-  stem               String?                        @db.LongText
-  material           String?                        @db.LongText
-  analysis           String?                        @db.LongText
-  lessonAudioUrl     String?                        @db.LongText
-  lessonAudioObjectKey String?                      @db.VarChar(255)
-  lessonAudioDurationSeconds Int                    @default(0)
-  score              Int                            @default(2)
-  correctAnswerJson  String?                        @db.LongText
-  questionMetaJson   String?                        @db.LongText
-  sortOrder          Int                            @default(0)
-  status             Boolean                        @default(true)
-  createdAt          DateTime                       @default(now())
-  updatedAt          DateTime                       @updatedAt
+  id                         String                @id @default(cuid())
+  bookId                     String
+  subjectId                  String
+  questionBankItemId         String?
+  bookQuestionLibraryItemId  String?
+  title                      String?               @db.VarChar(191)
+  questionNo                 String?               @db.VarChar(50)
+  yearLabel                  String?               @db.VarChar(50)
+  pageLabel                  String?               @db.VarChar(50)
+  tagsJson                   String?               @db.LongText
+  type                       MockExamQuestionType?
+  stem                       String?               @db.LongText
+  material                   String?               @db.LongText
+  analysis                   String?               @db.LongText
+  lessonAudioUrl             String?               @db.LongText
+  lessonAudioObjectKey       String?               @db.VarChar(255)
+  lessonAudioDurationSeconds Int                   @default(0)
+  score                      Int                   @default(2)
+  correctAnswerJson          String?               @db.LongText
+  questionMetaJson           String?               @db.LongText
+  sortOrder                  Int                   @default(0)
+  status                     Boolean               @default(true)
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
 
-  book              BookQuestionBank               @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  subject           BookQuestionBankSubject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  questionBankItem  QuestionBankItem?              @relation(fields: [questionBankItemId], references: [id], onDelete: SetNull)
-  bookQuestionLibraryItem BookQuestionLibraryItem?  @relation(fields: [bookQuestionLibraryItemId], references: [id], onDelete: SetNull)
-  options           BookQuestionBankItemOption[]
-  userStates        UserBookQuestionBankItemState[]
-  lastProgresses    UserBookQuestionBankProgress[] @relation("BookQuestionProgressLastItem")
+  book                    BookQuestionBank                @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  subject                 BookQuestionBankSubject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  questionBankItem        QuestionBankItem?               @relation(fields: [questionBankItemId], references: [id], onDelete: SetNull)
+  bookQuestionLibraryItem BookQuestionLibraryItem?        @relation(fields: [bookQuestionLibraryItemId], references: [id], onDelete: SetNull)
+  options                 BookQuestionBankItemOption[]
+  userStates              UserBookQuestionBankItemState[]
+  lastProgresses          UserBookQuestionBankProgress[]  @relation("BookQuestionProgressLastItem")
 
   @@index([bookId, sortOrder])
   @@index([bookId, subjectId, sortOrder])
@@ -822,39 +822,39 @@ model BookQuestionBankItem {
 }
 
 model UserBookQuestionBankPermission {
-  id         String            @id @default(cuid())
+  id         String   @id @default(cuid())
   userId     String
   bookId     String
-  sourceType String?           @db.VarChar(50)
-  sourceId   String?           @db.VarChar(191)
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  sourceType String?  @db.VarChar(50)
+  sourceId   String?  @db.VarChar(191)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  book       BookQuestionBank  @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book BookQuestionBank @relation(fields: [bookId], references: [id], onDelete: Cascade)
 
   @@unique([userId, bookId])
   @@index([bookId])
 }
 
 model UserBookQuestionBankProgress {
-  id                String                  @id @default(cuid())
+  id                String    @id @default(cuid())
   userId            String
   bookId            String
   lastSubjectId     String?
   lastBookItemId    String?
-  answeredCount     Int                     @default(0)
-  viewedAnswerCount Int                     @default(0)
-  masteredCount     Int                     @default(0)
-  redoCount         Int                     @default(0)
+  answeredCount     Int       @default(0)
+  viewedAnswerCount Int       @default(0)
+  masteredCount     Int       @default(0)
+  redoCount         Int       @default(0)
   lastPracticedAt   DateTime?
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  user           User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  book           BookQuestionBank           @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  lastSubject    BookQuestionBankSubject?   @relation("BookQuestionProgressLastSubject", fields: [lastSubjectId], references: [id], onDelete: SetNull)
-  lastBookItem   BookQuestionBankItem?      @relation("BookQuestionProgressLastItem", fields: [lastBookItemId], references: [id], onDelete: SetNull)
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book         BookQuestionBank         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  lastSubject  BookQuestionBankSubject? @relation("BookQuestionProgressLastSubject", fields: [lastSubjectId], references: [id], onDelete: SetNull)
+  lastBookItem BookQuestionBankItem?    @relation("BookQuestionProgressLastItem", fields: [lastBookItemId], references: [id], onDelete: SetNull)
 
   @@unique([userId, bookId])
   @@index([bookId])
@@ -862,27 +862,27 @@ model UserBookQuestionBankProgress {
 }
 
 model UserBookQuestionBankItemState {
-  id                 String              @id @default(cuid())
-  userId             String
-  bookId             String
-  bookItemId         String
-  questionBankItemId String?
+  id                        String    @id @default(cuid())
+  userId                    String
+  bookId                    String
+  bookItemId                String
+  questionBankItemId        String?
   bookQuestionLibraryItemId String?
-  answerJson         String?             @db.LongText
-  draftText          String?             @db.LongText
-  isAnswered         Boolean             @default(false)
-  hasViewedAnswer    Boolean             @default(false)
-  isMastered         Boolean             @default(false)
-  isRedoMarked       Boolean             @default(false)
-  answeredAt         DateTime?
-  viewedAnswerAt     DateTime?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  answerJson                String?   @db.LongText
+  draftText                 String?   @db.LongText
+  isAnswered                Boolean   @default(false)
+  hasViewedAnswer           Boolean   @default(false)
+  isMastered                Boolean   @default(false)
+  isRedoMarked              Boolean   @default(false)
+  answeredAt                DateTime?
+  viewedAnswerAt            DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
-  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  book             BookQuestionBank     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  bookItem         BookQuestionBankItem @relation(fields: [bookItemId], references: [id], onDelete: Cascade)
-  questionBankItem QuestionBankItem?    @relation(fields: [questionBankItemId], references: [id], onDelete: SetNull)
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book                    BookQuestionBank         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  bookItem                BookQuestionBankItem     @relation(fields: [bookItemId], references: [id], onDelete: Cascade)
+  questionBankItem        QuestionBankItem?        @relation(fields: [questionBankItemId], references: [id], onDelete: SetNull)
   bookQuestionLibraryItem BookQuestionLibraryItem? @relation(fields: [bookQuestionLibraryItemId], references: [id], onDelete: SetNull)
 
   @@unique([userId, bookItemId])
@@ -892,52 +892,52 @@ model UserBookQuestionBankItemState {
 }
 
 model BookQuestionBankItemOption {
-  id        String               @id @default(cuid())
-  itemId     String
-  optionKey String               @db.VarChar(10)
-  content   String               @db.LongText
-  sortOrder Int                  @default(0)
+  id        String @id @default(cuid())
+  itemId    String
+  optionKey String @db.VarChar(10)
+  content   String @db.LongText
+  sortOrder Int    @default(0)
 
-  item      BookQuestionBankItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item BookQuestionBankItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@index([itemId, sortOrder])
 }
 
 model QuestionBankItemOption {
-  id        String           @id @default(cuid())
+  id        String @id @default(cuid())
   itemId    String
-  optionKey String           @db.VarChar(10)
-  content   String           @db.LongText
-  sortOrder Int              @default(0)
+  optionKey String @db.VarChar(10)
+  content   String @db.LongText
+  sortOrder Int    @default(0)
 
-  item      QuestionBankItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item QuestionBankItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@index([itemId, sortOrder])
 }
 
 model MockExamQuestion {
-  id                String               @id @default(cuid())
-  paperId           String
-  sourceBankItemId  String?
-  isActive          Boolean              @default(true)
-  type              MockExamQuestionType
-  stem              String               @db.LongText
-  material          String?              @db.LongText
-  analysis          String?              @db.LongText
-  lessonAudioUrl    String?              @db.LongText
-  lessonAudioObjectKey String?           @db.VarChar(255)
-  lessonAudioDurationSeconds Int         @default(0)
-  score             Int                  @default(2)
-  sortOrder         Int                  @default(0)
-  correctAnswerJson String               @db.LongText
-  questionMetaJson  String?              @db.LongText
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  id                         String               @id @default(cuid())
+  paperId                    String
+  sourceBankItemId           String?
+  isActive                   Boolean              @default(true)
+  type                       MockExamQuestionType
+  stem                       String               @db.LongText
+  material                   String?              @db.LongText
+  analysis                   String?              @db.LongText
+  lessonAudioUrl             String?              @db.LongText
+  lessonAudioObjectKey       String?              @db.VarChar(255)
+  lessonAudioDurationSeconds Int                  @default(0)
+  score                      Int                  @default(2)
+  sortOrder                  Int                  @default(0)
+  correctAnswerJson          String               @db.LongText
+  questionMetaJson           String?              @db.LongText
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
 
-  paper             MockExamPaper        @relation(fields: [paperId], references: [id], onDelete: Cascade)
-  sourceBankItem    QuestionBankItem?    @relation("QuestionBankSource", fields: [sourceBankItemId], references: [id], onDelete: SetNull)
-  options           MockExamQuestionOption[]
-  answers           MockExamAnswer[]
+  paper          MockExamPaper            @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  sourceBankItem QuestionBankItem?        @relation("QuestionBankSource", fields: [sourceBankItemId], references: [id], onDelete: SetNull)
+  options        MockExamQuestionOption[]
+  answers        MockExamAnswer[]
 
   @@index([paperId, sortOrder])
   @@index([paperId, isActive, sortOrder])
@@ -946,54 +946,54 @@ model MockExamQuestion {
 }
 
 model MockExamQuestionOption {
-  id         String           @id @default(cuid())
+  id         String @id @default(cuid())
   questionId String
-  optionKey  String           @db.VarChar(10)
-  content    String           @db.LongText
-  sortOrder  Int              @default(0)
+  optionKey  String @db.VarChar(10)
+  content    String @db.LongText
+  sortOrder  Int    @default(0)
 
-  question   MockExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question MockExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@index([questionId, sortOrder])
 }
 
 model MockExamRecord {
-  id             String               @id @default(cuid())
-  paperId        String
-  userId         String
-  activeKey      String?              @unique @db.VarChar(191)
-  paperSnapshotJson String?           @db.LongText
-  status         MockExamRecordStatus @default(in_progress)
-  reviewWorkflowStatus MockExamReviewWorkflowStatus @default(not_required)
-  manualReviewerId String?            @db.VarChar(191)
-  manualReviewerName String?          @db.VarChar(100)
-  manualReviewLockToken String?       @db.VarChar(191)
-  manualReviewClaimedAt DateTime?
+  id                        String                       @id @default(cuid())
+  paperId                   String
+  userId                    String
+  activeKey                 String?                      @unique @db.VarChar(191)
+  paperSnapshotJson         String?                      @db.LongText
+  status                    MockExamRecordStatus         @default(in_progress)
+  reviewWorkflowStatus      MockExamReviewWorkflowStatus @default(not_required)
+  manualReviewerId          String?                      @db.VarChar(191)
+  manualReviewerName        String?                      @db.VarChar(100)
+  manualReviewLockToken     String?                      @db.VarChar(191)
+  manualReviewClaimedAt     DateTime?
   manualReviewLockExpiresAt DateTime?
-  manualReviewVersion Int             @default(0)
-  isPaused       Boolean              @default(false)
-  attemptNo      Int                  @default(1)
-  questionCount  Int                  @default(0)
-  allottedSeconds Int                 @default(0)
-  consumedSeconds Int                 @default(0)
-  totalScore     Int                  @default(0)
-  correctCount   Int                  @default(0)
-  answeredCount  Int                  @default(0)
-  startedAt      DateTime             @default(now())
-  submittedAt    DateTime?
-  reviewedAt     DateTime?
-  aiReviewStartedAt DateTime?
-  aiReviewFinishedAt DateTime?
-  aiReviewRetryCount Int             @default(0)
-  aiReviewNextRetryAt DateTime?
-  publishedAt    DateTime?
-  lastAiReviewError String?           @db.LongText
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  manualReviewVersion       Int                          @default(0)
+  isPaused                  Boolean                      @default(false)
+  attemptNo                 Int                          @default(1)
+  questionCount             Int                          @default(0)
+  allottedSeconds           Int                          @default(0)
+  consumedSeconds           Int                          @default(0)
+  totalScore                Int                          @default(0)
+  correctCount              Int                          @default(0)
+  answeredCount             Int                          @default(0)
+  startedAt                 DateTime                     @default(now())
+  submittedAt               DateTime?
+  reviewedAt                DateTime?
+  aiReviewStartedAt         DateTime?
+  aiReviewFinishedAt        DateTime?
+  aiReviewRetryCount        Int                          @default(0)
+  aiReviewNextRetryAt       DateTime?
+  publishedAt               DateTime?
+  lastAiReviewError         String?                      @db.LongText
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
 
-  paper          MockExamPaper        @relation(fields: [paperId], references: [id], onDelete: Cascade)
-  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  answers        MockExamAnswer[]
+  paper   MockExamPaper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers MockExamAnswer[]
 
   @@index([userId, status, updatedAt])
   @@index([paperId, userId, createdAt])
@@ -1005,54 +1005,128 @@ model MockExamRecord {
 }
 
 model MockExamAnswer {
-  id          String           @id @default(cuid())
-  recordId    String
-  questionId  String
-  answerJson  String?          @db.LongText
-  reviewJson  String?          @db.LongText
-  publishedReviewJson String?   @db.LongText
-  publishedScore Int?
-  isCorrect   Boolean?
-  score       Int              @default(0)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id                  String   @id @default(cuid())
+  recordId            String
+  questionId          String
+  answerJson          String?  @db.LongText
+  reviewJson          String?  @db.LongText
+  publishedReviewJson String?  @db.LongText
+  publishedScore      Int?
+  isCorrect           Boolean?
+  score               Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  record      MockExamRecord   @relation(fields: [recordId], references: [id], onDelete: Cascade)
-  question    MockExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  record   MockExamRecord   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  question MockExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([recordId, questionId])
   @@index([recordId, updatedAt])
 }
 
-model TypingPracticeFolder {
-  id        String               @id @default(cuid())
-  name      String               @unique @db.VarChar(100)
-  sortOrder Int                  @default(0)
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
+model AiReviewStrategy {
+  id                 Int       @id @default(autoincrement())
+  name               String    @db.VarChar(100)
+  version            String    @db.VarChar(20)
+  isActive           Boolean   @default(false) @map("is_active")
+  systemPrompt       String?   @map("system_prompt") @db.Text
+  gradingPrinciples  String?   @map("grading_principles") @db.Text
+  errorEmphasis      String?   @map("error_emphasis") @db.Text
+  commentTemplate    String?   @map("comment_template") @db.Text
+  phase1OutputRequirements String? @map("phase1_output_requirements") @db.Text
+  phase2OutputRequirements String? @map("phase2_output_requirements") @db.Text
+  model              String?   @default("claude-sonnet-4-6") @db.VarChar(50)
+  temperature        Decimal?  @default(0.50) @db.Decimal(3, 2)
+  maxTokens          Int?      @default(8000) @map("max_tokens")
+  timeoutMs          Int?      @default(120000) @map("timeout_ms")
+  requireErrorMarks  Boolean?  @default(true) @map("require_error_marks")
+  minErrorMarksCount Int?      @default(1) @map("min_error_marks_count")
+  minCoverageRate    Decimal?  @default(0.30) @map("min_coverage_rate") @db.Decimal(3, 2)
+  strictValidation   Boolean?  @default(true) @map("strict_validation")
+  createdBy          String?   @map("created_by") @db.VarChar(50)
+  createdAt          DateTime? @default(now()) @map("created_at")
+  updatedAt          DateTime? @default(now()) @updatedAt @map("updated_at")
+  comment            String?   @db.Text
 
-  texts     TypingPracticeText[]
+  logs AiReviewLog[]
+
+  @@unique([name, version], map: "uk_name_version")
+  @@index([isActive], map: "idx_active")
+  @@index([createdAt], map: "idx_created_at")
+  @@map("ai_review_strategies")
+}
+
+model AiReviewLog {
+  id                 BigInt    @id @default(autoincrement())
+  recordId           String    @map("record_id") @db.VarChar(50)
+  questionId         String    @map("question_id") @db.VarChar(50)
+  subQuestionId      String?   @map("sub_question_id") @db.VarChar(50)
+  strategyId         Int?      @map("strategy_id")
+  strategyName       String?   @map("strategy_name") @db.VarChar(100)
+  strategyVersion    String?   @map("strategy_version") @db.VarChar(20)
+  model              String?   @db.VarChar(50)
+  temperature        Decimal?  @db.Decimal(3, 2)
+  promptTokens       Int?      @map("prompt_tokens")
+  completionTokens   Int?      @map("completion_tokens")
+  totalTokens        Int?      @map("total_tokens")
+  latencyMs          Int?      @map("latency_ms")
+  status             String?   @db.VarChar(50)
+  retryCount         Int?      @default(0) @map("retry_count")
+  errorMessage       String?   @map("error_message") @db.Text
+  validationPassed   Boolean?  @map("validation_passed")
+  validationErrors   Json?     @map("validation_errors")
+  score              Int?
+  maxScore           Int?      @map("max_score")
+  positiveMarksCount Int?      @map("positive_marks_count")
+  errorMarksCount    Int?      @map("error_marks_count")
+  neutralMarksCount  Int?      @map("neutral_marks_count")
+  coverageRate       Decimal?  @map("coverage_rate") @db.Decimal(4, 3)
+  commentLength      Int?      @map("comment_length")
+  startedAt          DateTime? @map("started_at") @db.DateTime(3)
+  completedAt        DateTime? @map("completed_at") @db.DateTime(3)
+  rawPrompt          String?   @map("raw_prompt") @db.MediumText
+  rawResponse        String?   @map("raw_response") @db.MediumText
+  finalResult        Json?     @map("final_result")
+
+  strategy AiReviewStrategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+
+  @@index([recordId], map: "idx_record")
+  @@index([questionId], map: "idx_question")
+  @@index([status], map: "idx_status")
+  @@index([startedAt], map: "idx_started_at")
+  @@index([strategyId], map: "idx_strategy")
+  @@map("ai_review_logs")
+}
+
+model TypingPracticeFolder {
+  id        String   @id @default(cuid())
+  name      String   @unique @db.VarChar(100)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  texts TypingPracticeText[]
 
   @@index([sortOrder, updatedAt])
 }
 
 model TypingPracticeText {
-  id            String                     @id @default(cuid())
+  id            String                   @id @default(cuid())
   folderId      String
-  title         String                     @db.VarChar(191)
-  difficulty    TypingPracticeDifficulty   @default(medium)
-  source        String?                    @db.VarChar(255)
-  tagsJson      String?                    @db.LongText
-  content       String                     @db.LongText
-  note          String?                    @db.LongText
-  status        TypingPracticeTextStatus   @default(published)
-  sortOrder     Int                        @default(0)
-  contentLength Int                        @default(0)
-  createdAt     DateTime                   @default(now())
-  updatedAt     DateTime                   @updatedAt
+  title         String                   @db.VarChar(191)
+  difficulty    TypingPracticeDifficulty @default(medium)
+  source        String?                  @db.VarChar(255)
+  tagsJson      String?                  @db.LongText
+  content       String                   @db.LongText
+  note          String?                  @db.LongText
+  status        TypingPracticeTextStatus @default(published)
+  sortOrder     Int                      @default(0)
+  contentLength Int                      @default(0)
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
 
-  folder        TypingPracticeFolder       @relation(fields: [folderId], references: [id], onDelete: Restrict)
-  records       TypingPracticeRecord[]
+  folder  TypingPracticeFolder   @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  records TypingPracticeRecord[]
 
   @@index([folderId, sortOrder])
   @@index([status, updatedAt])
@@ -1060,33 +1134,33 @@ model TypingPracticeText {
 }
 
 model TypingPracticeRecord {
-  id              String               @id @default(cuid())
-  userId          String
-  textId          String?
-  mode            TypingPracticeMode
-  difficulty      TypingPracticeDifficulty @default(medium)
-  titleSnapshot   String               @db.VarChar(191)
-  sourceSnapshot  String?              @db.VarChar(255)
-  contentSnapshot String               @db.LongText
-  typedContent    String?              @db.LongText
-  targetLength    Int                  @default(0)
-  typedLength     Int                  @default(0)
-  correctLength   Int                  @default(0)
-  errorCount      Int                  @default(0)
-  backspaceCount  Int                  @default(0)
-  comboMax        Int                  @default(0)
-  accuracyRate    Int                  @default(0)
-  completionRate  Int                  @default(0)
-  cpm             Int                  @default(0)
-  score           Int                  @default(0)
-  durationSeconds Int                  @default(0)
+  id               String                   @id @default(cuid())
+  userId           String
+  textId           String?
+  mode             TypingPracticeMode
+  difficulty       TypingPracticeDifficulty @default(medium)
+  titleSnapshot    String                   @db.VarChar(191)
+  sourceSnapshot   String?                  @db.VarChar(255)
+  contentSnapshot  String                   @db.LongText
+  typedContent     String?                  @db.LongText
+  targetLength     Int                      @default(0)
+  typedLength      Int                      @default(0)
+  correctLength    Int                      @default(0)
+  errorCount       Int                      @default(0)
+  backspaceCount   Int                      @default(0)
+  comboMax         Int                      @default(0)
+  accuracyRate     Int                      @default(0)
+  completionRate   Int                      @default(0)
+  cpm              Int                      @default(0)
+  score            Int                      @default(0)
+  durationSeconds  Int                      @default(0)
   timeLimitSeconds Int?
-  previewSeconds  Int?
-  createdAt       DateTime             @default(now())
-  completedAt     DateTime             @default(now())
+  previewSeconds   Int?
+  createdAt        DateTime                 @default(now())
+  completedAt      DateTime                 @default(now())
 
-  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  text            TypingPracticeText?  @relation(fields: [textId], references: [id], onDelete: SetNull)
+  user User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text TypingPracticeText? @relation(fields: [textId], references: [id], onDelete: SetNull)
 
   @@index([userId, completedAt])
   @@index([mode, completedAt])
@@ -1094,17 +1168,17 @@ model TypingPracticeRecord {
 }
 
 model ShopConfig {
-  id                  Int         @id @default(1)
-  shopNotice          String?     @db.LongText
-  customerServiceUrl  String?     @db.VarChar(500)
-  featuredProductIds  String?     @db.LongText
-  featuredCategoryIds String?     @db.LongText
-  paymentGuide        String?     @db.LongText
-  enableWechatH5      Boolean     @default(true)
-  enableWechatJsapi   Boolean     @default(true)
-  enableAlipayWap     Boolean     @default(true)
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  id                  Int          @id @default(1)
+  shopNotice          String?      @db.LongText
+  customerServiceUrl  String?      @db.VarChar(500)
+  featuredProductIds  String?      @db.LongText
+  featuredCategoryIds String?      @db.LongText
+  paymentGuide        String?      @db.LongText
+  enableWechatH5      Boolean      @default(true)
+  enableWechatJsapi   Boolean      @default(true)
+  enableAlipayWap     Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
   banners             ShopBanner[]
 }
 
@@ -1121,7 +1195,7 @@ model ShopBanner {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  config         ShopConfig         @relation(fields: [configId], references: [id], onDelete: Cascade)
+  config ShopConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
 
   @@index([configId, sortOrder])
   @@index([status, sortOrder])
@@ -1140,77 +1214,77 @@ model ShopCategory {
 }
 
 model ShopProduct {
-  id               String             @id @default(cuid())
+  id               String            @id @default(cuid())
   categoryId       String?
-  name             String             @db.VarChar(191)
-  subtitle         String?            @db.VarChar(255)
-  coverUrl         String             @db.VarChar(500)
-  coverObjectKey   String?            @db.VarChar(255)
+  name             String            @db.VarChar(191)
+  subtitle         String?           @db.VarChar(255)
+  coverUrl         String            @db.VarChar(500)
+  coverObjectKey   String?           @db.VarChar(255)
   type             ShopProductType
-  status           ShopProductStatus  @default(draft)
-  description      String?            @db.LongText
-  detailContent    String?            @db.LongText
-  detailImages     String?            @db.LongText
-  requiresShipping Boolean            @default(false)
-  sortOrder        Int                @default(0)
-  salesCount       Int                @default(0)
-  isDeleted        Boolean            @default(false)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  status           ShopProductStatus @default(draft)
+  description      String?           @db.LongText
+  detailContent    String?           @db.LongText
+  detailImages     String?           @db.LongText
+  requiresShipping Boolean           @default(false)
+  sortOrder        Int               @default(0)
+  salesCount       Int               @default(0)
+  isDeleted        Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-  category         ShopCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  images           ShopProductImage[]
-  skus             ShopSku[]
-  courses          ShopProductCourse[]
-  orderItems       ShopOrderItem[]
-  cartItems        ShopCartItem[]
+  category   ShopCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  images     ShopProductImage[]
+  skus       ShopSku[]
+  courses    ShopProductCourse[]
+  orderItems ShopOrderItem[]
+  cartItems  ShopCartItem[]
 
   @@index([categoryId, status, sortOrder])
   @@index([type, status, sortOrder])
 }
 
 model ShopProductImage {
-  id             String      @id @default(cuid())
+  id             String   @id @default(cuid())
   productId      String
-  imageUrl       String      @db.VarChar(500)
-  imageObjectKey String?     @db.VarChar(255)
-  sortOrder      Int         @default(0)
-  createdAt      DateTime    @default(now())
+  imageUrl       String   @db.VarChar(500)
+  imageObjectKey String?  @db.VarChar(255)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
 
-  product        ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId, sortOrder])
 }
 
 model ShopProductCourse {
-  id        String      @id @default(cuid())
+  id        String   @id @default(cuid())
   productId String
   courseId  String
-  createdAt DateTime    @default(now())
+  createdAt DateTime @default(now())
 
-  product   ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-  course    Course      @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  product ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  course  Course      @relation(fields: [courseId], references: [id], onDelete: Restrict)
 
   @@unique([productId, courseId])
   @@index([courseId])
 }
 
 model ShopSku {
-  id            String      @id @default(cuid())
+  id            String   @id @default(cuid())
   productId     String
-  name          String      @db.VarChar(191)
-  price         Decimal     @db.Decimal(10, 2)
-  originalPrice Decimal?    @db.Decimal(10, 2)
-  stock         Int         @default(0)
-  weight        Int?        @default(0)
-  isDefault     Boolean     @default(false)
-  status        Boolean     @default(true)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  name          String   @db.VarChar(191)
+  price         Decimal  @db.Decimal(10, 2)
+  originalPrice Decimal? @db.Decimal(10, 2)
+  stock         Int      @default(0)
+  weight        Int?     @default(0)
+  isDefault     Boolean  @default(false)
+  status        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  product       ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-  cartItems     ShopCartItem[]
-  orderItems    ShopOrderItem[]
+  product    ShopProduct     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems  ShopCartItem[]
+  orderItems ShopOrderItem[]
 
   @@index([productId, status])
 }
@@ -1228,57 +1302,57 @@ model UserAddress {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isDefault])
 }
 
 model ShopCartItem {
-  id        String      @id @default(cuid())
+  id        String   @id @default(cuid())
   userId    String
   productId String
   skuId     String
-  quantity  Int         @default(1)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product   ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sku       ShopSku     @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku     ShopSku     @relation(fields: [skuId], references: [id], onDelete: Cascade)
 
   @@unique([userId, skuId])
   @@index([userId, updatedAt])
 }
 
 model ShopOrder {
-  id               String                  @id @default(cuid())
-  orderNo          String                  @unique @db.VarChar(50)
+  id               String            @id @default(cuid())
+  orderNo          String            @unique @db.VarChar(50)
   userId           String
-  status           ShopOrderStatus         @default(pending_payment)
-  paymentStatus    ShopPaymentStatus       @default(unpaid)
-  totalAmount      Decimal                 @db.Decimal(10, 2)
-  payAmount        Decimal                 @db.Decimal(10, 2)
-  freightAmount    Decimal                 @default(0) @db.Decimal(10, 2)
+  status           ShopOrderStatus   @default(pending_payment)
+  paymentStatus    ShopPaymentStatus @default(unpaid)
+  totalAmount      Decimal           @db.Decimal(10, 2)
+  payAmount        Decimal           @db.Decimal(10, 2)
+  freightAmount    Decimal           @default(0) @db.Decimal(10, 2)
   payExpireAt      DateTime?
-  remark           String?                 @db.VarChar(255)
-  receiverName     String?                 @db.VarChar(50)
-  receiverPhone    String?                 @db.VarChar(20)
-  receiverProvince String?                 @db.VarChar(50)
-  receiverCity     String?                 @db.VarChar(50)
-  receiverDistrict String?                 @db.VarChar(50)
-  receiverAddress  String?                 @db.VarChar(255)
+  remark           String?           @db.VarChar(255)
+  receiverName     String?           @db.VarChar(50)
+  receiverPhone    String?           @db.VarChar(20)
+  receiverProvince String?           @db.VarChar(50)
+  receiverCity     String?           @db.VarChar(50)
+  receiverDistrict String?           @db.VarChar(50)
+  receiverAddress  String?           @db.VarChar(255)
   paidAt           DateTime?
   cancelledAt      DateTime?
   completedAt      DateTime?
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items            ShopOrderItem[]
-  payments         ShopPaymentRecord[]
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items               ShopOrderItem[]
+  payments            ShopPaymentRecord[]
   digitalFulfillments ShopDigitalFulfillment[]
-  shipments        ShopShipment[]
-  refunds          ShopRefundRecord[]
+  shipments           ShopShipment[]
+  refunds             ShopRefundRecord[]
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
@@ -1287,26 +1361,26 @@ model ShopOrder {
 }
 
 model ShopOrderItem {
-  id                    String      @id @default(cuid())
+  id                    String          @id @default(cuid())
   orderId               String
   productId             String
   skuId                 String
-  productNameSnapshot   String      @db.VarChar(191)
+  productNameSnapshot   String          @db.VarChar(191)
   productTypeSnapshot   ShopProductType
-  coverSnapshot         String      @db.VarChar(500)
-  priceSnapshot         Decimal     @db.Decimal(10, 2)
-  originalPriceSnapshot Decimal?    @db.Decimal(10, 2)
-  quantity              Int         @default(1)
-  requiresShipping      Boolean     @default(false)
-  courseIdsSnapshot     String?     @db.LongText
-  createdAt             DateTime    @default(now())
+  coverSnapshot         String          @db.VarChar(500)
+  priceSnapshot         Decimal         @db.Decimal(10, 2)
+  originalPriceSnapshot Decimal?        @db.Decimal(10, 2)
+  quantity              Int             @default(1)
+  requiresShipping      Boolean         @default(false)
+  courseIdsSnapshot     String?         @db.LongText
+  createdAt             DateTime        @default(now())
 
-  order                 ShopOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product               ShopProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
-  sku                   ShopSku     @relation(fields: [skuId], references: [id], onDelete: Restrict)
-  digitalFulfillments   ShopDigitalFulfillment[]
-  shipmentItems         ShopShipmentItem[]
-  refunds               ShopRefundRecord[]
+  order               ShopOrder                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product             ShopProduct              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sku                 ShopSku                  @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  digitalFulfillments ShopDigitalFulfillment[]
+  shipmentItems       ShopShipmentItem[]
+  refunds             ShopRefundRecord[]
 
   @@index([orderId])
   @@index([productId])
@@ -1325,7 +1399,7 @@ model ShopPaymentRecord {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  order         ShopOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order ShopOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
   @@index([transactionNo])
@@ -1344,9 +1418,9 @@ model ShopDigitalFulfillment {
   createdAt    DateTime                     @default(now())
   updatedAt    DateTime                     @updatedAt
 
-  order        ShopOrder                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderItem    ShopOrderItem                @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  user         User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order     ShopOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem ShopOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([orderId, status])
   @@index([orderItemId])
@@ -1364,9 +1438,9 @@ model ShopShipment {
   createdAt  DateTime           @default(now())
   updatedAt  DateTime           @updatedAt
 
-  order      ShopOrder          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  items      ShopShipmentItem[]
-  tracks     ShopShipmentTrack[]
+  order  ShopOrder           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items  ShopShipmentItem[]
+  tracks ShopShipmentTrack[]
 
   @@index([orderId])
   @@index([status, createdAt])
@@ -1374,13 +1448,13 @@ model ShopShipment {
 }
 
 model ShopShipmentItem {
-  id          String        @id @default(cuid())
+  id          String @id @default(cuid())
   shipmentId  String
   orderItemId String
-  quantity    Int           @default(1)
+  quantity    Int    @default(1)
 
-  shipment    ShopShipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  orderItem   ShopOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  shipment  ShopShipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderItem ShopOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 
   @@unique([shipmentId, orderItemId])
   @@index([shipmentId])
@@ -1388,14 +1462,14 @@ model ShopShipmentItem {
 }
 
 model ShopShipmentTrack {
-  id         String       @id @default(cuid())
+  id         String   @id @default(cuid())
   shipmentId String
-  content    String       @db.VarChar(255)
-  location   String?      @db.VarChar(100)
+  content    String   @db.VarChar(255)
+  location   String?  @db.VarChar(100)
   trackTime  DateTime
-  createdAt  DateTime     @default(now())
+  createdAt  DateTime @default(now())
 
-  shipment   ShopShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipment ShopShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
   @@index([shipmentId, trackTime])
 }
@@ -1411,8 +1485,8 @@ model ShopRefundRecord {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  order         ShopOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderItem     ShopOrderItem?   @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  order     ShopOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem ShopOrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
 
   @@index([orderId, createdAt])
   @@index([status, createdAt])

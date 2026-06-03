@@ -1,5 +1,6 @@
 import { ReactNode, useState } from "react";
 import {
+  Activity,
   BarChart3,
   Bell,
   BookOpen,
@@ -80,6 +81,9 @@ const navGroups = [
     items: [
       { href: "/admin/mock-exam-reviews", label: "批改中心", icon: ShieldCheck, roles: "review" },
       { href: "/admin/mock-exam-ai-review-config", label: "AI批改配置", icon: BrainCircuit, roles: "system" },
+      { href: "/admin/ai-review-v2-strategy", label: "AI批改2.0提示词", icon: BrainCircuit, roles: "system" },
+      { href: "/admin/ai-review-monitor", label: "AI批改监控", icon: Activity, roles: "system" },
+      { href: "/admin/ai-review-v2-performance", label: "AI批改V2性能", icon: BarChart3, roles: "system" },
     ],
   },
   {

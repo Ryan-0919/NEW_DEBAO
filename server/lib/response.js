@@ -15,3 +15,11 @@ export const fail = (res, message = "请求失败", status = 400, code = status)
     data: null,
   });
 };
+
+export const unauthorized = (res, message = "未授权") => {
+  fail(res, message, 401);
+};
+
+export const forbidden = (res, message = "禁止访问") => {
+  fail(res, message, 403);
+};

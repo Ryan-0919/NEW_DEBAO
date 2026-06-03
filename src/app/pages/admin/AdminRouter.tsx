@@ -4,6 +4,9 @@ import { getAdminRole, getAdminToken, isAnyAdminRole, isContentManagementRole, i
 import { AdminAccountManagement } from "./AdminAccountManagement";
 import { AdminDashboard } from "./AdminDashboard";
 import { AdminLogin } from "./AdminLogin";
+import { AiReviewMonitor } from "./AiReviewMonitor";
+import { AiReviewV2StrategyManagement } from "./AiReviewV2StrategyManagement";
+import { AiReviewV2Performance } from "./AiReviewV2Performance";
 import { CourseManagement } from "./CourseManagement";
 import { ExamQuestionBankManagement } from "./ExamQuestionBankManagement";
 import { HomeBannerManagement } from "./HomeBannerManagement";
@@ -120,6 +123,18 @@ export function AdminRouter() {
     pageTitle = "AI批改配置";
     pageDescription = "配置主观题自动批改服务、提示词、队列并发和重试策略";
     content = <MockExamAiReviewConfigManagement />;
+  } else if (pathname.startsWith("/admin/ai-review-v2-strategy")) {
+    pageTitle = "AI批改2.0提示词";
+    pageDescription = "维护V2分阶段批改的模型、系统提示词、阶段输出格式和校验规则，保存后下次批改即时生效";
+    content = <AiReviewV2StrategyManagement />;
+  } else if (pathname.startsWith("/admin/ai-review-monitor")) {
+    pageTitle = "AI批改监控";
+    pageDescription = "实时监控AI批改系统的运行状态、质量指标和失败记录";
+    content = <AiReviewMonitor />;
+  } else if (pathname.startsWith("/admin/ai-review-v2-performance")) {
+    pageTitle = "AI批改V2性能监控";
+    pageDescription = "实时监控AI批改系统V2的性能指标、Token使用和成本统计";
+    content = <AiReviewV2Performance />;
   } else if (pathname.startsWith("/admin/mock-exam-reviews")) {
     pageTitle = "批改中心";
     pageDescription = "主观题批改队列、领取锁、草稿保存与发送结果";
