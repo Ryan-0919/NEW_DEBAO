@@ -4,23 +4,23 @@ html {
 
 @keyframes debao-danmaku-scroll {
   from {
-    transform: translateX(100%);
+    transform: translateX(0);
   }
   to {
-    transform: translateX(-120vw);
+    transform: translateX(calc(-120vw - 100%));
   }
 }
 
 .debao-video-danmaku-item {
   position: absolute;
-  left: 0;
+  left: 100%;
   max-width: 80%;
   white-space: nowrap;
   font-size: 16px;
   font-weight: 800;
   line-height: 1;
   text-shadow: 0 1px 2px rgba(0,0,0,0.92), 0 0 6px rgba(0,0,0,0.72);
-  animation: debao-danmaku-scroll 7.2s linear forwards;
+  animation: debao-danmaku-scroll 12s linear forwards;
   will-change: transform;
 }
 

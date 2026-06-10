@@ -3367,7 +3367,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     entries.forEach((entry) => {
       window.setTimeout(() => {
         setActiveVideoDanmakus(prev => prev.filter(item => item.renderId !== entry.renderId));
-      }, 7600);
+      }, 12500);
     });
   };
 
