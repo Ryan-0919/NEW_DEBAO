@@ -22,6 +22,8 @@ import { startMockExamAiReviewQueue } from "./lib/mock-exam-ai-review-queue.js";
 import { resumePendingMediaProcessingJobs } from "./lib/media-processing.js";
 import { lawUserRouter } from "./routes/law-user.js";
 import { lawAdminRouter } from "./routes/law-admin.js";
+import { adminLawPracticeRouter } from "./routes/admin-law-practice.js";
+import { lawPracticeUserRouter } from "./routes/law-practice-user.js";
 import { typingPracticeAdminRouter } from "./routes/typing-practice-admin.js";
 import { typingPracticeUserRouter } from "./routes/typing-practice-user.js";
 
@@ -83,8 +85,10 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/user/laws", lawUserRouter);
+app.use("/api/user/law-practice", lawPracticeUserRouter);
 app.use("/api/user/typing-practice", typingPracticeUserRouter);
 app.use("/api/admin/laws", lawAdminRouter);
+app.use("/api/admin/law-practice", adminLawPracticeRouter);
 app.use("/api/admin/typing-practice", typingPracticeAdminRouter);
 app.use("/api/admin/mock-exam-reviews", adminMockExamReviewRouter);
 app.use("/api/admin/ai-review/monitor", adminAiReviewMonitorRouter);

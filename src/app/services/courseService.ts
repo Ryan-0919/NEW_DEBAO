@@ -202,6 +202,18 @@ export interface LegacyVideoDetailPayload {
   last?: LegacyVideo;
 }
 
+export interface VideoDanmaku {
+  id: string;
+  courseId: string;
+  videoId: string;
+  timeSeconds: number;
+  content: string;
+  color: string;
+  userName: string;
+  isMine: boolean;
+  createdAt: string;
+}
+
 export interface UserCourseNote {
   id: string;
   courseId: string;
@@ -227,6 +239,10 @@ export const courseService = {
     request<LegacyAudioDetailPayload>(`/api/user/courses/${encodeId(courseId)}/audios/${encodeId(audioId)}/detail`),
   getVideoDetail: (courseId: string | number, videoId: string | number) =>
     request<LegacyVideoDetailPayload>(`/api/user/courses/${encodeId(courseId)}/videos/${encodeId(videoId)}/detail`),
+  getVideoDanmakus: (courseId: string | number, videoId: string | number) =>
+    request<VideoDanmaku[]>(`/api/user/courses/${encodeId(courseId)}/videos/${encodeId(videoId)}/danmaku`),
+  sendVideoDanmaku: (courseId: string | number, videoId: string | number, payload: { content: string; timeSeconds: number; color?: string }) =>
+    postJson<VideoDanmaku>(`/api/user/courses/${encodeId(courseId)}/videos/${encodeId(videoId)}/danmaku`, payload),
   getAudioProgress: (courseId: string | number, audioId: string | number) =>
     request<LegacyUserProgress | null>(`/api/user/audios/${encodeId(audioId)}/progress${buildQueryString({ courseId: `${courseId}` })}`),
   getVideoProgress: (courseId: string | number, videoId: string | number) =>

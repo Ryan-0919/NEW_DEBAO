@@ -107,6 +107,32 @@ const parseNonNegativeProgress = (value) => {
   return Math.max(0, Math.floor(numeric));
 };
 
+const DANMAKU_COLOR_OPTIONS = new Set(["#ffffff", "#ffd166", "#7dd3fc", "#86efac", "#fca5a5", "#c4b5fd"]);
+
+const readDanmakuContent = (value) => {
+  const content = `${value ?? ""}`.replace(/\s+/g, " ").trim();
+  if (!content) return { error: "请输入弹幕内容" };
+  if (content.length > 80) return { error: "弹幕最多 80 个字" };
+  return { content };
+};
+
+const normalizeDanmakuColor = (value) => {
+  const normalized = `${value ?? ""}`.trim().toLowerCase();
+  return DANMAKU_COLOR_OPTIONS.has(normalized) ? normalized : "#ffffff";
+};
+
+const serializeVideoDanmaku = (item, currentUserId = "") => ({
+  id: item.id,
+  courseId: item.courseId,
+  videoId: item.videoId,
+  timeSeconds: Number(item.timeSeconds ?? 0),
+  content: item.content ?? "",
+  color: item.color || "#ffffff",
+  userName: item.user?.nickname?.trim() || "得宝学员",
+  isMine: item.userId === currentUserId,
+  createdAt: formatDateTime(item.createdAt),
+});
+
 const clampProgressToDuration = (progress, duration) => {
   const durationSeconds = Math.max(0, Number(duration ?? 0));
   if (durationSeconds <= 0) return progress;
@@ -1321,6 +1347,79 @@ userRouter.get("/courses/:courseId/videos/:videoId/detail", async (req, res) => 
     });
   } catch (error) {
     return fail(res, error.message || "视频不存在", statusForCourseAccessError(error, 500));
+  }
+});
+
+userRouter.get("/courses/:courseId/videos/:videoId/danmaku", async (req, res) => {
+  try {
+    const course = await assertCoursePermission(req.auth.userId, req.params.courseId);
+    const relation = await prisma.courseVideo.findFirst({
+      where: {
+        courseId: course.id,
+        videoId: req.params.videoId,
+      },
+      select: { id: true },
+    });
+
+    if (!relation) return fail(res, "视频不存在", 404);
+
+    const items = await prisma.videoDanmaku.findMany({
+      where: {
+        courseId: course.id,
+        videoId: req.params.videoId,
+        isActive: true,
+      },
+      include: {
+        user: { select: { id: true, nickname: true } },
+      },
+      orderBy: [{ timeSeconds: "asc" }, { createdAt: "asc" }],
+      take: 1000,
+    });
+
+    return ok(res, items.map((item) => serializeVideoDanmaku(item, req.auth.userId)));
+  } catch (error) {
+    return fail(res, error.message || "弹幕加载失败", statusForCourseAccessError(error, 500));
+  }
+});
+
+userRouter.post("/courses/:courseId/videos/:videoId/danmaku", async (req, res) => {
+  try {
+    const parsedContent = readDanmakuContent(req.body?.content);
+    if (parsedContent.error) return fail(res, parsedContent.error, 400);
+
+    const timeSeconds = parseNonNegativeProgress(req.body?.timeSeconds ?? req.body?.time);
+    if (timeSeconds === null) return fail(res, "弹幕时间点不正确", 400);
+
+    const course = await assertCoursePermission(req.auth.userId, req.params.courseId);
+    const relation = await prisma.courseVideo.findFirst({
+      where: {
+        courseId: course.id,
+        videoId: req.params.videoId,
+      },
+      include: {
+        video: { select: { duration: true } },
+      },
+    });
+
+    if (!relation) return fail(res, "视频不存在", 404);
+
+    const item = await prisma.videoDanmaku.create({
+      data: {
+        userId: req.auth.userId,
+        courseId: course.id,
+        videoId: req.params.videoId,
+        timeSeconds: clampProgressToDuration(timeSeconds, relation.video?.duration),
+        content: parsedContent.content,
+        color: normalizeDanmakuColor(req.body?.color),
+      },
+      include: {
+        user: { select: { id: true, nickname: true } },
+      },
+    });
+
+    return ok(res, serializeVideoDanmaku(item, req.auth.userId), "弹幕已发送");
+  } catch (error) {
+    return fail(res, error.message || "弹幕发送失败", statusForCourseAccessError(error, 500));
   }
 });
 

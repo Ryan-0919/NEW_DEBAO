@@ -35,6 +35,11 @@ enum MockExamPaperStatus {
   published
 }
 
+enum LawPracticePaperStatus {
+  draft
+  published
+}
+
 enum MockExamQuestionType {
   single_choice
   multiple_choice
@@ -182,6 +187,7 @@ model User {
   progresses                  UserProgress[]
   videoProgresses             UserVideoProgress[]
   courseNotes                 UserCourseNote[]
+  videoDanmakus               VideoDanmaku[]
   addresses                   UserAddress[]
   cartItems                   ShopCartItem[]
   shopOrders                  ShopOrder[]
@@ -194,6 +200,7 @@ model User {
   bookQuestionBankProgresses  UserBookQuestionBankProgress[]
   bookQuestionBankItemStates  UserBookQuestionBankItemState[]
   typingPracticeRecords       TypingPracticeRecord[]
+  lawPracticeRecords          LawPracticeRecord[]
 }
 
 model UserDevice {
@@ -253,6 +260,7 @@ model Course {
   tags              Tag[]
   permissions       UserCoursePermission[]
   notes             UserCourseNote[]
+  videoDanmakus     VideoDanmaku[]
   courseAudios      CourseAudio[]
   courseVideos      CourseVideo[]
   shopProducts      ShopProductCourse[]
@@ -338,6 +346,7 @@ model Video {
   folder           VideoFolder         @relation(fields: [folderId], references: [id], onDelete: Restrict)
   courseVideos     CourseVideo[]
   progresses       UserVideoProgress[]
+  danmakus         VideoDanmaku[]
 
   @@index([folderId, uploadedAt])
   @@index([processStatus, uploadedAt])
@@ -422,6 +431,25 @@ model UserVideoProgress {
   @@unique([userId, courseId, videoId])
   @@index([courseId])
   @@index([videoId])
+}
+
+model VideoDanmaku {
+  id          String   @id @default(cuid())
+  userId      String
+  courseId    String
+  videoId     String
+  timeSeconds Int      @default(0)
+  content     String   @db.VarChar(120)
+  color       String?  @db.VarChar(20)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([courseId, videoId, timeSeconds])
+  @@index([userId, createdAt])
 }
 
 model UserCourseNote {
@@ -540,6 +568,114 @@ model LawEntryOperation {
 
   @@index([isPublished, updatedAt])
   @@index([isPinned, manualSortOrder])
+}
+
+model LawPracticeQuestion {
+  id             String   @id @default(cuid())
+  folderId       String?
+  title          String   @db.VarChar(191)
+  prompt         String   @db.LongText
+  lawName        String   @db.VarChar(191)
+  articleNo      String   @db.VarChar(100)
+  sourceLawId    Int?
+  standardText   String   @db.LongText
+  explanation    String?  @db.LongText
+  tagsJson       String?  @db.LongText
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  folder     LawPracticeQuestionFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  paperLinks LawPracticePaperQuestion[]
+  answers    LawPracticeAnswer[]
+
+  @@index([folderId])
+  @@index([isActive, sortOrder])
+  @@index([lawName])
+  @@index([sourceLawId])
+}
+
+model LawPracticeQuestionFolder {
+  id          String   @id @default(cuid())
+  name        String   @db.VarChar(191)
+  description String?  @db.VarChar(500)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  questions LawPracticeQuestion[]
+
+  @@index([isActive, sortOrder])
+  @@index([createdAt])
+}
+
+model LawPracticePaper {
+  id          String                 @id @default(cuid())
+  code        String                 @unique @db.VarChar(64)
+  title       String                 @db.VarChar(191)
+  description String?                @db.VarChar(500)
+  status      LawPracticePaperStatus @default(draft)
+  sortOrder   Int                    @default(0)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  questions LawPracticePaperQuestion[]
+  records   LawPracticeRecord[]
+
+  @@index([status, sortOrder])
+  @@index([createdAt])
+}
+
+model LawPracticePaperQuestion {
+  id         String   @id @default(cuid())
+  paperId    String
+  questionId String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  paper    LawPracticePaper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  question LawPracticeQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([paperId, questionId])
+  @@index([paperId, sortOrder])
+  @@index([questionId])
+}
+
+model LawPracticeRecord {
+  id          String               @id @default(cuid())
+  userId      String
+  paperId     String
+  status      MockExamRecordStatus @default(in_progress)
+  startedAt   DateTime             @default(now())
+  submittedAt DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paper   LawPracticePaper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  answers LawPracticeAnswer[]
+
+  @@index([userId, updatedAt])
+  @@index([paperId, status])
+}
+
+model LawPracticeAnswer {
+  id         String   @id @default(cuid())
+  recordId   String
+  questionId String
+  articleNo  String?  @db.VarChar(100)
+  answerText String?  @db.LongText
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  record   LawPracticeRecord   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  question LawPracticeQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([recordId, questionId])
+  @@index([questionId])
 }
 
 model MockExamSeries {

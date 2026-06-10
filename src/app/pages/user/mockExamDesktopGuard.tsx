@@ -5,6 +5,7 @@ import {
   Keyboard,
   Laptop,
   MonitorSmartphone,
+  Scale,
   Target,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -51,6 +52,7 @@ export type DesktopOnlyFeature =
   | "objectiveMock"
   | "subjectiveReview"
   | "myQuestionBank"
+  | "lawPractice"
   | "typingPractice";
 
 type DesktopOnlyFeatureConfig = {
@@ -94,6 +96,14 @@ const desktopOnlyFeatureConfig: Record<DesktopOnlyFeature, DesktopOnlyFeatureCon
     icon: BookOpenCheck,
     accent: "#caa7ff",
     tips: ["授权题库会保留练习记录", "主观题练习使用真机模考排版", "解析和收藏更适合在大屏查看"],
+  },
+  lawPractice: {
+    badge: "法条练习",
+    title: "法条练习请使用电脑打开",
+    description: "法条练习需要同时查看法律法规汇编、题目要求和长文本答题区。电脑端可以更接近真实机考检索和作答环境。",
+    icon: Scale,
+    accent: "#f6c15f",
+    tips: ["左侧法条目录需要较大的检索空间", "右侧答题区适合长文本抄录", "提交后统一查看标准答案"],
   },
   typingPractice: {
     badge: "打字练习",

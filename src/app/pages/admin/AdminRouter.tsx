@@ -10,6 +10,7 @@ import { AiReviewV2Performance } from "./AiReviewV2Performance";
 import { CourseManagement } from "./CourseManagement";
 import { ExamQuestionBankManagement } from "./ExamQuestionBankManagement";
 import { HomeBannerManagement } from "./HomeBannerManagement";
+import { LawPracticeLibraryManagement, LawPracticePaperManagement } from "./LawPracticeManagement";
 import { LawManagement } from "./LawManagement";
 import { LearningAnnouncementManagement } from "./LearningAnnouncementManagement";
 import { MediaLibraryManagement } from "./MediaLibraryManagement";
@@ -99,6 +100,14 @@ export function AdminRouter() {
     pageTitle = "主观机考题库";
     pageDescription = "主观批改机考使用的案例题、小问、参考答案和批改说明";
     content = <ExamQuestionBankManagement paperType="subjective" />;
+  } else if (pathname.startsWith("/admin/law-practice-library")) {
+    pageTitle = "法条练习原题库";
+    pageDescription = "维护法条定位原题、文件夹、批量导入和法条源关联";
+    content = <LawPracticeLibraryManagement />;
+  } else if (pathname.startsWith("/admin/law-practice")) {
+    pageTitle = "法条练习管理";
+    pageDescription = "从法条练习原题库引用题目，组卷发布给学员练习";
+    content = <LawPracticePaperManagement />;
   } else if (pathname.startsWith("/admin/public-question-library") || pathname.startsWith("/admin/question-library")) {
     pageTitle = "免费练习原题库";
     pageDescription = "免费练习题库引用的原始题目，不进入机考流程，不与授权题库原题混用";

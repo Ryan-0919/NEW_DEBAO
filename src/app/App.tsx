@@ -24,6 +24,7 @@ import type {
   LegacyUserVideoProgress,
   LegacyVideo,
   UserCourseNote,
+  VideoDanmaku,
 } from "./services/courseService";
 import { questionBankService } from "./services/questionBankService";
 import type { QuestionBankBook, QuestionBankItem, QuestionBankPracticeMode, QuestionBankSubject } from "./services/questionBankService";
@@ -32,6 +33,7 @@ import type { MockExamHistoryItem, MockExamPaperSummary } from "./services/mockE
 import { LegacyMockExamRouter } from "./pages/user/LegacyMockExamRouter";
 import { DebaoMyExamRecordPage, getMyExamRecordRouteFromPath } from "./pages/user/DebaoMyExamRecordPage";
 import { DebaoLawSearchPage } from "./pages/user/DebaoLawSearchPage";
+import { LawPracticeRouter } from "./pages/user/LawPracticeRouter";
 import { TypingPracticeRouter } from "./pages/user/TypingPracticeRouter";
 import { DesktopOnlyNotice, type DesktopOnlyFeature, useMockExamDesktopGuard } from "./pages/user/mockExamDesktopGuard";
 import { AdminRouter } from "./pages/admin/AdminRouter";
@@ -99,8 +101,8 @@ const modules = [
   { id: 2, title: "题库", sub: "海量真题 · 专项练习", icon: BookOpen, color: "#4e8ef7", glow: "rgba(78,142,247,0.2)", hot: true },
   { id: 3, title: "进入主观批改", sub: "人工精批 · 要点解析", icon: FileText, color: "#1dc9a4", glow: "rgba(29,201,164,0.2)", desktopOnly: true },
   { id: 4, title: "客观题模考", sub: "全真仿真 · 限时测验", icon: Target, color: "#c97ef5", glow: "rgba(201,126,245,0.2)", desktopOnly: true },
-  { id: 5, title: "主观法条检索", sub: "全库法条 · 快速定位", icon: Scale, color: "#f7a94e", glow: "rgba(247,169,78,0.2)" },
-  { id: 6, title: "打字练习", sub: "法律术语 · 答题提速", icon: Swords, color: "#f76e6e", glow: "rgba(247,110,110,0.2)", desktopOnly: true },
+  { id: 6, title: "法条练习", sub: "定位条文 · 抄录训练", icon: Scale, color: "#f6c15f", glow: "rgba(246,193,95,0.2)", desktopOnly: true },
+  { id: 7, title: "打字练习", sub: "法律术语 · 答题提速", icon: Swords, color: "#f76e6e", glow: "rgba(247,110,110,0.2)", desktopOnly: true },
 ];
 
 /* ══════════════════════ COURSES PAGE DATA ══════════════════════ */
@@ -867,6 +869,7 @@ const pageToPath: Record<string, string> = {
   mockExamHome: "/user/objective-mock-exams",
   mockExamRoom: "/user/mock-exams/records",
   lawSearch: "/user/laws",
+  lawPractice: "/user/law-practice",
   typingPractice: "/user/typing-practice",
   myProfile: "/profile",
   myNotes: "/profile/notes",
@@ -894,6 +897,7 @@ const pathToPage = (pathname: string) => {
   if (pathname.startsWith("/question-bank")) return "questionBankHome";
   if (pathname.startsWith("/user/objective-mock-exams")) return "mockExamHome";
   if (pathname.startsWith("/user/laws")) return "lawSearch";
+  if (pathname.startsWith("/user/law-practice")) return "lawPractice";
   if (pathname.startsWith("/user/typing-practice")) return "typingPractice";
   if (pathname.match(/^\/user\/mock-exams\/records\/[^/]+\/?$/)) return "mockExamRoom";
   if (pathname.startsWith("/user/mock-exams")) return "subjectiveGrading";
@@ -950,6 +954,7 @@ const getDesktopOnlyFeatureForPage = (
   mockMode?: MockExamMode,
 ): DesktopOnlyFeature | null => {
   if (page === "typingPractice" || pathname.startsWith("/user/typing-practice")) return "typingPractice";
+  if (page === "lawPractice" || pathname.startsWith("/user/law-practice")) return "lawPractice";
   if (page === "myQuestionBank" || pathname.startsWith("/question-bank/my")) return "myQuestionBank";
   if (page === "questionBank" || pathname.startsWith("/question-bank/practice")) {
     if (questionTarget?.source === "my" || questionTarget?.layout === "officialSubjective") return "myQuestionBank";
@@ -969,7 +974,7 @@ const buildMockExamRoomPath = (target: MockExamSessionTarget) => {
 
 const navIndexForPage = (page: string) => {
   if (page === "courses" || page === "audioDetail" || page === "courseDetail") return 1;
-  if (page === "questionBankHome" || page === "myQuestionBank" || page === "questionBank" || page === "mockExamHome" || page === "subjectiveGrading" || page === "mockExamRoom" || page === "lawSearch" || page === "typingPractice") return 2;
+  if (page === "questionBankHome" || page === "myQuestionBank" || page === "questionBank" || page === "mockExamHome" || page === "subjectiveGrading" || page === "mockExamRoom" || page === "lawSearch" || page === "lawPractice" || page === "typingPractice") return 2;
   if (page === "myProfile" || page === "myNotes" || page === "editProfile" || page === "settings") return 3;
   return 0;
 };
@@ -1569,6 +1574,7 @@ function HomePage({
     if (title === "进入主观批改") { goSubjective(); return; }
     if (title === "客观题模考") { setPage("mockExamHome"); setActiveNav(2); return; }
     if (title === "主观法条检索") { setPage("lawSearch"); setActiveNav(2); return; }
+    if (title === "法条练习") { setPage("lawPractice"); setActiveNav(2); return; }
     if (title === "打字练习") { setPage("typingPractice"); setActiveNav(2); return; }
   };
 
@@ -3052,6 +3058,13 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
 
 /* ══════════════════════ COURSE DETAIL PAGE ══════════════════════ */
 
+type ActiveVideoDanmaku = VideoDanmaku & {
+  renderId: string;
+  lane: number;
+};
+
+const VIDEO_DANMAKU_COLORS = ["#ffffff", "#ffd166", "#7dd3fc", "#86efac", "#fca5a5", "#c4b5fd"];
+
 function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: (p: string) => void; setActiveNav: (i: number) => void; course: AppCourse; notify: Notify }) {
   const appCourse = course;
   const isLegacyCourse = appCourse.source === "legacy";
@@ -3059,6 +3072,8 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   const videoPlayerRef = useRef<HTMLDivElement | null>(null);
   const lastSavedVideoProgressRef = useRef(-1);
   const pendingVideoResumeRef = useRef<{ lessonId: string; seconds: number; applied: boolean } | null>(null);
+  const videoDanmakusRef = useRef<VideoDanmaku[]>([]);
+  const shownDanmakuIdsRef = useRef<Set<string>>(new Set());
   const initialDetail = makeCourseShellDetail(appCourse, "正在读取课程目录", "课程目录同步中", "正在读取课程目录，请稍候。");
   const [detail, setDetail] = useState<ResolvedCourseDetail>(() => initialDetail);
   const [activeTab, setActiveTab] = useState<"intro" | "materials" | "notes">("intro");
@@ -3077,6 +3092,13 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
   const [savingVideoProgress, setSavingVideoProgress] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [showMobileVideoLessonPicker, setShowMobileVideoLessonPicker] = useState(false);
+  const [videoDanmakus, setVideoDanmakus] = useState<VideoDanmaku[]>([]);
+  const [activeVideoDanmakus, setActiveVideoDanmakus] = useState<ActiveVideoDanmaku[]>([]);
+  const [danmakuInput, setDanmakuInput] = useState("");
+  const [danmakuColor, setDanmakuColor] = useState(VIDEO_DANMAKU_COLORS[0]);
+  const [danmakuEnabled, setDanmakuEnabled] = useState(true);
+  const [danmakuLoading, setDanmakuLoading] = useState(false);
+  const [danmakuSubmitting, setDanmakuSubmitting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -3089,6 +3111,10 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     setVideoError("");
     setVideoReady(false);
     setIsPlaying(false);
+    setVideoDanmakus([]);
+    setActiveVideoDanmakus([]);
+    setDanmakuInput("");
+    shownDanmakuIdsRef.current = new Set();
     setLoadingDetail(true);
 
     courseService.getCourseDetail(appCourse.id)
@@ -3140,6 +3166,43 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
       active = false;
     };
   }, [appCourse.id, isLegacyCourse]);
+
+  useEffect(() => {
+    videoDanmakusRef.current = videoDanmakus;
+  }, [videoDanmakus]);
+
+  useEffect(() => {
+    shownDanmakuIdsRef.current = new Set();
+    setActiveVideoDanmakus([]);
+
+    if (!isLegacyCourse || currentLesson.source !== "legacy" || currentLesson.id === "__empty__") {
+      setVideoDanmakus([]);
+      return;
+    }
+
+    let active = true;
+    setDanmakuLoading(true);
+    courseService.getVideoDanmakus(appCourse.id, currentLesson.id)
+      .then((items) => {
+        if (!active) return;
+        const sorted = [...items].sort((left, right) => left.timeSeconds - right.timeSeconds);
+        setVideoDanmakus(sorted);
+        const currentSeconds = Math.max(0, Math.floor(videoRef.current?.currentTime ?? currentLesson.progressSeconds ?? 0));
+        shownDanmakuIdsRef.current = new Set(sorted.filter((item) => item.timeSeconds < currentSeconds - 1).map((item) => item.id));
+      })
+      .catch((err) => {
+        if (!active) return;
+        setVideoDanmakus([]);
+        notify(err instanceof Error ? `弹幕加载失败：${err.message}` : "弹幕加载失败", "warning");
+      })
+      .finally(() => {
+        if (active) setDanmakuLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [appCourse.id, currentLesson.id, currentLesson.source, isLegacyCourse]);
 
   const c = detail;
   const courseLearningProgress = calcCourseLearningProgress(c.chapters);
@@ -3290,6 +3353,70 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
     }
 
     selectLesson(adjacent);
+  };
+
+  const renderVideoDanmakus = (items: VideoDanmaku[]) => {
+    if (!danmakuEnabled || items.length === 0) return;
+    const now = Date.now();
+    const entries = items.slice(0, 8).map((item, index) => ({
+      ...item,
+      renderId: `${item.id}-${now}-${index}`,
+      lane: (index + Math.floor(Math.random() * 6)) % 6,
+    }));
+    setActiveVideoDanmakus(prev => [...prev, ...entries].slice(-20));
+    entries.forEach((entry) => {
+      window.setTimeout(() => {
+        setActiveVideoDanmakus(prev => prev.filter(item => item.renderId !== entry.renderId));
+      }, 7600);
+    });
+  };
+
+  const showDueVideoDanmakus = (seconds: number) => {
+    if (!danmakuEnabled || videoDanmakusRef.current.length === 0) return;
+    const due = videoDanmakusRef.current.filter((item) => {
+      if (shownDanmakuIdsRef.current.has(item.id)) return false;
+      return item.timeSeconds <= seconds && item.timeSeconds >= seconds - 2;
+    });
+    if (due.length === 0) return;
+    due.forEach((item) => shownDanmakuIdsRef.current.add(item.id));
+    renderVideoDanmakus(due);
+  };
+
+  const resetVideoDanmakuCursor = (seconds: number) => {
+    shownDanmakuIdsRef.current = new Set(
+      videoDanmakusRef.current.filter((item) => item.timeSeconds < seconds - 1).map((item) => item.id),
+    );
+    setActiveVideoDanmakus([]);
+  };
+
+  const submitVideoDanmaku = () => {
+    if (!isLegacyCourse || currentLesson.source !== "legacy" || currentLesson.id === "__empty__") {
+      notify("当前课程暂不支持发送弹幕", "warning");
+      return;
+    }
+    const content = danmakuInput.replace(/\s+/g, " ").trim();
+    if (!content) {
+      notify("请输入弹幕内容", "warning");
+      return;
+    }
+    if (content.length > 80) {
+      notify("弹幕最多 80 个字", "warning");
+      return;
+    }
+    const timeSeconds = Math.max(0, Math.floor(videoRef.current?.currentTime ?? currentLesson.progressSeconds ?? 0));
+    setDanmakuSubmitting(true);
+    courseService.sendVideoDanmaku(appCourse.id, currentLesson.id, { content, timeSeconds, color: danmakuColor })
+      .then((item) => {
+        setVideoDanmakus(prev => [...prev, item].sort((left, right) => left.timeSeconds - right.timeSeconds));
+        shownDanmakuIdsRef.current.add(item.id);
+        renderVideoDanmakus([item]);
+        setDanmakuInput("");
+        notify("弹幕已发送", "success");
+      })
+      .catch((error) => {
+        notify(error instanceof Error ? `弹幕发送失败：${error.message}` : "弹幕发送失败", "warning");
+      })
+      .finally(() => setDanmakuSubmitting(false));
   };
 
   useEffect(() => {
@@ -3613,12 +3740,14 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                 onPlay={() => setIsPlaying(true)}
                 onLoadedMetadata={event => {
                   applyPendingVideoResume(event.currentTarget);
+                  resetVideoDanmakuCursor(Math.floor(event.currentTarget.currentTime || currentLesson.progressSeconds || 0));
                 }}
                 onTimeUpdate={event => {
                   const target = event.currentTarget;
                   const duration = Number.isFinite(target.duration) && target.duration > 0 ? target.duration : currentLesson.durationSeconds;
                   const seconds = Math.floor(target.currentTime);
                   setCurrentLesson(prev => ({ ...prev, progressSeconds: seconds, lastPositionSeconds: seconds }));
+                  showDueVideoDanmakus(seconds);
                   if (seconds > 0 && seconds % 15 === 0) saveVideoSeconds(seconds);
                   if (duration > 0) {
                     setDetail(prev => ({
@@ -3634,6 +3763,9 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                 onEnded={event => {
                   setIsPlaying(false);
                   saveVideoSeconds(event.currentTarget.duration || currentLesson.durationSeconds, true);
+                }}
+                onSeeked={event => {
+                  resetVideoDanmakuCursor(Math.floor(event.currentTarget.currentTime || 0));
                 }}
                 onCanPlay={() => {
                   if (videoRef.current) applyPendingVideoResume(videoRef.current);
@@ -3683,6 +3815,23 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
               </div>
             </div>
 
+            {danmakuEnabled && activeVideoDanmakus.length > 0 ? (
+              <div className="debao-video-danmaku-layer" style={{ position: "absolute", left: 0, right: 0, top: 12, bottom: 76, zIndex: 3, pointerEvents: "none", overflow: "hidden" }}>
+                {activeVideoDanmakus.map((item) => (
+                  <div
+                    key={item.renderId}
+                    className="debao-video-danmaku-item"
+                    style={{
+                      top: `${8 + item.lane * 14}%`,
+                      color: item.color || "#ffffff",
+                    }}
+                  >
+                    {item.content}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             {/* Controls bar */}
             <div className="debao-video-controls-bar" style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top,rgba(0,0,0,0.85),transparent)", padding: "28px 20px 14px" }}>
               {/* Progress scrubber */}
@@ -3697,6 +3846,7 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                   const seconds = Math.round(ratio * duration);
                   pendingVideoResumeRef.current = null;
                   videoRef.current.currentTime = seconds;
+                  resetVideoDanmakuCursor(seconds);
                   setCurrentLesson(prev => ({ ...prev, progressSeconds: seconds, lastPositionSeconds: seconds }));
                   setDetail(prev => ({
                     ...prev,
@@ -3757,6 +3907,49 @@ function CourseDetailPage({ setPage, setActiveNav, course, notify }: { setPage: 
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="debao-video-danmaku-panel" style={{ background: "#0f1826", borderTop: "1px solid rgba(255,255,255,0.05)", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => setDanmakuEnabled(enabled => !enabled)}
+              style={{ padding: "7px 12px", borderRadius: 9, background: danmakuEnabled ? `${c.color}18` : "rgba(255,255,255,0.04)", border: `1px solid ${danmakuEnabled ? `${c.color}35` : "rgba(255,255,255,0.08)"}`, color: danmakuEnabled ? c.color : "#5a7898", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}
+            >
+              <MessageCircle size={13} /> {danmakuEnabled ? "弹幕开" : "弹幕关"}
+            </button>
+            <div className="debao-video-danmaku-colors" style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+              {VIDEO_DANMAKU_COLORS.map(color => (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={`弹幕颜色 ${color}`}
+                  onClick={() => setDanmakuColor(color)}
+                  style={{ width: 18, height: 18, borderRadius: "50%", border: danmakuColor === color ? `2px solid ${c.color}` : "1px solid rgba(255,255,255,0.22)", background: color, cursor: "pointer", boxShadow: danmakuColor === color ? `0 0 0 2px ${c.color}20` : "none" }}
+                />
+              ))}
+            </div>
+            <input
+              value={danmakuInput}
+              maxLength={80}
+              onChange={event => setDanmakuInput(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  submitVideoDanmaku();
+                }
+              }}
+              placeholder={danmakuLoading ? "弹幕加载中..." : "输入弹幕，按 Enter 发送"}
+              disabled={danmakuSubmitting || currentLesson.id === "__empty__"}
+              style={{ flex: 1, minWidth: 0, height: 34, borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.035)", color: "#dde4f0", padding: "0 12px", outline: "none", fontSize: 13 }}
+            />
+            <button
+              type="button"
+              disabled={danmakuSubmitting || !danmakuInput.trim() || currentLesson.id === "__empty__"}
+              onClick={submitVideoDanmaku}
+              style={{ padding: "8px 16px", borderRadius: 10, background: danmakuSubmitting || !danmakuInput.trim() ? "rgba(255,255,255,0.04)" : `${c.color}18`, border: `1px solid ${danmakuSubmitting || !danmakuInput.trim() ? "rgba(255,255,255,0.08)" : `${c.color}35`}`, color: danmakuSubmitting || !danmakuInput.trim() ? "#3a5570" : c.color, fontSize: 12, fontWeight: 700, cursor: danmakuSubmitting || !danmakuInput.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
+            >
+              {danmakuSubmitting ? "发送中" : "发送"}
+            </button>
           </div>
 
           {/* Lesson info strip */}
@@ -9012,7 +9205,7 @@ function DebaoAppShell() {
         <AuthPage onAuthenticated={handleAuthenticated} notify={notify} />
       ) : (
       <div className="debao-app-content">
-      {page !== "mockExamRoom" && page !== "typingPractice" && !(page === "questionBank" && selectedQuestionChapter?.layout === "officialSubjective") && <Nav activeNav={activeNav} setActiveNav={setActiveNav} setPage={setPage} currentUser={currentUser} studySummary={studySummary} themeMode={themeMode} onToggleTheme={toggleThemeMode} />}
+      {page !== "mockExamRoom" && page !== "typingPractice" && page !== "lawPractice" && !(page === "questionBank" && selectedQuestionChapter?.layout === "officialSubjective") && <Nav activeNav={activeNav} setActiveNav={setActiveNav} setPage={setPage} currentUser={currentUser} studySummary={studySummary} themeMode={themeMode} onToggleTheme={toggleThemeMode} />}
       {desktopOnlyFeature
         ? <DesktopOnlyNotice feature={desktopOnlyFeature} backLabel="返回首页" onBack={() => setPage("home")} />
         : myExamRecordRoute
@@ -9047,6 +9240,8 @@ function DebaoAppShell() {
         ? <DebaoMockExamListPage kind="objective" setPage={setPage} notify={notify} />
         : page === "lawSearch"
         ? <DebaoLawSearchPage setPage={setPage} />
+        : page === "lawPractice"
+        ? <LawPracticeRouter />
         : page === "typingPractice"
         ? <TypingPracticeRouter />
         : page === "mockExamRoom"

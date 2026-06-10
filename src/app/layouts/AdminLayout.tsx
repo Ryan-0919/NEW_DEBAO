@@ -69,6 +69,8 @@ const navGroups = [
       { href: "/admin/mock-exams", label: "机考试卷发布管理", icon: FileText, roles: "content" },
       { href: "/admin/objective-exam-question-bank", label: "客观机考题库", icon: ListChecks, roles: "content" },
       { href: "/admin/subjective-exam-question-bank", label: "主观机考题库", icon: PenSquare, roles: "content" },
+      { href: "/admin/law-practice-library", label: "法条练习原题库", icon: FileQuestion, roles: "content" },
+      { href: "/admin/law-practice", label: "法条练习管理", icon: Scale, roles: "content" },
       { href: "/admin/public-question-library", label: "免费练习原题库", icon: FileQuestion, roles: "content" },
       { href: "/admin/authorized-question-library", label: "授权题库原题库", icon: FileQuestion, roles: "content" },
       { href: "/admin/public-question-banks", label: "免费练习题库", icon: BookOpen, roles: "content" },
