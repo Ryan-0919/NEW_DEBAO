@@ -8897,27 +8897,6 @@ function ImageTargetPreviewPage() {
   );
 }
 
-function GuestFeatureGate({ onLogin }: { onLogin: () => void }) {
-  return (
-    <div className="debao-guest-feature-gate debao-themed-page" style={{ maxWidth: 760, margin: "0 auto", padding: "88px 32px", textAlign: "center" }}>
-      <div style={{ width: 62, height: 62, borderRadius: 18, margin: "0 auto 18px", background: "rgba(201,151,62,0.14)", border: "1px solid rgba(201,151,62,0.28)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <UserRound size={26} color="#e8c46a" />
-      </div>
-      <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 22, fontWeight: 800, color: "#f0e6d0", marginBottom: 8 }}>登录后继续使用</div>
-      <div style={{ fontSize: 14, color: "#5a7898", lineHeight: 1.9, marginBottom: 24 }}>
-        课程学习、题库练习、机考记录和个人学习数据需要绑定账号后保存。
-      </div>
-      <button
-        type="button"
-        onClick={onLogin}
-        style={{ padding: "12px 28px", borderRadius: 12, border: "none", background: "linear-gradient(90deg,#c9973e,#e8c46a)", color: "#090e1a", cursor: "pointer", fontSize: 14, fontWeight: 900 }}
-      >
-        登录 / 注册
-      </button>
-    </div>
-  );
-}
-
 function DebaoAppShell() {
   const [locationPath, setLocationPath] = useState(() => (typeof window !== "undefined" ? window.location.pathname : "/"));
   const initialPage = pathToPage(locationPath);
@@ -9370,7 +9349,7 @@ function DebaoAppShell() {
       <div className="debao-app-content">
       {showMainNav && <Nav activeNav={activeNav} setActiveNav={setActiveNav} setPage={setPage} currentUser={currentUser} studySummary={studySummary} themeMode={themeMode} onToggleTheme={toggleThemeMode} onRequestAuth={() => requestAuth()} />}
       {authBlocked
-        ? <GuestFeatureGate onLogin={() => requestAuth()} />
+        ? <HomePage setPage={setPage} setActiveNav={setActiveNav} goToCourse={goToCourse} notify={notify} courses={courses} homeConfig={homeConfig} studySummary={studySummary} loadingStudySummary={loadingStudySummary} />
         : desktopOnlyFeature
         ? <DesktopOnlyNotice feature={desktopOnlyFeature} backLabel="返回首页" onBack={() => setPage("home")} />
         : myExamRecordRoute
