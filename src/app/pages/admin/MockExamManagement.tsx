@@ -573,11 +573,6 @@ export function MockExamManagement() {
       toast.error("请输入试卷名称");
       return;
     }
-    if (!editingPaper && !paperForm.code?.trim()) {
-      toast.error("请输入试卷编码");
-      return;
-    }
-
     setSavingPaper(true);
     try {
       const payload = buildPaperPayload(paperForm);
@@ -595,7 +590,8 @@ export function MockExamManagement() {
         resetSourcePicker(created.paperType);
         void loadSourceFolders(created.paperType);
         void loadSourceItems(1, { paperType: created.paperType, folderId: "all", type: created.paperType === "subjective" ? "subjective_case" : "all", keyword: "" });
-        toast.success("试卷已创建，可以继续引用题库题目");
+        const requestedCode = payload.code?.trim();
+        toast.success(requestedCode && requestedCode !== created.code ? `试卷已创建，编码已自动调整为 ${created.code}` : "试卷已创建，可以继续引用题库题目");
       }
       await loadData();
     } catch (error) {
@@ -721,6 +717,7 @@ export function MockExamManagement() {
                     <Input
                       value={paperForm.code}
                       disabled={Boolean(editingPaper)}
+                      placeholder="留空自动生成；重复时自动追加后缀"
                       onChange={(event) => setPaperForm((current) => ({ ...current, code: event.target.value }))}
                     />
                   </div>

@@ -177,6 +177,53 @@ const parseJsonSafely = (value, fallback) => {
   }
 };
 
+const isUniqueConstraintError = (error, fieldName = "") => {
+  const targets = Array.isArray(error?.meta?.target) ? error.meta.target : [`${error?.meta?.target ?? ""}`];
+  return error?.code === "P2002" && (!fieldName || targets.some((target) => `${target}`.includes(fieldName)));
+};
+
+const MAX_MOCK_EXAM_CODE_LENGTH = 64;
+
+const normalizeMockExamPaperCode = (value = "") =>
+  normalizeDisplayText(value)
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, MAX_MOCK_EXAM_CODE_LENGTH);
+
+const buildMockExamPaperCode = (paperType = "") => {
+  const prefix = paperType === "subjective" ? "mock-sub" : paperType === "objective" ? "mock-obj" : "mock";
+  return `${prefix}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`.slice(0, MAX_MOCK_EXAM_CODE_LENGTH);
+};
+
+const appendMockExamPaperCodeSuffix = (code = "") => {
+  const suffix = `${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`;
+  const base = normalizeMockExamPaperCode(code).replace(/-+$/g, "");
+  const safeBase = (base || "mock").slice(0, Math.max(1, MAX_MOCK_EXAM_CODE_LENGTH - suffix.length - 1));
+  return `${safeBase}-${suffix}`;
+};
+
+const getAvailableMockExamPaperCode = async ({ preferredCode = "", paperType = "" }) => {
+  const normalized = normalizeMockExamPaperCode(preferredCode);
+  if (!normalized) return buildMockExamPaperCode(paperType);
+
+  const existing = await prisma.mockExamPaper.findUnique({
+    where: { code: normalized },
+    select: { id: true },
+  });
+  if (!existing) return normalized;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidate = appendMockExamPaperCodeSuffix(normalized);
+    const duplicated = await prisma.mockExamPaper.findUnique({
+      where: { code: candidate },
+      select: { id: true },
+    });
+    if (!duplicated) return candidate;
+  }
+
+  return buildMockExamPaperCode(paperType);
+};
+
 const readMockExamPaperType = (value) => {
   const normalized = `${value ?? ""}`.trim();
   return normalized === "objective" || normalized === "subjective" ? normalized : null;
@@ -789,30 +836,49 @@ adminContentRouter.delete("/mock-exams/series/:seriesId", async (req, res) => {
 
 adminContentRouter.post("/mock-exams/papers", async (req, res) => {
   const payload = readMockExamPaperPayload(req.body, { includeCode: true });
-  if (!payload.code) return fail(res, "请输入试卷编码", 400);
   if (!payload.title) return fail(res, "请输入试卷名称", 400);
   if (!payload.paperType) return fail(res, "请选择试卷类型", 400);
   const publishError = validateMockExamPaperPublish({ payload, questions: [] });
   if (publishError) return fail(res, publishError, 409);
 
-  const paper = await prisma.mockExamPaper.create({
-    data: payload,
-    include: {
-      series: { select: { id: true, name: true } },
-      questions: {
-        where: { isActive: true },
-        select: { id: true, type: true, score: true },
-      },
-      _count: { select: { records: true, permissions: true, leaderboardEntries: true } },
-    },
-  });
+  const createData = {
+    ...payload,
+    code: await getAvailableMockExamPaperCode({
+      preferredCode: payload.code,
+      paperType: payload.paperType,
+    }),
+  };
+
+  let paper = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      paper = await prisma.mockExamPaper.create({
+        data: createData,
+        include: {
+          series: { select: { id: true, name: true } },
+          questions: {
+            where: { isActive: true },
+            select: { id: true, type: true, score: true },
+          },
+          _count: { select: { records: true, permissions: true, leaderboardEntries: true } },
+        },
+      });
+      break;
+    } catch (error) {
+      if (!isUniqueConstraintError(error, "code") || attempt === 2) {
+        if (isUniqueConstraintError(error, "code")) return fail(res, "试卷编码已存在，请换一个编码后重试", 409);
+        throw error;
+      }
+      createData.code = buildMockExamPaperCode(createData.paperType);
+    }
+  }
 
   await writeAdminAuditLog(req, {
     action: "create_mock_exam_paper",
     entityType: "mock_exam_paper",
     entityId: paper.id,
     entityName: paper.title,
-    detail: payload,
+    detail: createData,
   });
 
   return ok(res, serializeAdminMockExamPaper(paper), "试卷已创建");
