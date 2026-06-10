@@ -979,6 +979,26 @@ const navIndexForPage = (page: string) => {
   return 0;
 };
 
+const AUTH_REQUIRED_PAGES = new Set([
+  "audioDetail",
+  "courseDetail",
+  "questionBankHome",
+  "myQuestionBank",
+  "questionBank",
+  "mockExamHome",
+  "subjectiveGrading",
+  "mockExamRoom",
+  "lawSearch",
+  "lawPractice",
+  "typingPractice",
+  "myProfile",
+  "myNotes",
+  "editProfile",
+  "settings",
+]);
+
+const isPageAuthRequired = (page: string) => AUTH_REQUIRED_PAGES.has(page);
+
 const getDisplayName = (user: LegacyUser | null) => user?.displayName || user?.nickname || "得宝用户";
 const getUserInitial = (user: LegacyUser | null) => getDisplayName(user).trim().slice(0, 1) || "得";
 const USER_AVATAR_ACCEPT = "image/jpeg,image/png,image/webp";
@@ -1160,7 +1180,7 @@ function makeCourseDetail(course: AppCourse) {
 
 /* ══════════════════════ NAV (shared) ══════════════════════ */
 
-function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, themeMode, onToggleTheme }: {
+function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, themeMode, onToggleTheme, onRequestAuth }: {
   activeNav: number;
   setActiveNav: (i: number) => void;
   setPage: (p: string) => void;
@@ -1168,6 +1188,7 @@ function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, them
   studySummary: UserStudySummary;
   themeMode: DebaoThemeMode;
   onToggleTheme: () => void;
+  onRequestAuth: () => void;
 }) {
   const displayName = getDisplayName(currentUser);
   const studyStreak = getStudyStreak(studySummary.heatmapDays);
@@ -1187,7 +1208,7 @@ function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, them
           {navItems.map((item, i) => {
             const NavIcon = navIcons[i] ?? Circle;
             return (
-              <button key={item} onClick={() => { setActiveNav(i); setPage(i === 1 ? "courses" : i === 2 ? "questionBankHome" : i === 3 ? "myProfile" : "home"); }} style={{ padding: "7px 18px", borderRadius: 9, fontSize: 13, border: "none", cursor: "pointer", background: activeNav === i ? "rgba(201,151,62,0.1)" : "transparent", color: activeNav === i ? "#c9973e" : "#5a7898", fontWeight: activeNav === i ? 600 : 400, transition: "all 0.15s" }}>
+              <button key={item} onClick={() => { setPage(i === 1 ? "courses" : i === 2 ? "questionBankHome" : i === 3 ? "myProfile" : "home"); }} style={{ padding: "7px 18px", borderRadius: 9, fontSize: 13, border: "none", cursor: "pointer", background: activeNav === i ? "rgba(201,151,62,0.1)" : "transparent", color: activeNav === i ? "#c9973e" : "#5a7898", fontWeight: activeNav === i ? 600 : 400, transition: "all 0.15s" }}>
                 <span className="debao-nav-tab-icon"><NavIcon size={20} /></span>
                 <span className="debao-nav-tab-label">{item}</span>
               </button>
@@ -1213,23 +1234,43 @@ function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, them
             <Bell size={16} />
             <span style={{ position: "absolute", top: 7, right: 7, width: 6, height: 6, borderRadius: "50%", background: "#f76e6e", border: "1.5px solid #090e1a" }} />
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, paddingLeft: 14, borderLeft: "1px solid rgba(255,255,255,0.07)" }}>
-            <div style={{ position: "relative" }}>
-              <UserAvatar user={currentUser} size={36} fontSize={14} />
-              <div style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%", background: "#1dc9a4", border: "2px solid #090e1a" }} />
+          {currentUser ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, paddingLeft: 14, borderLeft: "1px solid rgba(255,255,255,0.07)" }}>
+              <div style={{ position: "relative" }}>
+                <UserAvatar user={currentUser} size={36} fontSize={14} />
+                <div style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%", background: "#1dc9a4", border: "2px solid #090e1a" }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 13, color: "#c8d8ee", fontWeight: 600 }}>{displayName}</div>
+                <div style={{ fontSize: 10, color: "#3a5570" }}>{maskPhone(currentUser?.phone)}</div>
+              </div>
             </div>
-            <div>
-              <div style={{ fontSize: 13, color: "#c8d8ee", fontWeight: 600 }}>{displayName}</div>
-              <div style={{ fontSize: 10, color: "#3a5570" }}>{maskPhone(currentUser?.phone)}</div>
-            </div>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onRequestAuth}
+              style={{ padding: "8px 15px", borderRadius: 10, border: "1px solid rgba(201,151,62,0.32)", background: "rgba(201,151,62,0.12)", color: "#e8c46a", cursor: "pointer", fontSize: 13, fontWeight: 800 }}
+            >
+              登录 / 注册
+            </button>
+          )}
         </div>
       </div>
     </header>
   );
 }
 
-function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyUser) => void; notify: Notify }) {
+function AuthPage({
+  onAuthenticated,
+  notify,
+  variant = "page",
+  onClose,
+}: {
+  onAuthenticated: (user: LegacyUser) => void;
+  notify: Notify;
+  variant?: "page" | "modal";
+  onClose?: () => void;
+}) {
   const [mode, setMode] = useState<AuthMode>("login");
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("password");
   const [phone, setPhone] = useState("");
@@ -1251,6 +1292,7 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
 
   const title = mode === "register" ? "注册得宝账号" : "登录得宝";
   const subtitle = mode === "register" ? "使用手机号创建得宝账号，注册后会自动进入学习中心。" : "使用手机号和密码登录得宝，继续学习课程、题库和模考。";
+  const isModal = variant === "modal";
 
   useEffect(() => {
     if (smsCountdown <= 0) return;
@@ -1365,8 +1407,31 @@ function AuthPage({ onAuthenticated, notify }: { onAuthenticated: (user: LegacyU
   };
 
   return (
-    <div className="debao-auth-page debao-themed-page" style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: "radial-gradient(circle at 20% 15%,rgba(78,142,247,0.16),transparent 28%),radial-gradient(circle at 80% 20%,rgba(29,201,164,0.12),transparent 26%),#090e1a" }}>
-      <div style={{ width: "100%", maxWidth: 430, background: "#0f1826", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: "28px 30px", boxShadow: "0 22px 70px rgba(0,0,0,0.35)" }}>
+    <div
+      className="debao-auth-page debao-themed-page"
+      style={{
+        minHeight: isModal ? "auto" : "100vh",
+        position: isModal ? "fixed" : "static",
+        inset: isModal ? 0 : undefined,
+        zIndex: isModal ? 140 : undefined,
+        display: "grid",
+        placeItems: "center",
+        padding: isModal ? 18 : 24,
+        background: isModal ? "rgba(3,7,18,0.72)" : "radial-gradient(circle at 20% 15%,rgba(78,142,247,0.16),transparent 28%),radial-gradient(circle at 80% 20%,rgba(29,201,164,0.12),transparent 26%),#090e1a",
+        backdropFilter: isModal ? "blur(16px)" : undefined,
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 430, maxHeight: isModal ? "calc(100vh - 36px)" : undefined, overflowY: isModal ? "auto" : undefined, position: "relative", background: "#0f1826", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: "28px 30px", boxShadow: "0 22px 70px rgba(0,0,0,0.35)" }}>
+        {isModal && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭登录弹窗"
+            style={{ position: "absolute", top: 14, right: 14, width: 32, height: 32, borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#8fa3be", cursor: "pointer", display: "grid", placeItems: "center" }}
+          >
+            <X size={16} />
+          </button>
+        )}
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
           <AppLogo className="debao-auth-logo" />
         </div>
@@ -1538,8 +1603,8 @@ function HomePage({
   const diagnosisText = studySummary.stats.totalPracticeCount > 0
     ? `已完成 ${formatCount(studySummary.stats.totalPracticeCount)} 题，错题 ${formatCount(studySummary.stats.wrongCount)} 道，收藏 ${formatCount(studySummary.stats.bookmarkedCount)} 道。`
     : "完成练习后，这里会根据练习记录提示错题和收藏复习重点。";
-  const goQuestionBank = () => { setPage("questionBankHome"); setActiveNav(2); };
-  const goSubjective = () => { setPage("subjectiveGrading"); setActiveNav(2); };
+  const goQuestionBank = () => { setPage("questionBankHome"); };
+  const goSubjective = () => { setPage("subjectiveGrading"); };
   const openBannerTarget = (target = "", targetType: "link" | "image" = "link", imageUrl = "") => {
     const normalizedTarget = (targetType === "image" ? imageUrl || target : target).trim();
     if (!normalizedTarget) return;
@@ -1569,13 +1634,13 @@ function HomePage({
     setBannerIdx((current) => (current + direction + visibleMemberBanners.length) % visibleMemberBanners.length);
   };
   const openModule = (title: string, page?: string) => {
-    if (page === "courses") { setPage("courses"); setActiveNav(1); return; }
+    if (page === "courses") { setPage("courses"); return; }
     if (title === "题库") { goQuestionBank(); return; }
     if (title === "进入主观批改") { goSubjective(); return; }
-    if (title === "客观题模考") { setPage("mockExamHome"); setActiveNav(2); return; }
-    if (title === "主观法条检索") { setPage("lawSearch"); setActiveNav(2); return; }
-    if (title === "法条练习") { setPage("lawPractice"); setActiveNav(2); return; }
-    if (title === "打字练习") { setPage("typingPractice"); setActiveNav(2); return; }
+    if (title === "客观题模考") { setPage("mockExamHome"); return; }
+    if (title === "主观法条检索") { setPage("lawSearch"); return; }
+    if (title === "法条练习") { setPage("lawPractice"); return; }
+    if (title === "打字练习") { setPage("typingPractice"); return; }
   };
 
   useEffect(() => {
@@ -1727,7 +1792,7 @@ function HomePage({
               <h2 style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 16, fontWeight: 600, color: "#dde4f0" }}>继续学习</h2>
               <span style={{ fontSize: 11, color: "#2e4260", fontFamily: "'JetBrains Mono',monospace" }}>{activeHomeCourses.length} 门进行中</span>
             </div>
-            <button onClick={() => { setPage("courses"); setActiveNav(1); }} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#4e8ef7", background: "none", border: "none", cursor: "pointer", opacity: 0.85 }}>全部课程 <ChevronRight size={12} /></button>
+            <button onClick={() => { setPage("courses"); }} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#4e8ef7", background: "none", border: "none", cursor: "pointer", opacity: 0.85 }}>全部课程 <ChevronRight size={12} /></button>
 
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
@@ -8832,6 +8897,27 @@ function ImageTargetPreviewPage() {
   );
 }
 
+function GuestFeatureGate({ onLogin }: { onLogin: () => void }) {
+  return (
+    <div className="debao-guest-feature-gate debao-themed-page" style={{ maxWidth: 760, margin: "0 auto", padding: "88px 32px", textAlign: "center" }}>
+      <div style={{ width: 62, height: 62, borderRadius: 18, margin: "0 auto 18px", background: "rgba(201,151,62,0.14)", border: "1px solid rgba(201,151,62,0.28)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <UserRound size={26} color="#e8c46a" />
+      </div>
+      <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 22, fontWeight: 800, color: "#f0e6d0", marginBottom: 8 }}>登录后继续使用</div>
+      <div style={{ fontSize: 14, color: "#5a7898", lineHeight: 1.9, marginBottom: 24 }}>
+        课程学习、题库练习、机考记录和个人学习数据需要绑定账号后保存。
+      </div>
+      <button
+        type="button"
+        onClick={onLogin}
+        style={{ padding: "12px 28px", borderRadius: 12, border: "none", background: "linear-gradient(90deg,#c9973e,#e8c46a)", color: "#090e1a", cursor: "pointer", fontSize: 14, fontWeight: 900 }}
+      >
+        登录 / 注册
+      </button>
+    </div>
+  );
+}
+
 function DebaoAppShell() {
   const [locationPath, setLocationPath] = useState(() => (typeof window !== "undefined" ? window.location.pathname : "/"));
   const initialPage = pathToPage(locationPath);
@@ -8843,6 +8929,8 @@ function DebaoAppShell() {
   const [page, setPageState] = useState(initialPage);
   const [currentUser, setCurrentUser] = useState<LegacyUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const pendingAuthActionRef = useRef<(() => void) | null>(null);
   const [courses, setCourses] = useState<AppCourse[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<AppCourse | null>(null);
@@ -8881,7 +8969,12 @@ function DebaoAppShell() {
     setThemeMode(current => current === "light" ? "dark" : "light");
   };
 
-  const setPage = (nextPage: string) => {
+  const requestAuth = (afterLogin?: () => void) => {
+    pendingAuthActionRef.current = afterLogin ?? null;
+    setAuthModalOpen(true);
+  };
+
+  const applyPage = (nextPage: string) => {
     if (nextPage === "mockExamHome") setMockExamMode("objective");
     if (nextPage === "subjectiveGrading") setMockExamMode("subjective");
     setMyQuestionBankPaperType(null);
@@ -8897,12 +8990,20 @@ function DebaoAppShell() {
     setLocationPath(window.location.pathname);
   };
 
-  const navigateToPath = (nextPath: string, state: Record<string, unknown> = {}) => {
+  const setPage = (nextPage: string) => {
+    if (!currentUser && isPageAuthRequired(nextPage)) {
+      requestAuth(() => applyPage(nextPage));
+      return;
+    }
+    applyPage(nextPage);
+  };
+
+  const applyPath = (nextPath: string, state: Record<string, unknown> = {}) => {
     if (typeof window === "undefined") return;
+    const nextPage = pathToPage(nextPath);
     if (window.location.pathname !== nextPath) {
       window.history.pushState(state, "", nextPath);
     }
-    const nextPage = pathToPage(nextPath);
     if (nextPage === "myQuestionBank") {
       const paperTypeParam = new URLSearchParams(window.location.search).get("paperType");
       setMyQuestionBankPaperType(paperTypeParam === "objective" || paperTypeParam === "subjective" ? paperTypeParam : null);
@@ -8912,6 +9013,15 @@ function DebaoAppShell() {
     setLocationPath(nextPath);
     setPageState(nextPage);
     setActiveNav(navIndexForPage(nextPage));
+  };
+
+  const navigateToPath = (nextPath: string, state: Record<string, unknown> = {}) => {
+    const nextPage = pathToPage(nextPath);
+    if (!currentUser && isPageAuthRequired(nextPage)) {
+      requestAuth(() => applyPath(nextPath, state));
+      return;
+    }
+    applyPath(nextPath, state);
   };
 
   useEffect(() => {
@@ -8971,6 +9081,7 @@ function DebaoAppShell() {
       setCurrentUser(null);
       setCourses([]);
       setPage("home");
+      setAuthModalOpen(true);
       notify("登录已过期，请重新登录", "warning");
     };
 
@@ -9015,10 +9126,21 @@ function DebaoAppShell() {
     };
   }, []);
 
+  useEffect(() => {
+    if (checkingAuth || currentUser) return;
+    if (isPageAuthRequired(page) || myExamRecordRoute) {
+      setAuthModalOpen(true);
+    }
+  }, [checkingAuth, currentUser, page, myExamRecordRoute]);
+
   const handleAuthenticated = (user: LegacyUser) => {
     setCurrentUser(user);
-    setPage("home");
-    setActiveNav(0);
+    setAuthModalOpen(false);
+    const pendingAction = pendingAuthActionRef.current;
+    pendingAuthActionRef.current = null;
+    if (pendingAction) {
+      window.setTimeout(pendingAction, 0);
+    }
   };
 
   const handleLogout = async () => {
@@ -9147,7 +9269,7 @@ function DebaoAppShell() {
     };
   }, [currentUser]);
 
-  const goToCourse = (course: AppCourse) => {
+  const openCourseDirectly = (course: AppCourse) => {
     setSelectedCourse(course);
     setRouteCourseAccess({ status: "idle" });
     const nextPage = course.type === "audio" ? "audioDetail" : "courseDetail";
@@ -9158,7 +9280,15 @@ function DebaoAppShell() {
     }
   };
 
-  const startQuestionPractice = (
+  const goToCourse = (course: AppCourse) => {
+    if (!currentUser) {
+      requestAuth(() => openCourseDirectly(course));
+      return;
+    }
+    openCourseDirectly(course);
+  };
+
+  const startQuestionPracticeDirectly = (
     mode: QuestionPracticeModeLabel = "顺序练习",
     chapter: QuestionPracticeTarget = null,
   ) => {
@@ -9174,7 +9304,18 @@ function DebaoAppShell() {
     }
   };
 
-  const openMyQuestionBank = (paperType: "objective" | "subjective") => {
+  const startQuestionPractice = (
+    mode: QuestionPracticeModeLabel = "顺序练习",
+    chapter: QuestionPracticeTarget = null,
+  ) => {
+    if (!currentUser) {
+      requestAuth(() => startQuestionPracticeDirectly(mode, chapter));
+      return;
+    }
+    startQuestionPracticeDirectly(mode, chapter);
+  };
+
+  const openMyQuestionBankDirectly = (paperType: "objective" | "subjective") => {
     setMyQuestionBankPaperType(paperType);
     setPageState("myQuestionBank");
     setActiveNav(2);
@@ -9185,7 +9326,15 @@ function DebaoAppShell() {
     }
   };
 
-  const openMockExamRoom = (target: MockExamSessionTarget) => {
+  const openMyQuestionBank = (paperType: "objective" | "subjective") => {
+    if (!currentUser) {
+      requestAuth(() => openMyQuestionBankDirectly(paperType));
+      return;
+    }
+    openMyQuestionBankDirectly(paperType);
+  };
+
+  const openMockExamRoomDirectly = (target: MockExamSessionTarget) => {
     const nextTarget = target?.mode ? target : { ...(target ?? {}), mode: mockExamMode };
     setSelectedMockExamTarget(nextTarget);
     setMockExamMode(nextTarget?.mode ?? mockExamMode);
@@ -9196,17 +9345,33 @@ function DebaoAppShell() {
     }
   };
 
+  const openMockExamRoom = (target: MockExamSessionTarget) => {
+    if (!currentUser) {
+      requestAuth(() => openMockExamRoomDirectly(target));
+      return;
+    }
+    openMockExamRoomDirectly(target);
+  };
+
+  const authBlocked = !currentUser && (isPageAuthRequired(page) || Boolean(myExamRecordRoute));
+  const showMainNav =
+    authBlocked ||
+    (page !== "mockExamRoom" &&
+      page !== "typingPractice" &&
+      page !== "lawPractice" &&
+      !(page === "questionBank" && selectedQuestionChapter?.layout === "officialSubjective"));
+
   return (
     <div className={`debao-app-shell debao-theme-${themeMode}`} data-theme={themeMode} style={{ minHeight: "100vh", background: "#090e1a", fontFamily: "'Noto Sans SC',sans-serif", color: "#dde4f0" }}>
       <Toast toast={toast} />
       {checkingAuth ? (
         <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#5a7898", fontSize: 14 }}>正在校验得宝登录态...</div>
-      ) : !currentUser ? (
-        <AuthPage onAuthenticated={handleAuthenticated} notify={notify} />
       ) : (
       <div className="debao-app-content">
-      {page !== "mockExamRoom" && page !== "typingPractice" && page !== "lawPractice" && !(page === "questionBank" && selectedQuestionChapter?.layout === "officialSubjective") && <Nav activeNav={activeNav} setActiveNav={setActiveNav} setPage={setPage} currentUser={currentUser} studySummary={studySummary} themeMode={themeMode} onToggleTheme={toggleThemeMode} />}
-      {desktopOnlyFeature
+      {showMainNav && <Nav activeNav={activeNav} setActiveNav={setActiveNav} setPage={setPage} currentUser={currentUser} studySummary={studySummary} themeMode={themeMode} onToggleTheme={toggleThemeMode} onRequestAuth={() => requestAuth()} />}
+      {authBlocked
+        ? <GuestFeatureGate onLogin={() => requestAuth()} />
+        : desktopOnlyFeature
         ? <DesktopOnlyNotice feature={desktopOnlyFeature} backLabel="返回首页" onBack={() => setPage("home")} />
         : myExamRecordRoute
         ? <DebaoMyExamRecordPage
@@ -9255,6 +9420,7 @@ function DebaoAppShell() {
         : page === "settings"
         ? <SettingsPage setPage={setPage} notify={notify} onLogout={handleLogout} currentUser={currentUser} />
         : <HomePage setPage={setPage} setActiveNav={setActiveNav} goToCourse={goToCourse} notify={notify} courses={courses} homeConfig={homeConfig} studySummary={studySummary} loadingStudySummary={loadingStudySummary} />}
+      {authModalOpen && <AuthPage variant="modal" onAuthenticated={handleAuthenticated} notify={notify} onClose={() => { pendingAuthActionRef.current = null; setAuthModalOpen(false); }} />}
       </div>
       )}
     </div>
