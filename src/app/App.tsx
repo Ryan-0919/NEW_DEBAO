@@ -1417,8 +1417,8 @@ function AuthPage({
         display: "grid",
         placeItems: "center",
         padding: isModal ? 18 : 24,
-        background: isModal ? "rgba(3,7,18,0.72)" : "radial-gradient(circle at 20% 15%,rgba(78,142,247,0.16),transparent 28%),radial-gradient(circle at 80% 20%,rgba(29,201,164,0.12),transparent 26%),#090e1a",
-        backdropFilter: isModal ? "blur(16px)" : undefined,
+        background: isModal ? "transparent" : "radial-gradient(circle at 20% 15%,rgba(78,142,247,0.16),transparent 28%),radial-gradient(circle at 80% 20%,rgba(29,201,164,0.12),transparent 26%),#090e1a",
+        backdropFilter: undefined,
       }}
     >
       <div style={{ width: "100%", maxWidth: 430, maxHeight: isModal ? "calc(100vh - 36px)" : undefined, overflowY: isModal ? "auto" : undefined, position: "relative", background: "#0f1826", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: "28px 30px", boxShadow: "0 22px 70px rgba(0,0,0,0.35)" }}>
