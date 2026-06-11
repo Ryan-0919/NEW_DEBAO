@@ -7143,7 +7143,7 @@ function MyProfilePage({
             return { label: "不参与批改", color: "#8fa3be", background: "rgba(143,163,190,0.1)", border: "rgba(143,163,190,0.18)" };
           }
           if (record.reviewStatus === "ai_processing") {
-            return { label: "AI批改中", color: "#f7a94e", background: "rgba(247,169,78,0.12)", border: "rgba(247,169,78,0.24)" };
+            return { label: "老师正在批改", color: "#f7a94e", background: "rgba(247,169,78,0.12)", border: "rgba(247,169,78,0.24)" };
           }
           if (record.reviewStatus === "manual_pending") {
             return { label: "待老师批改", color: "#f7a94e", background: "rgba(247,169,78,0.12)", border: "rgba(247,169,78,0.24)" };
