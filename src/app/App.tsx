@@ -1074,6 +1074,7 @@ const formatDateOnly = (value: string | null | undefined) => {
   if (!value) return "-";
   return value.includes(" ") ? value.split(" ")[0] : value.slice(0, 10);
 };
+const getCountdownDays = (date: Date) => Math.max(0, Math.ceil((date.getTime() - Date.now()) / 86400000));
 const getStudyStreak = (days: { date: string; count: number }[]) => {
   const activeDates = new Set(days.filter(day => Number(day.count ?? 0) > 0).map(day => day.date.slice(0, 10)));
   let cursor = new Date();
@@ -1180,19 +1181,48 @@ function makeCourseDetail(course: AppCourse) {
 
 /* ══════════════════════ NAV (shared) ══════════════════════ */
 
-function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, themeMode, onToggleTheme, onRequestAuth }: {
+function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, homeConfig, themeMode, onToggleTheme, onRequestAuth }: {
   activeNav: number;
   setActiveNav: (i: number) => void;
   setPage: (p: string) => void;
   currentUser: LegacyUser | null;
   studySummary: UserStudySummary;
+  homeConfig: UserHomeConfig;
   themeMode: DebaoThemeMode;
   onToggleTheme: () => void;
   onRequestAuth: () => void;
 }) {
   const displayName = getDisplayName(currentUser);
-  const studyStreak = getStudyStreak(studySummary.heatmapDays);
   const isLightTheme = themeMode === "light";
+  const [countdownIndex, setCountdownIndex] = useState(0);
+  const objectiveCountdownConfig = homeConfig.examCountdown?.objective ?? EMPTY_USER_HOME_CONFIG.examCountdown?.objective;
+  const subjectiveCountdownConfig = homeConfig.examCountdown?.subjective ?? EMPTY_USER_HOME_CONFIG.examCountdown?.subjective;
+  const countdownItems = [
+    {
+      key: "objective",
+      label: "客观题倒计时",
+      days: getCountdownDays(parseCountdownDate(objectiveCountdownConfig?.targetDate, "2026-09-13")),
+      color: "#f76e6e",
+      background: "rgba(247,110,110,0.08)",
+      border: "rgba(247,110,110,0.18)",
+    },
+    {
+      key: "subjective",
+      label: "主观题倒计时",
+      days: getCountdownDays(parseCountdownDate(subjectiveCountdownConfig?.targetDate, "2026-10-11")),
+      color: "#1dc9a4",
+      background: "rgba(29,201,164,0.08)",
+      border: "rgba(29,201,164,0.18)",
+    },
+  ];
+  const activeCountdown = countdownItems[countdownIndex % countdownItems.length];
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCountdownIndex((current) => (current + 1) % countdownItems.length);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [countdownItems.length]);
 
   return (
     <header className="debao-nav-shell" style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(7,12,24,0.96)", backdropFilter: "blur(24px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
@@ -1226,9 +1256,15 @@ function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, them
             {isLightTheme ? <Moon size={15} /> : <Sun size={15} />}
             <span>{isLightTheme ? "黑夜" : "白天"}</span>
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 13px", borderRadius: 20, background: "rgba(247,110,110,0.08)", border: "1px solid rgba(247,110,110,0.18)" }}>
-            <Flame size={13} color="#f76e6e" />
-            <span style={{ fontSize: 12, color: "#f76e6e", fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{studyStreak}天连续</span>
+          <div
+            className="debao-nav-exam-countdown"
+            title={`${activeCountdown.label} ${activeCountdown.days} 天`}
+            style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 13px", borderRadius: 20, background: activeCountdown.background, border: `1px solid ${activeCountdown.border}`, minWidth: 126, justifyContent: "center", transition: "all 0.25s ease" }}
+          >
+            <Flame size={13} color={activeCountdown.color} />
+            <span style={{ fontSize: 12, color: activeCountdown.color, fontWeight: 700, whiteSpace: "nowrap" }}>
+              {activeCountdown.label}{activeCountdown.days}天
+            </span>
           </div>
           <button style={{ position: "relative", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 9, cursor: "pointer", color: "#5e7898", padding: "7px 9px", display: "flex", alignItems: "center" }}>
             <Bell size={16} />
@@ -9347,7 +9383,7 @@ function DebaoAppShell() {
         <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#5a7898", fontSize: 14 }}>正在校验得宝登录态...</div>
       ) : (
       <div className="debao-app-content">
-      {showMainNav && <Nav activeNav={activeNav} setActiveNav={setActiveNav} setPage={setPage} currentUser={currentUser} studySummary={studySummary} themeMode={themeMode} onToggleTheme={toggleThemeMode} onRequestAuth={() => requestAuth()} />}
+      {showMainNav && <Nav activeNav={activeNav} setActiveNav={setActiveNav} setPage={setPage} currentUser={currentUser} studySummary={studySummary} homeConfig={homeConfig} themeMode={themeMode} onToggleTheme={toggleThemeMode} onRequestAuth={() => requestAuth()} />}
       {authBlocked
         ? <HomePage setPage={setPage} setActiveNav={setActiveNav} goToCourse={goToCourse} notify={notify} courses={courses} homeConfig={homeConfig} studySummary={studySummary} loadingStudySummary={loadingStudySummary} />
         : desktopOnlyFeature
