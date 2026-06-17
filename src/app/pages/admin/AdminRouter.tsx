@@ -20,6 +20,7 @@ import { MockExamRecordManagement } from "./MockExamRecordManagement";
 import { MockExamReviewManagement } from "./MockExamReviewManagement";
 import { QuestionBankManagement } from "./QuestionBankManagement";
 import { QuestionLibraryManagement } from "./QuestionLibraryManagement";
+import { ShopManagement } from "./ShopManagement";
 import { SystemConfigManagement } from "./SystemConfigManagement";
 import { SystemLogs } from "./SystemLogs";
 import { TypingPracticeManagement } from "./TypingPracticeManagement";
@@ -84,6 +85,10 @@ export function AdminRouter() {
     pageTitle = "首页 Banner 管理";
     pageDescription = "维护用户首页顶部横幅图、标题和描述";
     content = <HomeBannerManagement />;
+  } else if (pathname.startsWith("/admin/shop")) {
+    pageTitle = "商城与支付";
+    pageDescription = "维护课程商品、支付宝收款和订单记录";
+    content = <ShopManagement />;
   } else if (pathname.startsWith("/admin/learning-announcements")) {
     pageTitle = "学习公告管理";
     pageDescription = "维护用户首页学习公告，保存后前端通过真实接口展示";

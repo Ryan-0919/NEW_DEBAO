@@ -9,6 +9,7 @@ generated/
 .env
 .env.*
 !.env.example
+secrets/
 
 # Logs
 *.log

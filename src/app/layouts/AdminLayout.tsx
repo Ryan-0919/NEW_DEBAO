@@ -19,6 +19,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  ShoppingBag,
   UserCog,
   Users,
   Video,
@@ -95,6 +96,12 @@ const navGroups = [
       { href: "/admin/learning-announcements", label: "学习公告管理", icon: Bell, roles: "system" },
       { href: "/admin/settings", label: "系统门户配置", icon: Settings, roles: "system" },
       { href: "/admin/logs", label: "系统日志", icon: ScrollText, roles: "system" },
+    ],
+  },
+  {
+    label: "商城支付",
+    items: [
+      { href: "/admin/shop", label: "商城与支付", icon: ShoppingBag, roles: "system" },
     ],
   },
 ] as const;

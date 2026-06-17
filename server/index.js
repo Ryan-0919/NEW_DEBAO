@@ -26,6 +26,9 @@ import { adminLawPracticeRouter } from "./routes/admin-law-practice.js";
 import { lawPracticeUserRouter } from "./routes/law-practice-user.js";
 import { typingPracticeAdminRouter } from "./routes/typing-practice-admin.js";
 import { typingPracticeUserRouter } from "./routes/typing-practice-user.js";
+import { shopUserRouter } from "./routes/shop-user.js";
+import { shopPaymentRouter } from "./routes/shop-payment.js";
+import { adminShopRouter } from "./routes/admin-shop.js";
 
 const app = express();
 app.set("trust proxy", true);
@@ -84,12 +87,15 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/shop/payments", shopPaymentRouter);
+app.use("/api/shop", shopUserRouter);
 app.use("/api/user/laws", lawUserRouter);
 app.use("/api/user/law-practice", lawPracticeUserRouter);
 app.use("/api/user/typing-practice", typingPracticeUserRouter);
 app.use("/api/admin/laws", lawAdminRouter);
 app.use("/api/admin/law-practice", adminLawPracticeRouter);
 app.use("/api/admin/typing-practice", typingPracticeAdminRouter);
+app.use("/api/admin/shop", adminShopRouter);
 app.use("/api/admin/mock-exam-reviews", adminMockExamReviewRouter);
 app.use("/api/admin/ai-review/monitor", adminAiReviewMonitorRouter);
 app.use("/api/admin/ai-review-v2", adminAiReviewV2PerformanceRouter);

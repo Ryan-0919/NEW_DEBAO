@@ -11,6 +11,7 @@ import {
   SkipBack, AlignLeft, Paperclip, ListVideo,
   Bookmark, Flag, RotateCcw, CheckCheck, X, Shuffle, Trash2,
   ListFilter, Circle, Menu, House, UserRound, Moon, Sun, QrCode,
+  ShoppingBag, CreditCard, PackageCheck,
 } from "lucide-react";
 import { ApiRequestError, USER_SESSION_EXPIRED_EVENT } from "./services/apiClient";
 import { courseService } from "./services/courseService";
@@ -49,6 +50,8 @@ import {
 } from "./services/session";
 import { userService } from "./services/userService";
 import type { LegacyUser, UserStudySummary } from "./services/userService";
+import { shopService } from "./services/shopService";
+import type { ShopConfig, ShopOrder, ShopProduct } from "./services/shopService";
 import { mockApi, type UserHomeConfig } from "./lib/mockData";
 import { AppLogo } from "./components/branding/AppLogo";
 
@@ -863,6 +866,8 @@ const pageToPath: Record<string, string> = {
   courses: "/courses",
   audioDetail: "/courses/audio",
   courseDetail: "/courses/video",
+  shop: "/shop",
+  shopOrder: "/shop/orders",
   questionBankHome: "/question-bank",
   myQuestionBank: "/question-bank/my",
   questionBank: "/question-bank/practice",
@@ -892,6 +897,8 @@ const pathToPage = (pathname: string) => {
   if (pathname.startsWith("/courses/video")) return "courseDetail";
   if (pathname.startsWith("/courses/")) return "courseDetail";
   if (pathname === "/courses") return "courses";
+  if (pathname.startsWith("/shop/orders/")) return "shopOrder";
+  if (pathname.startsWith("/shop")) return "shop";
   if (pathname.startsWith("/question-bank/my")) return "myQuestionBank";
   if (pathname.startsWith("/question-bank/practice")) return "questionBank";
   if (pathname.startsWith("/question-bank")) return "questionBankHome";
@@ -922,6 +929,11 @@ const getRouteCourseIdFromPath = (pathname: string) => {
 const getRouteCourseId = () => {
   if (typeof window === "undefined") return null;
   return getRouteCourseIdFromPath(window.location.pathname);
+};
+
+const getRouteShopOrderIdFromPath = (pathname: string) => {
+  const match = pathname.match(/^\/shop\/orders\/([^/]+)(?:\/result)?\/?$/);
+  return match ? decodeURIComponent(match[1]) : null;
 };
 
 const getRouteMockExamTarget = (): MockExamSessionTarget => {
@@ -973,7 +985,7 @@ const buildMockExamRoomPath = (target: MockExamSessionTarget) => {
 };
 
 const navIndexForPage = (page: string) => {
-  if (page === "courses" || page === "audioDetail" || page === "courseDetail") return 1;
+  if (page === "courses" || page === "audioDetail" || page === "courseDetail" || page === "shop" || page === "shopOrder") return 1;
   if (page === "questionBankHome" || page === "myQuestionBank" || page === "questionBank" || page === "mockExamHome" || page === "subjectiveGrading" || page === "mockExamRoom" || page === "lawSearch" || page === "lawPractice" || page === "typingPractice") return 2;
   if (page === "myProfile" || page === "myNotes" || page === "editProfile" || page === "settings") return 3;
   return 0;
@@ -982,6 +994,8 @@ const navIndexForPage = (page: string) => {
 const AUTH_REQUIRED_PAGES = new Set([
   "audioDetail",
   "courseDetail",
+  "shop",
+  "shopOrder",
   "questionBankHome",
   "myQuestionBank",
   "questionBank",
@@ -1994,6 +2008,14 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
             <h1 style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 26, fontWeight: 700, color: "#dde4f0", marginBottom: 6 }}>课程学习</h1>
             <p style={{ fontSize: 13, color: "#3a5570" }}>系统备考 · 名师精讲 · 配套题库 · 随时回看</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setPage("shop")}
+            style={{ marginLeft: "auto", marginRight: 14, height: 38, padding: "0 16px", borderRadius: 10, border: "1px solid rgba(201,151,62,0.32)", background: "rgba(201,151,62,0.12)", color: "#e8c46a", cursor: "pointer", fontSize: 13, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 7 }}
+          >
+            <ShoppingBag size={15} />
+            购买课程
+          </button>
           {/* Search */}
           <div className="debao-courses-search" style={{ position: "relative" }}>
             <Search size={14} color="#3a5570" style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)" }} />
@@ -2063,6 +2085,9 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
           <BookOpen size={42} color="#1e3050" style={{ margin: "0 auto 16px" }} />
           <div style={{ fontSize: 15, color: "#5a7898", marginBottom: 6 }}>当前账号还没有开通课程</div>
           <div style={{ fontSize: 12, color: "#2e4260", lineHeight: 1.8 }}>给用户开通课程后，这里会自动显示可学习内容。</div>
+          <button onClick={() => setPage("shop")} style={{ marginTop: 18, padding: "10px 18px", borderRadius: 10, border: "1px solid rgba(201,151,62,0.32)", background: "rgba(201,151,62,0.12)", color: "#e8c46a", cursor: "pointer", fontSize: 13, fontWeight: 800 }}>
+            去购买课程
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <div className="debao-courses-empty" style={{ textAlign: "center", padding: "80px 0", color: "#2e4260" }}>
@@ -2141,6 +2166,298 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const shopOrderStatusLabel: Record<string, string> = {
+  pending_payment: "待支付",
+  paid: "已支付",
+  partially_fulfilled: "部分交付",
+  completed: "已完成",
+  cancelled: "已取消",
+  refunding: "退款中",
+  refunded: "已退款",
+};
+
+function submitAlipayForm(formHtml: string) {
+  if (typeof document === "undefined") return;
+  const paymentWindow = window.open("", "_blank");
+  if (!paymentWindow) {
+    const container = document.createElement("div");
+    container.style.display = "none";
+    container.innerHTML = formHtml;
+    document.body.appendChild(container);
+    const form = container.querySelector("form") as HTMLFormElement | null;
+    form?.submit();
+    window.setTimeout(() => container.remove(), 1000);
+    return;
+  }
+  paymentWindow.document.open();
+  paymentWindow.document.write(formHtml);
+  paymentWindow.document.close();
+}
+
+function ShopPage({ setPage, notify, onOrderCreated }: { setPage: (p: string) => void; notify: Notify; onOrderCreated: (order: ShopOrder) => void }) {
+  const [products, setProducts] = useState<ShopProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submittingProductId, setSubmittingProductId] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    shopService
+      .getProducts()
+      .then((payload) => {
+        if (active) setProducts(payload);
+      })
+      .catch((error) => {
+        notify(error instanceof Error ? `商品加载失败：${error.message}` : "商品加载失败", "warning");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const createOrder = async (product: ShopProduct) => {
+    const sku = product.sku ?? product.skus.find((item) => item.status);
+    if (!sku) {
+      notify("当前商品暂未配置可购买规格", "warning");
+      return;
+    }
+    if (sku.stock <= 0) {
+      notify("当前商品库存不足，请联系教务老师", "warning");
+      return;
+    }
+
+    setSubmittingProductId(product.id);
+    try {
+      const order = await shopService.createOrder({ productId: product.id, skuId: sku.id, quantity: 1 });
+      notify("订单已创建，请继续支付", "success");
+      onOrderCreated(order);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "创建订单失败", "warning");
+    } finally {
+      setSubmittingProductId("");
+    }
+  };
+
+  return (
+    <div className="debao-shop-page debao-themed-page" style={{ maxWidth: 1180, margin: "0 auto", padding: "34px 36px 60px" }}>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 18, marginBottom: 24 }}>
+        <div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 12px", borderRadius: 999, background: "rgba(201,151,62,0.12)", border: "1px solid rgba(201,151,62,0.26)", color: "#e8c46a", fontSize: 12, fontWeight: 800, marginBottom: 12 }}>
+            <ShoppingBag size={14} />
+            课程购买
+          </div>
+          <h1 style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 28, color: "#dde4f0", marginBottom: 8 }}>得宝课程商城</h1>
+          <p style={{ fontSize: 13, color: "#5a7898", lineHeight: 1.8 }}>选择需要开通的课程权益，支付成功后系统会自动发放课程权限。</p>
+        </div>
+        <button onClick={() => setPage("courses")} style={{ height: 38, padding: "0 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#8fa3be", cursor: "pointer", fontSize: 13 }}>
+          返回课程
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: "72px 24px", textAlign: "center", borderRadius: 18, background: "#0f1826", border: "1px solid rgba(255,255,255,0.06)", color: "#5a7898" }}>正在读取可购买课程...</div>
+      ) : products.length === 0 ? (
+        <div style={{ padding: "72px 24px", textAlign: "center", borderRadius: 18, background: "#0f1826", border: "1px solid rgba(255,255,255,0.06)", color: "#5a7898" }}>
+          <ShoppingBag size={42} color="#263a5a" style={{ margin: "0 auto 14px" }} />
+          <div style={{ color: "#dde4f0", fontSize: 16, fontWeight: 800, marginBottom: 6 }}>暂无上架商品</div>
+          <div style={{ fontSize: 13 }}>请先在后台商品管理中上架课程商品。</div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 18 }}>
+          {products.map((product) => {
+            const sku = product.sku ?? product.skus[0] ?? null;
+            const submitting = submittingProductId === product.id;
+            return (
+              <article key={product.id} style={{ overflow: "hidden", borderRadius: 20, background: "#0f1826", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 18px 46px rgba(0,0,0,0.22)" }}>
+                <div style={{ height: 148, position: "relative", background: "linear-gradient(135deg,#17233a,#2a1e0a)", display: "grid", placeItems: "center", overflow: "hidden" }}>
+                  {product.coverUrl ? <img src={product.coverUrl} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.55))" }} />
+                  <div style={{ position: "absolute", left: 16, right: 16, bottom: 14, color: "#fff", fontSize: 18, fontWeight: 900, lineHeight: 1.35 }}>{product.name}</div>
+                </div>
+                <div style={{ padding: 18 }}>
+                  <div style={{ minHeight: 44, color: "#8fa3be", fontSize: 13, lineHeight: 1.7 }}>{product.subtitle || product.description || "得恩法考课程权益"}</div>
+                  {product.courseNames.length > 0 ? (
+                    <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {product.courseNames.slice(0, 4).map((name) => (
+                        <span key={name} style={{ padding: "4px 8px", borderRadius: 8, background: "rgba(78,142,247,0.1)", border: "1px solid rgba(78,142,247,0.18)", color: "#8ab4ff", fontSize: 11 }}>{name}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div style={{ marginTop: 18, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 14 }}>
+                    <div>
+                      <div style={{ color: "#f76e6e", fontSize: 26, fontWeight: 900, fontFamily: "'JetBrains Mono',monospace" }}>¥{sku?.price ?? "0.00"}</div>
+                      {sku?.originalPrice ? <div style={{ color: "#3a5570", fontSize: 12, textDecoration: "line-through" }}>¥{sku.originalPrice}</div> : null}
+                    </div>
+                    <button
+                      disabled={submitting}
+                      onClick={() => void createOrder(product)}
+                      style={{ height: 42, padding: "0 18px", borderRadius: 12, border: "none", background: "linear-gradient(90deg,#c9973e,#e8c46a)", color: "#090e1a", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 900, display: "inline-flex", alignItems: "center", gap: 7 }}
+                    >
+                      {submitting ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
+                      立即购买
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ShopOrderPage({ orderId, setPage, notify }: { orderId: string | null; setPage: (p: string) => void; notify: Notify }) {
+  const [order, setOrder] = useState<ShopOrder | null>(null);
+  const [shopConfig, setShopConfig] = useState<ShopConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [paying, setPaying] = useState(false);
+
+  const loadOrder = async () => {
+    if (!orderId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const [nextOrder, nextConfig] = await Promise.all([
+        shopService.getOrder(orderId),
+        shopService.getConfig().catch(() => null),
+      ]);
+      setOrder(nextOrder);
+      setShopConfig(nextConfig);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "订单加载失败", "warning");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadOrder();
+  }, [orderId]);
+
+  const pay = async () => {
+    if (!order) return;
+    setPaying(true);
+    try {
+      const payload = await shopService.payOrder(order.id, { channel: "alipay", scene: "wap" });
+      if ("status" in payload && payload.status === "paid") {
+        setOrder(payload.order);
+        notify("订单已支付", "success");
+        return;
+      }
+      submitAlipayForm(payload.formHtml);
+      notify("已打开支付宝收银台，支付完成后请回到本页刷新状态", "success");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "发起支付失败", "warning");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const mockPay = async () => {
+    if (!order) return;
+    setPaying(true);
+    try {
+      const nextOrder = await shopService.mockPayOrder(order.id);
+      setOrder(nextOrder);
+      notify("模拟支付成功，课程权限已发放", "success");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "模拟支付失败", "warning");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="debao-themed-page" style={{ maxWidth: 880, margin: "0 auto", padding: "90px 36px", color: "#5a7898", textAlign: "center" }}>正在读取订单...</div>;
+  }
+
+  if (!order) {
+    return (
+      <div className="debao-themed-page" style={{ maxWidth: 780, margin: "0 auto", padding: "90px 36px", textAlign: "center" }}>
+        <div style={{ color: "#dde4f0", fontSize: 18, fontWeight: 800, marginBottom: 10 }}>订单不存在</div>
+        <button onClick={() => setPage("shop")} style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid rgba(78,142,247,0.24)", background: "rgba(78,142,247,0.1)", color: "#8ab4ff", cursor: "pointer" }}>返回商城</button>
+      </div>
+    );
+  }
+
+  const paid = order.paymentStatus === "paid";
+  const isMockPaymentMode = shopConfig?.paymentMode === "mock";
+  const canUseAlipay = !isMockPaymentMode && shopConfig?.enableAlipayWap !== false;
+
+  return (
+    <div className="debao-shop-order-page debao-themed-page" style={{ maxWidth: 920, margin: "0 auto", padding: "34px 36px 60px" }}>
+      <button onClick={() => setPage("shop")} style={{ marginBottom: 18, border: "none", background: "transparent", color: "#8ab4ff", cursor: "pointer", fontSize: 13 }}>← 返回商城</button>
+      <section style={{ borderRadius: 22, background: "#0f1826", border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden", boxShadow: "0 24px 70px rgba(0,0,0,0.28)" }}>
+        <div style={{ padding: "24px 26px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18 }}>
+          <div>
+            <div style={{ color: paid ? "#1dc9a4" : "#e8c46a", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 900, marginBottom: 10 }}>
+              {paid ? <PackageCheck size={16} /> : <CreditCard size={16} />}
+              {paid ? "支付成功" : "等待支付"}
+            </div>
+            <h1 style={{ color: "#dde4f0", fontSize: 22, fontWeight: 900, marginBottom: 6 }}>订单 {order.orderNo}</h1>
+            <p style={{ color: "#5a7898", fontSize: 13 }}>创建时间：{order.createdAt}</p>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ color: "#f76e6e", fontSize: 30, fontWeight: 900, fontFamily: "'JetBrains Mono',monospace" }}>¥{order.payAmount}</div>
+            <div style={{ color: "#5a7898", fontSize: 12 }}>{shopOrderStatusLabel[order.status] ?? order.status}</div>
+          </div>
+        </div>
+
+        <div style={{ padding: "22px 26px" }}>
+          <div style={{ display: "grid", gap: 12 }}>
+            {order.items.map((item) => (
+              <div key={item.id} style={{ display: "grid", gridTemplateColumns: "64px 1fr auto", gap: 14, alignItems: "center", padding: 14, borderRadius: 14, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ width: 64, height: 48, borderRadius: 10, background: "linear-gradient(135deg,#2a1e0a,#173152)", overflow: "hidden" }}>
+                  {item.cover ? <img src={item.cover} alt={item.productName} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                </div>
+                <div>
+                  <div style={{ color: "#dde4f0", fontSize: 14, fontWeight: 800 }}>{item.productName}</div>
+                  <div style={{ color: "#5a7898", fontSize: 12, marginTop: 4 }}>数量 x {item.quantity} · 权益 {item.courseIds.length} 门课程</div>
+                </div>
+                <div style={{ color: "#f0d28a", fontWeight: 900 }}>¥{item.price}</div>
+              </div>
+            ))}
+          </div>
+
+          {shopConfig?.paymentGuide ? (
+            <div style={{ marginTop: 18, padding: "12px 14px", borderRadius: 12, background: "rgba(232,196,106,0.08)", border: "1px solid rgba(232,196,106,0.16)", color: "#c9b178", fontSize: 12, lineHeight: 1.8 }}>
+              {shopConfig.paymentGuide}
+            </div>
+          ) : null}
+
+          <div style={{ marginTop: 22, display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 12 }}>
+            <button onClick={() => void loadOrder()} style={{ height: 42, padding: "0 16px", borderRadius: 11, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#8fa3be", cursor: "pointer", fontSize: 13 }}>
+              刷新状态
+            </button>
+            {!paid ? (
+              <>
+                <button disabled={paying} onClick={() => void mockPay()} style={{ display: isMockPaymentMode ? "inline-flex" : "none", height: 42, padding: "0 16px", borderRadius: 11, border: "1px solid rgba(78,142,247,0.24)", background: "rgba(78,142,247,0.1)", color: "#8ab4ff", cursor: paying ? "wait" : "pointer", fontSize: 13, fontWeight: 800 }}>
+                  本地模拟支付
+                </button>
+                <button disabled={paying || !canUseAlipay} onClick={() => void pay()} style={{ height: 42, padding: "0 22px", borderRadius: 11, border: "none", background: canUseAlipay ? "linear-gradient(90deg,#1677ff,#66b1ff)" : "rgba(255,255,255,0.08)", color: canUseAlipay ? "#fff" : "#5a7898", cursor: paying || !canUseAlipay ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 900, display: isMockPaymentMode ? "none" : "inline-flex", alignItems: "center", gap: 7 }}>
+                  {paying ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
+                  支付宝支付
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setPage("courses")} style={{ height: 42, padding: "0 22px", borderRadius: 11, border: "none", background: "linear-gradient(90deg,#c9973e,#e8c46a)", color: "#090e1a", cursor: "pointer", fontSize: 13, fontWeight: 900 }}>
+                去学习课程
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -8971,6 +9288,7 @@ function DebaoAppShell() {
   const [themeMode, setThemeMode] = useState<DebaoThemeMode>(() => getInitialDebaoTheme());
   const isMobileDesktopOnlyBlocked = useMockExamDesktopGuard();
   const routeCourseId = typeof window !== "undefined" ? getRouteCourseIdFromPath(window.location.pathname) : null;
+  const routeShopOrderId = typeof window !== "undefined" ? getRouteShopOrderIdFromPath(window.location.pathname) : null;
   const desktopOnlyFeature = isMobileDesktopOnlyBlocked
     ? getDesktopOnlyFeatureForPage(page, locationPath, selectedQuestionChapter, mockExamMode)
     : null;
@@ -9303,6 +9621,15 @@ function DebaoAppShell() {
     openCourseDirectly(course);
   };
 
+  const openShopOrder = (order: ShopOrder) => {
+    setPageState("shopOrder");
+    setActiveNav(1);
+    if (typeof window !== "undefined") {
+      window.history.pushState({ page: "shopOrder", orderId: order.id }, "", `/shop/orders/${encodeURIComponent(order.id)}`);
+      setLocationPath(window.location.pathname);
+    }
+  };
+
   const startQuestionPracticeDirectly = (
     mode: QuestionPracticeModeLabel = "顺序练习",
     chapter: QuestionPracticeTarget = null,
@@ -9404,6 +9731,10 @@ function DebaoAppShell() {
         ? <HomePage setPage={setPage} setActiveNav={setActiveNav} goToCourse={goToCourse} notify={notify} courses={courses} homeConfig={homeConfig} studySummary={studySummary} loadingStudySummary={loadingStudySummary} />
         : page === "courses"
         ? <CoursesPage setPage={setPage} goToCourse={goToCourse} notify={notify} courses={courses} loadingCourses={loadingCourses} studySummary={studySummary} loadingStudySummary={loadingStudySummary} />
+        : page === "shop"
+        ? <ShopPage setPage={setPage} notify={notify} onOrderCreated={openShopOrder} />
+        : page === "shopOrder"
+        ? <ShopOrderPage orderId={routeShopOrderId} setPage={setPage} notify={notify} />
         : page === "audioDetail"
         ? selectedCourse ? <AudioPlayerPage setPage={setPage} course={selectedCourse} notify={notify} /> : <CourseRouteState loading={loadingCourses} routeCourseId={routeCourseId} accessState={routeCourseAccess} setPage={setPage} />
         : page === "courseDetail"
