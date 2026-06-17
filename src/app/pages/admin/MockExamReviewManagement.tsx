@@ -68,6 +68,7 @@ const statusMeta: Record<string, { label: string; className: string }> = {
   ai_processing: { label: "AI正在批改", className: "border-blue-200 bg-blue-50 text-blue-800" },
   manual_pending: { label: "待老师批改", className: "border-violet-200 bg-violet-50 text-violet-800" },
   published: { label: "已批改", className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+  returned_for_redo: { label: "已返还重做", className: "border-orange-200 bg-orange-50 text-orange-800" },
   mine: { label: "我领取的", className: "border-sky-200 bg-sky-50 text-sky-800" },
   locked: { label: "已锁定", className: "border-slate-200 bg-slate-100 text-slate-700" },
   ai_problem: { label: "AI异常", className: "border-rose-200 bg-rose-50 text-rose-800" },
@@ -372,6 +373,7 @@ function RecordRow({
   onOpen,
   onClaim,
   onRecall,
+  onReturnForRedo,
 }: {
   record: AdminMockExamReviewRecord;
   selected: boolean;
@@ -379,6 +381,7 @@ function RecordRow({
   onOpen: (record: AdminMockExamReviewRecord) => void;
   onClaim: (record: AdminMockExamReviewRecord) => void;
   onRecall: (record: AdminMockExamReviewRecord) => void;
+  onReturnForRedo: (record: AdminMockExamReviewRecord) => void;
 }) {
   const status = statusMeta[record.reviewWorkflowStatus] ?? statusMeta.all;
   const claimLabel = record.lock.ownedByMe ? "继续批改" : record.reviewWorkflowStatus === "published" ? "重新修改" : "领取";
@@ -427,6 +430,11 @@ function RecordRow({
           {record.reviewWorkflowStatus === "published" || record.hasPublishedReview ? (
             <Button variant="outline" size="sm" className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" onClick={() => onRecall(record)}>
               收回
+            </Button>
+          ) : null}
+          {record.reviewWorkflowStatus === "published" || record.hasPublishedReview ? (
+            <Button variant="outline" size="sm" className="border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100" onClick={() => onReturnForRedo(record)}>
+              返还重做
             </Button>
           ) : null}
           <Button variant="outline" size="sm" onClick={() => onOpen(record)}>
@@ -1183,6 +1191,31 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
     }
   };
 
+  const returnForRedo = async (record: AdminMockExamReviewRecord) => {
+    const reason = window.prompt(
+      `确认将这份已批改试卷返还给学生重新作答吗？\n考生：${record.userLabel}\n\n返还后：\n1. 学生端不再看到本次批改结果；\n2. 本次记录不再占用考试/批改次数；\n3. 学生需要重新进入试卷作答并再次提交。\n\n可填写返还原因：`,
+      "",
+    );
+    if (reason === null) return;
+
+    setActionLoading(true);
+    try {
+      await adminMockExamReviewService.returnForRedo(record.id, { reason: reason.trim() });
+      if (detail?.record.id === record.id) {
+        setDetail(null);
+        setReviewForm([]);
+        setSavedFormSnapshot("");
+        setViewMode("queue");
+      }
+      toast.success("已返还给学生重新作答，并恢复本次次数");
+      await loadRecords(selectedPaper, recordsPage.page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "返还重做失败");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const updateReviewSubQuestion = (questionId: string, subQuestionId: string, patch: Partial<AdminMockExamReviewSubQuestion>) => {
     if (!canEdit) return;
     setReviewForm((current) =>
@@ -1433,6 +1466,16 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
                 收回批改
               </Button>
             ) : null}
+            {isRepublishDetail ? (
+              <Button
+                variant="outline"
+                className="border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                disabled={actionLoading || aiReviewLoading}
+                onClick={() => void returnForRedo(detail.record)}
+              >
+                返还重做
+              </Button>
+            ) : null}
             <Button variant="outline" disabled={actionLoading || aiReviewLoading || !detail.record.lock.canClaim || (isRepublishDetail && !detail.record.lock.ownedByMe)} onClick={() => void rerunAiReview()}>
               <RefreshCw className={`size-4 ${aiReviewLoading ? "animate-spin" : ""}`} />
               {aiReviewLoading ? "AI重批中..." : "AI重批"}
@@ -1667,6 +1710,7 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
                       onOpen={openDetail}
                       onClaim={claimRecord}
                       onRecall={recallPublishedReview}
+                      onReturnForRedo={returnForRedo}
                     />
                   ))
                 )}

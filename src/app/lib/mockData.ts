@@ -5,7 +5,7 @@ export type AdminMockExamPaperType = "objective" | "subjective";
 export type MockExamQuestionType = "single_choice" | "multiple_choice" | "uncertain_choice" | "subjective_case";
 export type MockExamRecordStatus = "in_progress" | "submitted";
 export type MockExamQuestionAnswerState = "unanswered" | "partial" | "answered";
-export type MockExamReviewWorkflowStatus = "not_required" | "ai_pending" | "ai_processing" | "manual_pending" | "published";
+export type MockExamReviewWorkflowStatus = "not_required" | "ai_pending" | "ai_processing" | "manual_pending" | "published" | "returned_for_redo";
 
 export interface MockExamLaunchConfigTab {
   key: "notice" | "rules" | "guide";
@@ -187,6 +187,7 @@ export interface MockExamRecordSummary {
   submittedAt: string;
   reviewedAt?: string;
   reviewWorkflowStatus: MockExamReviewWorkflowStatus;
+  returnedForRedo?: boolean;
   canResume: boolean;
 }
 
@@ -320,6 +321,7 @@ export interface MockExamRecordDetail {
   reviewedAt: string;
   publishedAt: string;
   reviewWorkflowStatus: MockExamReviewWorkflowStatus;
+  returnedForRedo?: boolean;
   paper: Omit<MockExamPaper, "activeRecord" | "latestRecord">;
   summary: {
     accuracyRate: number;

@@ -7969,6 +7969,7 @@ const MOCK_EXAM_SERIES_QUERY_PARAM = "seriesId";
 
 const getPaperStatusLabel = (paper: MockExamPaperSummary) => {
   if (!paper.isOpen) return paper.openTime ? `开放时间 ${paper.openTime}` : "暂未开放";
+  if (paper.latestRecord?.returnedForRedo) return "返还重做";
   if (paper.activeRecord?.canResume) return "继续作答";
   if (paper.latestRecord) return "再次进入";
   return "进入考试";

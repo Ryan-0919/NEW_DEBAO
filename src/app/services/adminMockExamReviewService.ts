@@ -1,6 +1,6 @@
 import { adminPatchJson, adminPostJson, adminRequest, buildAdminQueryString } from "./adminApiClient";
 
-export type AdminReviewWorkflowStatus = "ai_pending" | "ai_processing" | "manual_pending" | "published";
+export type AdminReviewWorkflowStatus = "ai_pending" | "ai_processing" | "manual_pending" | "published" | "returned_for_redo";
 
 export type AdminMockExamReviewStats = {
   paperCount?: number;
@@ -205,6 +205,11 @@ export type AdminMockExamReviewBatchAiReviewResult = {
   }[];
 };
 
+export type AdminMockExamReviewReturnForRedoResult = {
+  recordId: string;
+  reviewWorkflowStatus: "returned_for_redo";
+};
+
 export const adminMockExamReviewService = {
   getSummary: () => adminRequest<AdminMockExamReviewStats>("/api/admin/mock-exam-reviews/summary"),
   getPapers: (params: { page?: number; pageSize?: number; keyword?: string } = {}) =>
@@ -222,6 +227,8 @@ export const adminMockExamReviewService = {
     adminPostJson<AdminMockExamReviewBatchAiReviewResult>("/api/admin/mock-exam-reviews/records/batch-ai-review", { recordIds }),
   recallPublishedReview: (recordId: string) =>
     adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/recall-published-review`),
+  returnForRedo: (recordId: string, payload: { reason?: string } = {}) =>
+    adminPostJson<AdminMockExamReviewReturnForRedoResult>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/return-for-redo`, payload),
   releaseRecord: (recordId: string) => adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/release`),
   saveDraft: (recordId: string, payload: AdminMockExamReviewSavePayload) =>
     adminPatchJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/review-draft`, payload),

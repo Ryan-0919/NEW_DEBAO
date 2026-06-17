@@ -74,6 +74,7 @@ enum MockExamReviewWorkflowStatus {
   ai_processing
   manual_pending
   published
+  returned_for_redo
 }
 
 enum TypingPracticeTextStatus {

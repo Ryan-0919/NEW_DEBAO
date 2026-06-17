@@ -17,6 +17,7 @@ export interface MockExamRecordSummary {
   startedAt: string;
   submittedAt: string;
   reviewWorkflowStatus: string;
+  returnedForRedo?: boolean;
   canResume: boolean;
 }
 
@@ -139,6 +140,7 @@ export interface MockExamRecordDetail {
   reviewedAt: string;
   publishedAt: string;
   reviewWorkflowStatus: string;
+  returnedForRedo?: boolean;
   paper: {
     id: string;
     code: string;

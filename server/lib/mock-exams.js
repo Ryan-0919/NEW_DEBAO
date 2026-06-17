@@ -426,6 +426,8 @@ const getReviewWorkflowStatus = (record) => {
   return explicit || "ai_pending";
 };
 
+const isReturnedForRedoRecord = (record) => getReviewWorkflowStatus(record) === "returned_for_redo";
+
 const isRecordPublishedToUser = (record) => ["not_required", "published"].includes(getReviewWorkflowStatus(record));
 
 const getVisibleMockExamTotalScore = (record) => {
@@ -466,6 +468,7 @@ const serializeRecordSummary = (record, currentTime = new Date()) => {
     startedAt: formatDateTime(record.startedAt),
     submittedAt: record.submittedAt ? formatDateTime(record.submittedAt) : "",
     reviewWorkflowStatus: getReviewWorkflowStatus(record),
+    returnedForRedo: isReturnedForRedoRecord(record),
     canResume: record.status === "in_progress" && remainingSeconds > 0,
   };
 };
@@ -647,6 +650,7 @@ export const serializeMockExamRecordDetail = (record, currentTime = new Date()) 
     reviewedAt: record.reviewedAt ? formatDateTime(record.reviewedAt) : "",
     publishedAt: record.publishedAt ? formatDateTime(record.publishedAt) : "",
     reviewWorkflowStatus: getReviewWorkflowStatus(record),
+    returnedForRedo: isReturnedForRedoRecord(record),
     paper: {
       id: paper.id,
       code: paper.code,
@@ -1913,6 +1917,7 @@ export const syncExpiredMockExamRecords = async ({ db, userId, currentTime = new
   });
 
   for (const record of records) {
+    if (isReturnedForRedoRecord(record)) continue;
     if (getRemainingSeconds(record, currentTime) <= 0) {
       await finalizeMockExamRecord({ db, recordId: record.id, userId, currentTime });
     }
@@ -1931,6 +1936,10 @@ export const getMockExamRecordForUser = async ({
 
   if (!record || record.userId !== userId) {
     throw createHttpError("考试记录不存在", 404);
+  }
+
+  if (isReturnedForRedoRecord(record)) {
+    throw createHttpError("这份试卷已由老师返还重做，请重新进入试卷作答", 409);
   }
 
   await assertMockExamPaperPermission({ db, userId, paperId: record.paperId });
@@ -2009,7 +2018,13 @@ export const startMockExamRecord = async ({ db, paperId, userId, currentTime = n
     return getMockExamRecordForUser({ db, recordId: activeRecord.id, userId, currentTime });
   }
 
-  const attemptCount = await db.mockExamRecord.count({ where: { paperId, userId } });
+  const attemptCount = await db.mockExamRecord.count({
+    where: {
+      paperId,
+      userId,
+      NOT: { reviewWorkflowStatus: "returned_for_redo" },
+    },
+  });
   const permissionAttemptLimit = Number(permission?.manualAttemptLimit ?? 0);
   const permissionAttemptUsed = Number(permission?.manualAttemptUsed ?? 0);
   const maxAttempts = permissionAttemptLimit > 0 ? permissionAttemptLimit : Number(paper.maxAttempts ?? 0);
@@ -2378,7 +2393,7 @@ export const listUserVisibleMockExamPapers = async ({ db, userId, paperType = ""
   return papers
     .filter((paper) => isMatchingPaperType(paper, paperType))
     .map((paper) => {
-      const paperRecords = records.filter((record) => record.paperId === paper.id);
+      const paperRecords = records.filter((record) => record.paperId === paper.id && !isReturnedForRedoRecord(record));
       const activeRecord = paperRecords.find((record) => record.status === "in_progress") ?? null;
       const latestRecord = paperRecords.find((record) => record.status === "submitted") ?? null;
       return serializeMockExamPaperSummary({ paper, activeRecord, latestRecord, currentTime });
@@ -2450,6 +2465,7 @@ export const listUserVisibleMockExamRecords = async ({ db, userId, paperType = "
   return records
     .filter((record) => isPublishedMockExamPaper(record.paper))
     .filter((record) => isMatchingPaperType(getRecordPaper(record), paperType))
+    .filter((record) => !isReturnedForRedoRecord(record))
     .filter(isRecordVisibleInUserHistory)
     .map(serializeUserMockExamHistoryItem);
 };
@@ -2546,6 +2562,7 @@ export const listUserVisibleMockExamLeaderboardPapers = async ({ db, userId }) =
   const paperMap = new Map();
   records.forEach((record) => {
     if (!isPublishedMockExamPaper(record.paper)) return;
+    if (isReturnedForRedoRecord(record)) return;
     if (!isRecordPublishedToUser(record)) return;
     const paper = getRecordPaper(record);
     if (!paper?.id || paperMap.has(paper.id)) return;
@@ -2600,7 +2617,7 @@ export const getUserMockExamLeaderboardDetail = async ({ db, userId, paperId }) 
     },
   });
 
-  const currentUserRecords = records.filter((record) => record.userId === userId);
+  const currentUserRecords = records.filter((record) => record.userId === userId && !isReturnedForRedoRecord(record));
   if (currentUserRecords.length === 0) {
     throw createHttpError("你还没有参加过该试卷，暂时无法进入排行榜", 403);
   }
@@ -2613,7 +2630,7 @@ export const getUserMockExamLeaderboardDetail = async ({ db, userId, paperId }) 
     },
   });
 
-  const leaderboard = buildMockExamLeaderboardRows(records.filter(isRecordPublishedToUser), leaderboardEntries, userId);
+  const leaderboard = buildMockExamLeaderboardRows(records.filter((record) => !isReturnedForRedoRecord(record) && isRecordPublishedToUser(record)), leaderboardEntries, userId);
   const currentUserEntry = leaderboard.find((item) => item.userId === userId) ?? null;
 
   return {
@@ -2660,7 +2677,7 @@ export const getRecentMockExamForUser = async ({ db, userId, currentTime = new D
     },
   });
 
-  const record = records.find((item) => isPublishedMockExamPaper(item.paper)) ?? null;
+  const record = records.find((item) => isPublishedMockExamPaper(item.paper) && !isReturnedForRedoRecord(item)) ?? null;
   if (!record) return null;
 
   const paper = getRecordPaper(record);

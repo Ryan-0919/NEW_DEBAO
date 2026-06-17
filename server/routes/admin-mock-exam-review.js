@@ -10,6 +10,7 @@ import { requireAdminAuth, requireAdminRoles } from "../middleware/auth.js";
 const REVIEW_ADMIN_ROLES = ["super_admin", "operations_admin", "review_admin"];
 const SUBJECTIVE_TYPE = "subjective_case";
 const LOCK_MINUTES = 120;
+const RETURNED_FOR_REDO_STATUS = "returned_for_redo";
 const WORKFLOW_STATUSES = new Set(["ai_pending", "ai_processing", "manual_pending", "published"]);
 const REVIEW_WORKFLOW_STATUS_VALUES = [...WORKFLOW_STATUSES];
 
@@ -247,6 +248,22 @@ const hasPublishedReviewSnapshot = (record) =>
   (record?.answers ?? []).some((answer) => Boolean(answer?.publishedReviewJson));
 
 const isRepublishingReviewRecord = (record) => Boolean(record?.publishedAt || hasPublishedReviewSnapshot(record));
+
+const restoreMockExamAttemptQuota = async ({ tx, record }) => {
+  if (!record?.userId || !record?.paperId) return;
+
+  await tx.userMockExamPermission.updateMany({
+    where: {
+      userId: record.userId,
+      paperId: record.paperId,
+      manualAttemptUsed: { gt: 0 },
+    },
+    data: {
+      manualAttemptUsed: { decrement: 1 },
+      currentRecordStartedAt: null,
+    },
+  });
+};
 
 const ensurePublishedReviewSnapshot = async ({ tx, record }) => {
   if (!isRepublishingReviewRecord(record) || hasPublishedReviewSnapshot(record)) return false;
@@ -1282,6 +1299,82 @@ adminMockExamReviewRouter.post("/records/:recordId/recall-published-review", asy
     return ok(res, serializeReviewDetail(updatedRecord, req, currentTime), "已收回学生端可见的批改结果");
   } catch (error) {
     return fail(res, error.message || "收回批改结果失败", error.statusCode || 500);
+  }
+});
+
+adminMockExamReviewRouter.post("/records/:recordId/return-for-redo", async (req, res) => {
+  try {
+    const recordId = `${req.params.recordId ?? ""}`.trim();
+    const reason = normalizeText(req.body?.reason ?? "");
+    const currentTime = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const record = await getAdminReviewRecord(tx, recordId);
+      assertReviewableRecord(record);
+
+      if (!isRepublishingReviewRecord(record)) {
+        const error = new Error("这份试卷还没有发送给学生，不能返还重做");
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const lock = getLockInfo(record, req, currentTime);
+      if (lock.active && !lock.ownedByMe) {
+        const error = new Error(`该记录已被 ${record.manualReviewerName || "其他老师"} 领取，暂时不能返还重做`);
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const paper = getRecordPaper(record);
+      const subjectiveQuestionIds = new Set((paper?.questions ?? []).filter(isSubjectiveQuestion).map((question) => question.id));
+      const subjectiveAnswers = (record.answers ?? []).filter((answer) => subjectiveQuestionIds.has(answer.questionId));
+
+      await Promise.all(
+        subjectiveAnswers.map((answer) =>
+          tx.mockExamAnswer.update({
+            where: { id: answer.id },
+            data: {
+              publishedReviewJson: null,
+              publishedScore: null,
+            },
+          }),
+        ),
+      );
+
+      await restoreMockExamAttemptQuota({ tx, record });
+
+      await tx.mockExamRecord.update({
+        where: { id: record.id },
+        data: {
+          activeKey: null,
+          reviewWorkflowStatus: RETURNED_FOR_REDO_STATUS,
+          publishedAt: null,
+          manualReviewerId: null,
+          manualReviewerName: null,
+          manualReviewLockToken: null,
+          manualReviewClaimedAt: null,
+          manualReviewLockExpiresAt: null,
+          manualReviewVersion: { increment: 1 },
+          lastAiReviewError: reason ? `返还重做：${reason}` : "返还重做",
+        },
+      });
+
+      return {
+        record: await getAdminReviewRecord(tx, record.id),
+        paperTitle: paper?.title ?? "",
+      };
+    });
+
+    await writeAdminAuditLog(req, {
+      action: "return_mock_exam_review_for_redo",
+      entityType: "mock_exam_record",
+      entityId: recordId,
+      entityName: result.paperTitle,
+      detail: { recordId, paperId: result.record?.paperId, userId: result.record?.userId, reason },
+    });
+
+    return ok(res, { recordId, reviewWorkflowStatus: RETURNED_FOR_REDO_STATUS }, "已返还给学生重新作答，旧批改记录将不再占用次数");
+  } catch (error) {
+    return fail(res, error.message || "返还重做失败", error.statusCode || 500);
   }
 });
 
