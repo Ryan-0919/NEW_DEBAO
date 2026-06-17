@@ -58,6 +58,7 @@ const navGroups = [
     label: "课程内容",
     items: [
       { href: "/admin/courses", label: "课程管理", icon: BookOpen, roles: "content" },
+      { href: "/admin/shop", label: "商城与支付", icon: ShoppingBag, roles: "content" },
       { href: "/admin/audio-library", label: "音频库", icon: Library, roles: "content" },
       { href: "/admin/video-library", label: "视频库", icon: Video, roles: "content" },
       { href: "/admin/laws", label: "法条检索", icon: Scale, roles: "content" },
@@ -96,12 +97,6 @@ const navGroups = [
       { href: "/admin/learning-announcements", label: "学习公告管理", icon: Bell, roles: "system" },
       { href: "/admin/settings", label: "系统门户配置", icon: Settings, roles: "system" },
       { href: "/admin/logs", label: "系统日志", icon: ScrollText, roles: "system" },
-    ],
-  },
-  {
-    label: "商城支付",
-    items: [
-      { href: "/admin/shop", label: "商城与支付", icon: ShoppingBag, roles: "system" },
     ],
   },
 ] as const;

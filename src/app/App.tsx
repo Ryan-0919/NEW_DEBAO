@@ -88,8 +88,9 @@ const getImageTargetPreviewSource = () => {
 
 /* ══════════════════════ SHARED DATA ══════════════════════ */
 
-const navItems = ["首页", "课程中心", "题库", "我的"];
-const navIcons = [House, PlayCircle, BookOpen, UserRound];
+const navItems = ["首页", "课程中心", "商城", "题库", "我的"];
+const navIcons = [House, PlayCircle, ShoppingBag, BookOpen, UserRound];
+const navPages = ["home", "courses", "shop", "questionBankHome", "myProfile"];
 type DebaoThemeMode = "dark" | "light";
 const DEBAO_THEME_STORAGE_KEY = "debao:theme-mode";
 
@@ -985,9 +986,10 @@ const buildMockExamRoomPath = (target: MockExamSessionTarget) => {
 };
 
 const navIndexForPage = (page: string) => {
-  if (page === "courses" || page === "audioDetail" || page === "courseDetail" || page === "shop" || page === "shopOrder") return 1;
-  if (page === "questionBankHome" || page === "myQuestionBank" || page === "questionBank" || page === "mockExamHome" || page === "subjectiveGrading" || page === "mockExamRoom" || page === "lawSearch" || page === "lawPractice" || page === "typingPractice") return 2;
-  if (page === "myProfile" || page === "myNotes" || page === "editProfile" || page === "settings") return 3;
+  if (page === "courses" || page === "audioDetail" || page === "courseDetail") return 1;
+  if (page === "shop" || page === "shopOrder") return 2;
+  if (page === "questionBankHome" || page === "myQuestionBank" || page === "questionBank" || page === "mockExamHome" || page === "subjectiveGrading" || page === "mockExamRoom" || page === "lawSearch" || page === "lawPractice" || page === "typingPractice") return 3;
+  if (page === "myProfile" || page === "myNotes" || page === "editProfile" || page === "settings") return 4;
   return 0;
 };
 
@@ -1252,7 +1254,7 @@ function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, home
           {navItems.map((item, i) => {
             const NavIcon = navIcons[i] ?? Circle;
             return (
-              <button key={item} onClick={() => { setPage(i === 1 ? "courses" : i === 2 ? "questionBankHome" : i === 3 ? "myProfile" : "home"); }} style={{ padding: "7px 18px", borderRadius: 9, fontSize: 13, border: "none", cursor: "pointer", background: activeNav === i ? "rgba(201,151,62,0.1)" : "transparent", color: activeNav === i ? "#c9973e" : "#5a7898", fontWeight: activeNav === i ? 600 : 400, transition: "all 0.15s" }}>
+              <button key={item} onClick={() => { setPage(navPages[i] ?? "home"); }} style={{ padding: "7px 18px", borderRadius: 9, fontSize: 13, border: "none", cursor: "pointer", background: activeNav === i ? "rgba(201,151,62,0.1)" : "transparent", color: activeNav === i ? "#c9973e" : "#5a7898", fontWeight: activeNav === i ? 600 : 400, transition: "all 0.15s" }}>
                 <span className="debao-nav-tab-icon"><NavIcon size={20} /></span>
                 <span className="debao-nav-tab-label">{item}</span>
               </button>
