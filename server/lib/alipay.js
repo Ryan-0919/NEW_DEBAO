@@ -98,6 +98,12 @@ const escapeHtmlAttribute = (value) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
+const buildGatewayActionUrl = () => {
+  const gateway = `${config.alipay.gateway ?? ""}`.trim();
+  if (!gateway || /[?&]charset=/i.test(gateway)) return gateway;
+  return `${gateway}${gateway.includes("?") ? "&" : "?"}charset=${encodeURIComponent(ALIPAY_CHARSET)}`;
+};
+
 export const buildAlipayPayForm = ({
   orderNo,
   subject,
@@ -139,10 +145,11 @@ export const buildAlipayPayForm = ({
   };
 
   const inputs = Object.entries(params)
+    .filter(([key]) => key !== "charset")
     .map(([key, value]) => `<input type="hidden" name="${escapeHtmlAttribute(key)}" value="${escapeHtmlAttribute(value)}" />`)
     .join("");
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>支付宝支付</title></head><body><form id="alipay-submit-form" method="post" action="${escapeHtmlAttribute(config.alipay.gateway)}">${inputs}<noscript><button type="submit">继续支付</button></noscript></form><script>document.getElementById("alipay-submit-form").submit();</script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>支付宝支付</title></head><body><form id="alipay-submit-form" method="post" accept-charset="${escapeHtmlAttribute(ALIPAY_CHARSET)}" action="${escapeHtmlAttribute(buildGatewayActionUrl())}">${inputs}<noscript><button type="submit">继续支付</button></noscript></form><script>document.getElementById("alipay-submit-form").submit();</script></body></html>`;
 };
 
 export const getAlipayNotifyStatus = (params = {}) => {
