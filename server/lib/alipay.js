@@ -48,12 +48,11 @@ export const isAlipayConfigured = () =>
   isConfiguredValue(config.alipay.publicKeyPem) &&
   isConfiguredValue(config.alipay.gateway);
 
-export const buildAlipaySignContent = (params = {}, { excludeSignType = true } = {}) =>
+export const buildAlipaySignContent = (params = {}) =>
   Object.entries(params)
     .filter(
       ([key, value]) =>
         key !== "sign" &&
-        (!excludeSignType || key !== "sign_type") &&
         value !== undefined &&
         value !== null &&
         `${value}` !== "",
