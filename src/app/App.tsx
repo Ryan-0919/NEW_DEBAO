@@ -2200,6 +2200,14 @@ function submitAlipayForm(formHtml: string) {
   paymentWindow.document.close();
 }
 
+function getAlipayPayScene(): "wap" | "page" {
+  if (typeof window === "undefined") return "page";
+  const ua = window.navigator.userAgent || "";
+  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+  const isMobileViewport = window.matchMedia?.("(max-width: 768px)").matches;
+  return isMobileDevice || isMobileViewport ? "wap" : "page";
+}
+
 function ShopPage({ setPage, notify, onOrderCreated }: { setPage: (p: string) => void; notify: Notify; onOrderCreated: (order: ShopOrder) => void }) {
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2351,14 +2359,15 @@ function ShopOrderPage({ orderId, setPage, notify }: { orderId: string | null; s
     if (!order) return;
     setPaying(true);
     try {
-      const payload = await shopService.payOrder(order.id, { channel: "alipay", scene: "wap" });
+      const scene = getAlipayPayScene();
+      const payload = await shopService.payOrder(order.id, { channel: "alipay", scene });
       if ("status" in payload && payload.status === "paid") {
         setOrder(payload.order);
         notify("订单已支付", "success");
         return;
       }
       submitAlipayForm(payload.formHtml);
-      notify("已打开支付宝收银台，支付完成后请回到本页刷新状态", "success");
+      notify(scene === "page" ? "已打开支付宝扫码页，支付完成后请回到本页刷新状态" : "已打开支付宝收银台，支付完成后请回到本页刷新状态", "success");
     } catch (error) {
       notify(error instanceof Error ? error.message : "发起支付失败", "warning");
     } finally {
