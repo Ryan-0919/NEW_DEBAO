@@ -432,14 +432,19 @@ const isRecordPublishedToUser = (record) => ["not_required", "published"].includ
 
 const getVisibleMockExamTotalScore = (record) => {
   if (!record || !isRecordPublishedToUser(record)) return Number(record?.totalScore ?? 0);
-  const publishedSubjectiveScore = (record.answers ?? [])
-    .filter((answer) => answer.publishedReviewJson)
-    .reduce((sum, answer) => sum + Number(answer.publishedScore ?? answer.score ?? 0), 0);
-  if (publishedSubjectiveScore <= 0) return Number(record.totalScore ?? 0);
-  const currentSubjectiveScore = (record.answers ?? [])
-    .filter((answer) => answer.reviewJson)
-    .reduce((sum, answer) => sum + Number(answer.score ?? 0), 0);
-  return Math.max(0, Number(record.totalScore ?? 0) - currentSubjectiveScore + publishedSubjectiveScore);
+  const paper = getRecordPaper(record);
+  const questions = paper?.questions ?? [];
+  if (!questions.length) return Number(record.totalScore ?? 0);
+
+  const answerMap = new Map((record.answers ?? []).map((answer) => [answer.questionId, answer]));
+  return questions.reduce((sum, question) => {
+    const answer = answerMap.get(question.id);
+    if (!isSubjectiveQuestion(question)) return sum + (Number(answer?.score ?? 0) || 0);
+
+    const publishedReviewJson = parseJsonSafely(answer?.publishedReviewJson, null);
+    if (!publishedReviewJson) return sum + (Number(answer?.score ?? 0) || 0);
+    return sum + getSubjectiveReviewJsonScore({ question, reviewJson: publishedReviewJson });
+  }, 0);
 };
 
 const userVisibleReviewStatuses = new Set(["not_required", "ai_pending", "ai_processing", "manual_pending", "published"]);
@@ -514,6 +519,45 @@ const serializeQuestion = (question, answer, revealAnswer) => {
     const reviewJson = revealAnswer ? publishedReviewJson ?? parseJsonSafely(answer?.reviewJson, null) : null;
     const reviewSource = `${reviewJson?.source ?? "system"}`.trim() || "system";
     const reviewProvider = normalizeReviewProvider(reviewJson?.reviewProvider ?? reviewJson?.provider ?? "");
+    const subjectiveSubQuestions = questionMeta.subQuestions.map((item) => {
+      const text = answerMap[item.id] ?? "";
+      const reviewItem = Array.isArray(reviewJson?.subQuestions)
+        ? reviewJson.subQuestions.find((entry) => `${entry?.id ?? ""}` === item.id)
+        : null;
+      const maxScore = getSubjectiveMaxScore(question, item, questionMeta.subQuestions.length);
+      const answerMarks = revealAnswer ? normalizeAnswerMarks(reviewItem?.answerMarks) : [];
+      const score = revealAnswer
+        ? getReviewItemVisibleScore({
+            question,
+            subQuestion: item,
+            reviewItem,
+            subQuestionCount: questionMeta.subQuestions.length,
+          })
+        : 0;
+
+      return {
+        id: item.id,
+        title: item.title,
+        placeholder: item.placeholder,
+        answer: text,
+        wordCount: text.length,
+        score,
+        maxScore,
+        reviewComment: revealAnswer ? normalizeReviewCommentText(reviewItem?.reviewComment ?? "") : "",
+        referenceAnswer: revealAnswer ? `${reviewItem?.referenceAnswer ?? item.referenceAnswer ?? ""}`.trim() : "",
+        reviewSource: reviewItem?.reviewSource ?? reviewSource,
+        reviewProvider: normalizeReviewProvider(reviewItem?.reviewProvider ?? reviewProvider),
+        isReviewed: revealAnswer && Boolean(reviewItem),
+        abilityLabel: `${reviewItem?.abilityLabel ?? item.abilityLabel ?? item.title ?? ""}`.trim(),
+        abilityScoreRate: revealAnswer && maxScore > 0 ? Number(((score / maxScore) * 100).toFixed(1)) : 0,
+        rubricGuidance: revealAnswer ? `${reviewItem?.rubricGuidance ?? item.rubricGuidance ?? ""}`.trim() : "",
+        rubricPoints: revealAnswer ? normalizeRubricPoints(reviewItem?.rubricPoints ?? item.rubricPoints) : [],
+        missedPoints: revealAnswer ? normalizeMissedPoints(reviewItem?.missedPoints) : [],
+        skippedReview: revealAnswer && Boolean(reviewItem?.skippedReview),
+        skippedReviewReason: revealAnswer ? `${reviewItem?.skippedReviewReason ?? ""}`.trim() : "",
+        answerMarks,
+      };
+    });
     return {
       id: question.id,
       sortOrder: question.sortOrder,
@@ -527,46 +571,13 @@ const serializeQuestion = (question, answer, revealAnswer) => {
       userAnswerKeys: [],
       correctAnswerKeys: [],
       isCorrect: null,
-      earnedScore: revealAnswer ? Number(answer?.publishedScore ?? answer?.score ?? 0) : 0,
+      earnedScore: revealAnswer ? subjectiveSubQuestions.reduce((sum, item) => sum + Number(item.score ?? 0), 0) : 0,
       answerState,
       sectionLabel: questionMeta.sectionLabel,
       sectionDescription: questionMeta.sectionDescription,
       reviewSource,
       reviewProvider,
-      subjectiveSubQuestions: questionMeta.subQuestions.map((item) => {
-        const text = answerMap[item.id] ?? "";
-        const reviewItem = Array.isArray(reviewJson?.subQuestions)
-          ? reviewJson.subQuestions.find((entry) => `${entry?.id ?? ""}` === item.id)
-          : null;
-        const maxScore = Number(reviewItem?.maxScore ?? item.maxScore ?? 0) || 0;
-        const answerMarks = revealAnswer ? normalizeAnswerMarks(reviewItem?.answerMarks) : [];
-        const score = revealAnswer
-          ? clampScore(sumPositiveAnswerMarkScores(answerMarks), 0, maxScore)
-          : 0;
-
-        return {
-          id: item.id,
-          title: item.title,
-          placeholder: item.placeholder,
-          answer: text,
-          wordCount: text.length,
-          score,
-          maxScore,
-          reviewComment: revealAnswer ? normalizeReviewCommentText(reviewItem?.reviewComment ?? "") : "",
-          referenceAnswer: revealAnswer ? `${reviewItem?.referenceAnswer ?? item.referenceAnswer ?? ""}`.trim() : "",
-          reviewSource: reviewItem?.reviewSource ?? reviewSource,
-          reviewProvider: normalizeReviewProvider(reviewItem?.reviewProvider ?? reviewProvider),
-          isReviewed: revealAnswer && Boolean(reviewItem),
-          abilityLabel: `${reviewItem?.abilityLabel ?? item.abilityLabel ?? item.title ?? ""}`.trim(),
-          abilityScoreRate: revealAnswer && maxScore > 0 ? Number(((score / maxScore) * 100).toFixed(1)) : 0,
-          rubricGuidance: revealAnswer ? `${reviewItem?.rubricGuidance ?? item.rubricGuidance ?? ""}`.trim() : "",
-          rubricPoints: revealAnswer ? normalizeRubricPoints(reviewItem?.rubricPoints ?? item.rubricPoints) : [],
-          missedPoints: revealAnswer ? normalizeMissedPoints(reviewItem?.missedPoints) : [],
-          skippedReview: revealAnswer && Boolean(reviewItem?.skippedReview),
-          skippedReviewReason: revealAnswer ? `${reviewItem?.skippedReviewReason ?? ""}`.trim() : "",
-          answerMarks,
-        };
-      }),
+      subjectiveSubQuestions,
       reviewFeedbackStars: revealAnswer ? Number(reviewJson?.feedbackStars ?? 0) || 0 : 0,
       reviewFeedbackSubmittedAt: revealAnswer && reviewJson?.feedbackSubmittedAt ? formatDateTime(reviewJson.feedbackSubmittedAt) : "",
       lessonAudioUrl: getQuestionAudioUrl(question),
@@ -700,6 +711,30 @@ const getSubjectiveMaxScore = (question, subQuestion, subQuestionCount = 1) => {
   if (rubricTotal > 0) return rubricTotal;
 
   return Math.max(0, Math.round((Number(question?.score ?? 0) || 0) / Math.max(1, subQuestionCount)));
+};
+
+const getReviewItemVisibleScore = ({ question, subQuestion, reviewItem, subQuestionCount = 1 }) => {
+  const maxScore = getSubjectiveMaxScore(question, subQuestion, subQuestionCount);
+  const answerMarks = normalizeAnswerMarks(reviewItem?.answerMarks);
+  const positiveMarks = answerMarks.filter((mark) => mark.status === "score" || mark.status === "correct");
+  if (positiveMarks.length > 0) {
+    return clampScore(sumPositiveAnswerMarkScores(positiveMarks), 0, maxScore);
+  }
+  return clampScore(reviewItem?.score, 0, maxScore);
+};
+
+const getSubjectiveReviewJsonScore = ({ question, reviewJson }) => {
+  const questionMeta = getQuestionMeta(question);
+  if (!Array.isArray(reviewJson?.subQuestions)) return 0;
+  return questionMeta.subQuestions.reduce((sum, subQuestion) => {
+    const reviewItem = reviewJson.subQuestions.find((item) => `${item?.id ?? ""}` === subQuestion.id);
+    return sum + getReviewItemVisibleScore({
+      question,
+      subQuestion,
+      reviewItem,
+      subQuestionCount: questionMeta.subQuestions.length,
+    });
+  }, 0);
 };
 
 const getReviewPointText = (point) =>
