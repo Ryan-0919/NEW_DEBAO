@@ -8,6 +8,8 @@ import { AiReviewMonitor } from "./AiReviewMonitor";
 import { AiReviewV2StrategyManagement } from "./AiReviewV2StrategyManagement";
 import { AiReviewV2Performance } from "./AiReviewV2Performance";
 import { CourseManagement } from "./CourseManagement";
+import { DictationManagement } from "./DictationManagement";
+import { RecitationManagement } from "./RecitationManagement";
 import { ExamQuestionBankManagement } from "./ExamQuestionBankManagement";
 import { HomeBannerManagement } from "./HomeBannerManagement";
 import { LawPracticeLibraryManagement, LawPracticePaperManagement } from "./LawPracticeManagement";
@@ -113,6 +115,14 @@ export function AdminRouter() {
     pageTitle = "法条练习管理";
     pageDescription = "从法条练习原题库引用题目，组卷发布给学员练习";
     content = <LawPracticePaperManagement />;
+  } else if (pathname.startsWith("/admin/dictation")) {
+    pageTitle = "默写本管理";
+    pageDescription = "维护默写本科目、章节、挖空填空题，发布后学员可在题库入口中练习";
+    content = <DictationManagement />;
+  } else if (pathname.startsWith("/admin/recitation")) {
+    pageTitle = "抽背管理";
+    pageDescription = "维护抽背独立题库、章节和批量导入；不与默写本题库混用";
+    content = <RecitationManagement />;
   } else if (pathname.startsWith("/admin/public-question-library") || pathname.startsWith("/admin/question-library")) {
     pageTitle = "免费练习原题库";
     pageDescription = "免费练习题库引用的原始题目，不进入机考流程，不与授权题库原题混用";

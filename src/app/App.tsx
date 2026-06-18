@@ -3,7 +3,7 @@ import type { ChangeEvent, FormEvent, MouseEvent as ReactMouseEvent, ReactNode, 
 import { createPortal } from "react-dom";
 import Hls from "hls.js";
 import {
-  Bell, BookOpen, BarChart2, MessageCircle, Trophy,
+  Bell, BookOpen, BookOpenCheck, BarChart2, MessageCircle, Trophy,
   Scale, Swords, ChevronRight, FileText, Target,
   Flame, Clock, TrendingUp, Play, Star, ChevronLeft, Zap,
   Search, Users, CheckCircle2, Lock, Download, PenLine,
@@ -34,6 +34,8 @@ import type { MockExamHistoryItem, MockExamPaperSummary } from "./services/mockE
 import { LegacyMockExamRouter } from "./pages/user/LegacyMockExamRouter";
 import { DebaoMyExamRecordPage, getMyExamRecordRouteFromPath } from "./pages/user/DebaoMyExamRecordPage";
 import { DebaoLawSearchPage } from "./pages/user/DebaoLawSearchPage";
+import { DictationNotebook } from "./pages/user/DictationNotebook";
+import { RecitationTraining } from "./pages/user/RecitationTraining";
 import { LawPracticeRouter } from "./pages/user/LawPracticeRouter";
 import { TypingPracticeRouter } from "./pages/user/TypingPracticeRouter";
 import { DesktopOnlyNotice, type DesktopOnlyFeature, useMockExamDesktopGuard } from "./pages/user/mockExamDesktopGuard";
@@ -105,7 +107,7 @@ const modules = [
   { id: 2, title: "题库", sub: "海量真题 · 专项练习", icon: BookOpen, color: "#4e8ef7", glow: "rgba(78,142,247,0.2)", hot: true },
   { id: 3, title: "进入主观批改", sub: "人工精批 · 要点解析", icon: FileText, color: "#1dc9a4", glow: "rgba(29,201,164,0.2)", desktopOnly: true },
   { id: 4, title: "客观题模考", sub: "全真仿真 · 限时测验", icon: Target, color: "#c97ef5", glow: "rgba(201,126,245,0.2)", desktopOnly: true },
-  { id: 6, title: "法条练习", sub: "定位条文 · 抄录训练", icon: Scale, color: "#f6c15f", glow: "rgba(246,193,95,0.2)", desktopOnly: true },
+  { id: 6, title: "背诵训练", sub: "默写抽背 · 随机检测", icon: BookOpenCheck, color: "#f6c15f", glow: "rgba(246,193,95,0.2)" },
   { id: 7, title: "打字练习", sub: "法律术语 · 答题提速", icon: Swords, color: "#f76e6e", glow: "rgba(247,110,110,0.2)", desktopOnly: true },
 ];
 
@@ -876,6 +878,8 @@ const pageToPath: Record<string, string> = {
   mockExamRoom: "/user/mock-exams/records",
   lawSearch: "/user/laws",
   lawPractice: "/user/law-practice",
+  recitationTraining: "/user/recitation",
+  dictationNotebook: "/user/dictation",
   typingPractice: "/user/typing-practice",
   myProfile: "/profile",
   myNotes: "/profile/notes",
@@ -905,6 +909,8 @@ const pathToPage = (pathname: string) => {
   if (pathname.startsWith("/question-bank")) return "questionBankHome";
   if (pathname.startsWith("/user/objective-mock-exams")) return "mockExamHome";
   if (pathname.startsWith("/user/laws")) return "lawSearch";
+  if (pathname.startsWith("/user/recitation")) return "recitationTraining";
+  if (pathname.startsWith("/user/dictation")) return "dictationNotebook";
   if (pathname.startsWith("/user/law-practice")) return "lawPractice";
   if (pathname.startsWith("/user/typing-practice")) return "typingPractice";
   if (pathname.match(/^\/user\/mock-exams\/records\/[^/]+\/?$/)) return "mockExamRoom";
@@ -988,7 +994,7 @@ const buildMockExamRoomPath = (target: MockExamSessionTarget) => {
 const navIndexForPage = (page: string) => {
   if (page === "courses" || page === "audioDetail" || page === "courseDetail") return 1;
   if (page === "shop" || page === "shopOrder") return 2;
-  if (page === "questionBankHome" || page === "myQuestionBank" || page === "questionBank" || page === "mockExamHome" || page === "subjectiveGrading" || page === "mockExamRoom" || page === "lawSearch" || page === "lawPractice" || page === "typingPractice") return 3;
+  if (page === "questionBankHome" || page === "myQuestionBank" || page === "questionBank" || page === "mockExamHome" || page === "subjectiveGrading" || page === "mockExamRoom" || page === "lawSearch" || page === "lawPractice" || page === "recitationTraining" || page === "dictationNotebook" || page === "typingPractice") return 3;
   if (page === "myProfile" || page === "myNotes" || page === "editProfile" || page === "settings") return 4;
   return 0;
 };
@@ -1006,6 +1012,8 @@ const AUTH_REQUIRED_PAGES = new Set([
   "mockExamRoom",
   "lawSearch",
   "lawPractice",
+  "recitationTraining",
+  "dictationNotebook",
   "typingPractice",
   "myProfile",
   "myNotes",
@@ -1691,6 +1699,7 @@ function HomePage({
     if (title === "进入主观批改") { goSubjective(); return; }
     if (title === "客观题模考") { setPage("mockExamHome"); return; }
     if (title === "主观法条检索") { setPage("lawSearch"); return; }
+    if (title === "背诵训练" || title === "默写本") { setPage("recitationTraining"); return; }
     if (title === "法条练习") { setPage("lawPractice"); return; }
     if (title === "打字练习") { setPage("typingPractice"); return; }
   };
@@ -9763,6 +9772,10 @@ function DebaoAppShell() {
         ? <DebaoMockExamListPage kind="objective" setPage={setPage} notify={notify} />
         : page === "lawSearch"
         ? <DebaoLawSearchPage setPage={setPage} />
+        : page === "recitationTraining"
+        ? <RecitationTraining setPage={setPage} />
+        : page === "dictationNotebook"
+        ? <DictationNotebook setPage={setPage} />
         : page === "lawPractice"
         ? <LawPracticeRouter />
         : page === "typingPractice"

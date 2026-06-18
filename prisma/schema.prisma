@@ -40,6 +40,16 @@ enum LawPracticePaperStatus {
   published
 }
 
+enum DictationItemStatus {
+  draft
+  published
+}
+
+enum RecitationItemStatus {
+  draft
+  published
+}
+
 enum MockExamQuestionType {
   single_choice
   multiple_choice
@@ -677,6 +687,112 @@ model LawPracticeAnswer {
 
   @@unique([recordId, questionId])
   @@index([questionId])
+}
+
+model DictationSubject {
+  id          String   @id @default(cuid())
+  code        String   @unique @db.VarChar(64)
+  name        String   @db.VarChar(100)
+  color       String   @default("#c9973e") @db.VarChar(32)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chapters DictationChapter[]
+
+  @@index([isActive, sortOrder])
+  @@index([createdAt])
+}
+
+model DictationChapter {
+  id          String   @id @default(cuid())
+  subjectId   String
+  title       String   @db.VarChar(191)
+  description String?  @db.VarChar(500)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subject DictationSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  items   DictationItem[]
+
+  @@index([subjectId, isActive, sortOrder])
+  @@index([createdAt])
+}
+
+model DictationItem {
+  id            String              @id @default(cuid())
+  chapterId     String
+  title         String              @db.VarChar(191)
+  content       String              @db.LongText
+  blanksJson    String              @db.LongText
+  source        String?             @db.VarChar(191)
+  explanation   String?             @db.LongText
+  status        DictationItemStatus @default(published)
+  sortOrder     Int                 @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  chapter DictationChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId, status, sortOrder])
+  @@index([createdAt])
+}
+
+model RecitationSubject {
+  id          String   @id @default(cuid())
+  code        String   @unique @db.VarChar(64)
+  name        String   @db.VarChar(100)
+  color       String   @default("#c9973e") @db.VarChar(32)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chapters RecitationChapter[]
+
+  @@index([isActive, sortOrder])
+  @@index([createdAt])
+}
+
+model RecitationChapter {
+  id          String   @id @default(cuid())
+  subjectId   String
+  title       String   @db.VarChar(191)
+  description String?  @db.VarChar(500)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subject RecitationSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  items   RecitationItem[]
+
+  @@index([subjectId, isActive, sortOrder])
+  @@index([createdAt])
+}
+
+model RecitationItem {
+  id          String               @id @default(cuid())
+  chapterId   String
+  title       String               @db.VarChar(191)
+  content     String               @db.LongText
+  blanksJson  String               @db.LongText
+  source      String?              @db.VarChar(191)
+  explanation String?              @db.LongText
+  status      RecitationItemStatus @default(published)
+  sortOrder   Int                  @default(0)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  chapter RecitationChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId, status, sortOrder])
+  @@index([createdAt])
 }
 
 model MockExamSeries {
