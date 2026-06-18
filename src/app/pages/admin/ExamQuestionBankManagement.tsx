@@ -90,6 +90,7 @@ const createEmptySubQuestion = (index = 0): AdminExamQuestionSubQuestion => ({
   referenceAnswer: "",
   rubricGuidance: "",
   rubricPoints: [],
+  maxScore: 0,
   sortOrder: index + 1,
 });
 
@@ -169,6 +170,7 @@ const normalizeSubQuestions = (items: AdminExamQuestionSubQuestion[] = []) =>
           sortOrder: pointIndex + 1,
         }))
         .filter((point) => point.title),
+      maxScore: Number(item.maxScore) || (item.rubricPoints ?? []).reduce((sum, point) => sum + (Number(point.score) || 0), 0),
       sortOrder: index + 1,
     }))
     .filter((item) => item.title);
@@ -833,7 +835,12 @@ export function ExamQuestionBankManagement({ paperType }: { paperType: AdminExam
                     <div key={`${subQuestion.id}-${subIndex}`} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1 space-y-3">
-                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_180px]">
+                            <div className="space-y-2">
+                              <Label>小问分值</Label>
+                              <Input type="number" className="border-slate-200 bg-white" value={subQuestion.maxScore ?? 0} onChange={(event) => updateSubQuestion(subIndex, { maxScore: Number(event.target.value) || 0 })} />
+                              <p className="text-[11px] leading-4 text-slate-400">不填时按采分点合计</p>
+                            </div>
                             <div className="space-y-2">
                               <Label>小问题干</Label>
                               <Textarea className="min-h-20 border-slate-200 bg-white" value={subQuestion.title} onChange={(event) => updateSubQuestion(subIndex, { title: event.target.value })} />

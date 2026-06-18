@@ -180,6 +180,13 @@ const readSubQuestions = (value, stem) => {
       referenceAnswer: normalizeDisplayText(item?.referenceAnswer ?? "").trim(),
       rubricGuidance: normalizeDisplayText(item?.rubricGuidance ?? "").trim(),
       rubricPoints: readRubricPoints(item?.rubricPoints),
+      maxScore: Math.max(
+        0,
+        toInt(
+          item?.maxScore ?? item?.score,
+          readRubricPoints(item?.rubricPoints).reduce((sum, point) => sum + Math.max(0, Number(point.score ?? 0) || 0), 0),
+        ),
+      ),
       sortOrder: toInt(item?.sortOrder, index + 1),
     }))
     .filter((item) => item.title)
@@ -196,6 +203,7 @@ const readSubQuestions = (value, stem) => {
       referenceAnswer: "",
       rubricGuidance: "",
       rubricPoints: [],
+      maxScore: 0,
       sortOrder: 1,
     },
   ];
@@ -313,6 +321,7 @@ const serializeItem = (item) => {
       referenceAnswer: subQuestion.referenceAnswer ?? "",
       rubricGuidance: subQuestion.rubricGuidance ?? "",
       rubricPoints: Array.isArray(subQuestion.rubricPoints) ? subQuestion.rubricPoints : [],
+      maxScore: Number(subQuestion.maxScore ?? subQuestion.score ?? 0) || 0,
       sortOrder: Number(subQuestion.sortOrder ?? index + 1),
     })),
     createdAt: formatDateTime(item.createdAt),

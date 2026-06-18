@@ -690,8 +690,14 @@ export const serializeMockExamRecordDetail = (record, currentTime = new Date()) 
 const clampScore = (value, min = 0, max = 0) => Math.max(min, Math.min(max, Math.round(Number(value ?? 0) || 0)));
 
 const getSubjectiveMaxScore = (question, subQuestion, subQuestionCount = 1) => {
-  const explicit = Number(subQuestion?.maxScore ?? 0) || 0;
+  const explicit = Number(subQuestion?.maxScore ?? subQuestion?.score ?? 0) || 0;
   if (explicit > 0) return explicit;
+
+  const rubricTotal = normalizeRubricPoints(subQuestion?.rubricPoints).reduce(
+    (sum, point) => sum + Math.max(0, Number(point.maxScore ?? point.score ?? 0) || 0),
+    0,
+  );
+  if (rubricTotal > 0) return rubricTotal;
 
   return Math.max(0, Math.round((Number(question?.score ?? 0) || 0) / Math.max(1, subQuestionCount)));
 };

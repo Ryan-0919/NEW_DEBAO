@@ -47,6 +47,7 @@ export type AdminExamQuestionSubQuestion = {
   referenceAnswer?: string;
   rubricGuidance?: string;
   rubricPoints?: AdminExamQuestionRubricPoint[];
+  maxScore?: number;
   sortOrder?: number;
 };
 
