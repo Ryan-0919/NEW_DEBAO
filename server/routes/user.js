@@ -273,6 +273,8 @@ const buildUserStudySummary = async (userId) => {
     questionStates,
     mockRecords,
     typingSummary,
+    typingRecords,
+    lawPracticeRecords,
     explicitQuestionBankPermissions,
     activeUserCount,
     recentOrders,
@@ -335,6 +337,33 @@ const buildUserStudySummary = async (userId) => {
       _sum: {
         typedLength: true,
       },
+    }),
+    prisma.typingPracticeRecord.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        titleSnapshot: true,
+        mode: true,
+        accuracyRate: true,
+        cpm: true,
+        score: true,
+        durationSeconds: true,
+        completedAt: true,
+      },
+      orderBy: [{ completedAt: "desc" }],
+      take: 200,
+    }),
+    prisma.lawPracticeRecord.findMany({
+      where: { userId },
+      include: {
+        paper: {
+          select: {
+            title: true,
+          },
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }],
+      take: 200,
     }),
     prisma.userBookQuestionBankPermission.findMany({
       where: {
@@ -415,6 +444,14 @@ const buildUserStudySummary = async (userId) => {
   const completedObjectiveRecords = submittedMockRecords.filter((record) => record.paper?.paperType === "objective");
   const completedSubjectiveRecords = submittedMockRecords.filter((record) => record.paper?.paperType === "subjective");
 
+  const learningActivityEvents = [
+    ...courseProgressItems.map((item) => ({ type: "course", occurredAt: item.lastUpdated })),
+    ...questionStates.map((state) => ({ type: "question_bank", occurredAt: state.answeredAt ?? state.viewedAnswerAt ?? state.updatedAt })),
+    ...mockRecords.map((record) => ({ type: "mock_exam", occurredAt: record.submittedAt ?? record.startedAt ?? record.updatedAt })),
+    ...typingRecords.map((record) => ({ type: "typing_practice", occurredAt: record.completedAt })),
+    ...lawPracticeRecords.map((record) => ({ type: "law_practice", occurredAt: record.submittedAt ?? record.startedAt ?? record.updatedAt })),
+  ].filter((item) => item.occurredAt);
+
   const activityCandidates = [
     ...questionStates.map((state) => ({
       type: "question_bank",
@@ -443,6 +480,18 @@ const buildUserStudySummary = async (userId) => {
           : `已作答 ${Number(record.answeredCount ?? 0)}/${Number(record.questionCount ?? 0)}`,
       occurredAt: record.submittedAt ?? record.startedAt ?? record.updatedAt,
     })),
+    ...typingRecords.map((record) => ({
+      type: "typing_practice",
+      title: `完成${record.titleSnapshot || "打字练习"}`,
+      detail: `速度 ${Number(record.cpm ?? 0)} 字/分钟 · 正确率 ${Number(record.accuracyRate ?? 0)}%`,
+      occurredAt: record.completedAt,
+    })),
+    ...lawPracticeRecords.map((record) => ({
+      type: "law_practice",
+      title: record.status === "submitted" ? `提交${record.paper?.title || "法条练习"}` : `开始${record.paper?.title || "法条练习"}`,
+      detail: record.status === "submitted" ? "已完成法条定位练习" : "练习进行中",
+      occurredAt: record.submittedAt ?? record.startedAt ?? record.updatedAt,
+    })),
   ]
     .filter((item) => item.occurredAt)
     .sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime())
@@ -464,9 +513,8 @@ const buildUserStudySummary = async (userId) => {
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(day);
     dayEnd.setHours(23, 59, 59, 999);
-    const count = questionStates.filter((state) => {
-      const occurredAt = state.answeredAt ?? state.viewedAnswerAt ?? state.updatedAt;
-      const timestamp = occurredAt ? new Date(occurredAt).getTime() : 0;
+    const count = learningActivityEvents.filter((event) => {
+      const timestamp = new Date(event.occurredAt).getTime();
       return timestamp >= dayStart.getTime() && timestamp <= dayEnd.getTime();
     }).length;
     heatmapDays.push({
