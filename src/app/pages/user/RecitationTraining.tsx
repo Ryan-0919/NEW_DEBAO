@@ -63,6 +63,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   const [activeSubjectId, setActiveSubjectId] = useState("");
   const [activeChapterId, setActiveChapterId] = useState("");
   const [loadingSubjects, setLoadingSubjects] = useState(false);
+  const [subjectsLoaded, setSubjectsLoaded] = useState(false);
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
   const [answerDraft, setAnswerDraft] = useState("");
@@ -94,6 +95,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
 
   const openQuiz = () => {
     setView("quiz");
+    if (subjects.length === 0) setSubjectsLoaded(false);
     if (typeof window !== "undefined" && window.location.pathname !== "/user/recitation/quiz") {
       window.history.pushState({ page: "recitationTraining", mode: "quiz" }, "", "/user/recitation/quiz");
     }
@@ -114,7 +116,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   }, []);
 
   useEffect(() => {
-    if (view !== "quiz" || subjects.length > 0 || loadingSubjects) return;
+    if (view !== "quiz" || subjectsLoaded || loadingSubjects) return;
     let active = true;
     const load = async () => {
       setLoadingSubjects(true);
@@ -125,14 +127,17 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
       } catch (error) {
         if (active) toast.error(error instanceof Error ? error.message : "背诵训练科目加载失败");
       } finally {
-        if (active) setLoadingSubjects(false);
+        if (active) {
+          setSubjectsLoaded(true);
+          setLoadingSubjects(false);
+        }
       }
     };
     void load();
     return () => {
       active = false;
     };
-  }, [loadingSubjects, subjects.length, view]);
+  }, [loadingSubjects, subjectsLoaded, view]);
 
   useEffect(() => {
     if (view !== "quiz" || !activeSubjectId) return;
@@ -323,6 +328,18 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
               <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
                 <Loader2 className="size-4 animate-spin" />
                 正在加载学科...
+              </div>
+            ) : subjects.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+                <div>暂无可练习的抽背学科，请在后台“抽背管理”中启用学科并发布题目。</div>
+                <Button
+                  variant="outline"
+                  className="mt-4 rounded-full border-[#bfd2dc] bg-white text-slate-700 hover:bg-[#f5fafc]"
+                  onClick={() => setSubjectsLoaded(false)}
+                >
+                  <RefreshCw className="size-4" />
+                  重新加载
+                </Button>
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
