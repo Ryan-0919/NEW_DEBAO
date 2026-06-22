@@ -12,6 +12,7 @@ import {
 } from "../../services/dictationService";
 
 type BlankDraftMap = Record<string, Record<string, string>>;
+type AnswerVisibilityMap = Record<string, boolean>;
 
 const normalizeAnswer = (value = "") => value.replace(/\s+/g, "").trim();
 
@@ -67,12 +68,14 @@ function DictationPaperItem({
   index,
   drafts,
   showAnswer,
+  onToggleAnswer,
   onDraftChange,
 }: {
   item: DictationItem;
   index: number;
   drafts: Record<string, string>;
   showAnswer: boolean;
+  onToggleAnswer: () => void;
   onDraftChange: (blankId: string, value: string) => void;
 }) {
   const correctCount = useMemo(
@@ -101,6 +104,16 @@ function DictationPaperItem({
             ) : (
               <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">{item.blankCount} 个挖空</span>
             )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="ml-auto rounded-full border-[#bfd2dc] bg-white text-[#31556d] hover:bg-[#f5fafc]"
+              onClick={onToggleAnswer}
+            >
+              {showAnswer ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              {showAnswer ? "隐藏答案" : "查看答案"}
+            </Button>
           </div>
 
           <div className="font-serif text-[18px] leading-[2.25] text-slate-900">
@@ -156,7 +169,7 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
   const [loadingSubjects, setLoadingSubjects] = useState(true);
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
-  const [showAnswers, setShowAnswers] = useState(false);
+  const [shownAnswers, setShownAnswers] = useState<AnswerVisibilityMap>({});
   const [drafts, setDrafts] = useState<BlankDraftMap>({});
   const isPracticePage = Boolean(activeChapterId);
 
@@ -208,7 +221,7 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
       setLoadingChapters(true);
       if (!isPracticePage) setActiveChapterId("");
       setItems([]);
-      setShowAnswers(false);
+      setShownAnswers({});
       try {
         const payload = await dictationService.getChapters(activeSubjectId);
         if (active) setChapters(payload);
@@ -227,14 +240,14 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
   useEffect(() => {
     if (!activeChapterId) {
       setItems([]);
-      setShowAnswers(false);
+      setShownAnswers({});
       return;
     }
 
     let active = true;
     const load = async () => {
       setLoadingItems(true);
-      setShowAnswers(false);
+      setShownAnswers({});
       try {
         const payload = await dictationService.getChapterItems(activeChapterId);
         if (!active) return;
@@ -279,8 +292,15 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
       });
       return next;
     });
-    setShowAnswers(false);
+    setShownAnswers({});
     toast.success("本章节填写内容已清空");
+  };
+
+  const toggleItemAnswer = (itemId: string) => {
+    setShownAnswers((current) => ({
+      ...current,
+      [itemId]: !current[itemId],
+    }));
   };
 
   const goHome = () => {
@@ -295,7 +315,7 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
     if (!chapterId) return;
     const nextPath = `/user/dictation/chapters/${encodeURIComponent(chapterId)}`;
     setActiveChapterId(chapterId);
-    setShowAnswers(false);
+    setShownAnswers({});
     setItems([]);
     if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
       window.history.pushState({ page: "dictationNotebook", chapterId }, "", nextPath);
@@ -305,7 +325,7 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
   const backToDirectory = () => {
     setActiveChapterId("");
     setItems([]);
-    setShowAnswers(false);
+    setShownAnswers({});
     if (typeof window !== "undefined" && window.location.pathname !== "/user/dictation") {
       window.history.pushState({ page: "dictationNotebook" }, "", "/user/dictation");
     }
@@ -326,7 +346,7 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
               </div>
               <div>
                 <h1 className="text-2xl font-black tracking-normal text-slate-950">默写本</h1>
-                <p className="mt-1 text-sm text-slate-500">选择章节后直接展示整章内容，先填写挖空，再统一查看答案。</p>
+                <p className="mt-1 text-sm text-slate-500">选择章节后直接展示整章内容，先填写挖空，每道题可单独查看答案。</p>
               </div>
             </div>
           </div>
@@ -340,10 +360,6 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
               <Button variant="outline" className="rounded-full border-[#bfd2dc] bg-white text-slate-700 hover:bg-[#f5fafc]" onClick={resetCurrentChapter}>
                 <RefreshCw className="size-4" />
                 重做本章
-              </Button>
-              <Button className="rounded-full bg-[#31556d] text-white hover:bg-[#27475d]" onClick={() => setShowAnswers((current) => !current)}>
-                {showAnswers ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                {showAnswers ? "隐藏答案" : "查看答案"}
               </Button>
             </div>
           ) : null}
@@ -413,9 +429,6 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
                             <Button variant="outline" className="rounded-full border-[#bfd2dc] bg-white text-slate-700 hover:bg-[#f5fafc]" onClick={resetCurrentChapter}>
                               重做
                             </Button>
-                            <Button className="rounded-full bg-[#31556d] text-white hover:bg-[#27475d]" onClick={() => setShowAnswers((current) => !current)}>
-                              {showAnswers ? "隐藏答案" : "查看答案"}
-                            </Button>
                           </div>
                         </div>
                       </div>
@@ -463,7 +476,8 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
                                   item={item}
                                   index={index}
                                   drafts={drafts[item.id] ?? {}}
-                                  showAnswer={showAnswers}
+                                  showAnswer={Boolean(shownAnswers[item.id])}
+                                  onToggleAnswer={() => toggleItemAnswer(item.id)}
                                   onDraftChange={(blankId, value) => updateDraft(item.id, blankId, value)}
                                 />
                               ))}
