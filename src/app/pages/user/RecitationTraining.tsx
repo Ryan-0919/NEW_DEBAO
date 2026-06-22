@@ -116,7 +116,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   }, []);
 
   useEffect(() => {
-    if (view !== "quiz" || subjectsLoaded || loadingSubjects) return;
+    if (view !== "quiz" || subjectsLoaded) return;
     let active = true;
     const load = async () => {
       setLoadingSubjects(true);
@@ -137,7 +137,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
     return () => {
       active = false;
     };
-  }, [loadingSubjects, subjectsLoaded, view]);
+  }, [subjectsLoaded, view]);
 
   useEffect(() => {
     if (view !== "quiz" || !activeSubjectId) return;
