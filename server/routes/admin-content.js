@@ -161,6 +161,15 @@ const toInt = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const getObjectiveMockExamQuestionScore = (type) => (type === "single_choice" ? 1 : 2);
+
+const getMockExamQuestionScore = (paperType, questionType, fallbackScore = 0) => {
+  if (paperType === "objective" && MOCK_EXAM_OBJECTIVE_QUESTION_TYPES.has(questionType)) {
+    return getObjectiveMockExamQuestionScore(questionType);
+  }
+  return Math.max(0, toInt(fallbackScore, 0));
+};
+
 const toBool = (value, fallback = false) => {
   if (typeof value === "boolean") return value;
   if (value === "true" || value === "1" || value === 1) return true;
@@ -1010,7 +1019,7 @@ adminContentRouter.post("/mock-exams/papers/:paperId/questions/import-from-bank"
           lessonAudioUrl: item.lessonAudioUrl,
           lessonAudioObjectKey: item.lessonAudioObjectKey,
           lessonAudioDurationSeconds: Number(item.lessonAudioDurationSeconds ?? 0) || 0,
-          score: Number(item.score ?? 0) || 0,
+          score: getMockExamQuestionScore(paper.paperType, item.type, item.score),
           sortOrder: nextSortOrder + index,
           correctAnswerJson: item.correctAnswerJson || "[]",
           questionMetaJson: item.questionMetaJson,

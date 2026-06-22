@@ -21,6 +21,7 @@ const librarySubjectiveColumns = [
 ];
 
 const examBaseColumns = ["题号", "标题", "年份", "页码", "分区标题", "分区说明", "标签", "难度", "题型", "材料", "题干", "解析", "分值", "排序", "音频URL", "音频时长秒"];
+const examObjectiveBaseColumns = examBaseColumns.filter((column) => column !== "分值");
 
 const rowsByKind: Record<QuestionImportTemplateKind, Record<string, string | number>[]> = {
   "library-objective": [
@@ -114,7 +115,6 @@ const rowsByKind: Record<QuestionImportTemplateKind, Record<string, string | num
       材料: "可为空；如有共同材料可填写在这里。",
       题干: "这里填写客观机考题干。",
       解析: "这里填写解析。",
-      分值: 1,
       排序: 1,
       选项A: "选项 A",
       选项B: "选项 B",
@@ -135,7 +135,6 @@ const rowsByKind: Record<QuestionImportTemplateKind, Record<string, string | num
       材料: "可为空；如有共同材料可填写在这里。",
       题干: "这里填写客观机考多选题干。",
       解析: "这里填写解析。",
-      分值: 2,
       排序: 2,
       选项A: "选项 A",
       选项B: "选项 B",
@@ -156,7 +155,6 @@ const rowsByKind: Record<QuestionImportTemplateKind, Record<string, string | num
       材料: "可为空；如有共同材料可填写在这里。",
       题干: "这里填写客观机考不定项题干。",
       解析: "这里填写解析。",
-      分值: 2,
       排序: 3,
       选项A: "选项 A",
       选项B: "选项 B",
@@ -199,7 +197,7 @@ const rowsByKind: Record<QuestionImportTemplateKind, Record<string, string | num
 const columnsByKind: Record<QuestionImportTemplateKind, string[]> = {
   "library-objective": libraryObjectiveColumns,
   "library-subjective": librarySubjectiveColumns,
-  "exam-objective": [...examBaseColumns, "选项A", "选项B", "选项C", "选项D", "正确答案"],
+  "exam-objective": [...examObjectiveBaseColumns, "选项A", "选项B", "选项C", "选项D", "正确答案"],
   "exam-subjective": [
     ...examBaseColumns,
     "小问1标题",

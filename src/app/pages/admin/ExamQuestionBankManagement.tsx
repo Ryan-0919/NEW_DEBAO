@@ -78,6 +78,7 @@ const configByType = {
 
 const compactNumber = (value: number | undefined | null) => Number(value ?? 0).toLocaleString("zh-CN");
 const difficultyLabel = (value: number) => (Number(value) <= 1 ? "基础" : Number(value) >= 3 ? "较难" : "标准");
+const getObjectiveQuestionScore = (type: AdminExamQuestionBankItemType) => (type === "single_choice" ? 1 : 2);
 const splitTags = (value = "") => value.split(/[,\n，、；;]/).map((item) => item.trim()).filter(Boolean);
 const splitKeywords = (value = "") => splitTags(value);
 const joinKeywords = (value: string[] | undefined) => (Array.isArray(value) ? value.join("，") : "");
@@ -113,7 +114,7 @@ const createEmptyItemForm = (paperType: AdminExamQuestionBankPaperType): ItemFor
   lessonAudioUrl: "",
   lessonAudioObjectKey: "",
   lessonAudioDurationSeconds: 0,
-  score: paperType === "subjective" ? 20 : 2,
+  score: paperType === "subjective" ? 20 : 1,
   sortOrder: 0,
   correctAnswer: [],
   options: paperType === "subjective" ? [] : defaultOptions.map((option) => ({ ...option })),
@@ -139,7 +140,7 @@ const toItemForm = (item: AdminExamQuestionBankItem): ItemForm => ({
   lessonAudioUrl: item.lessonAudioUrl,
   lessonAudioObjectKey: item.lessonAudioObjectKey,
   lessonAudioDurationSeconds: item.lessonAudioDurationSeconds,
-  score: item.score,
+  score: item.paperType === "objective" ? getObjectiveQuestionScore(item.type) : item.score,
   sortOrder: item.sortOrder,
   correctAnswer: item.correctAnswer,
   options: item.options.length > 0 ? item.options.map((option, index) => ({ ...option, sortOrder: index })) : defaultOptions.map((option) => ({ ...option })),
@@ -195,7 +196,7 @@ const buildItemPayload = (form: ItemForm): AdminExamQuestionBankItemPayload => {
     lessonAudioUrl: form.lessonAudioUrl?.trim() || "",
     lessonAudioObjectKey: form.lessonAudioObjectKey?.trim() || "",
     lessonAudioDurationSeconds: Number(form.lessonAudioDurationSeconds) || 0,
-    score: Number(form.score) || (isSubjective ? 20 : 2),
+    score: isSubjective ? Number(form.score) || 20 : getObjectiveQuestionScore(form.type),
     sortOrder: Number(form.sortOrder) || 0,
     correctAnswer: isSubjective ? [] : form.correctAnswer,
     options: isSubjective
@@ -291,7 +292,6 @@ export function ExamQuestionBankManagement({ paperType }: { paperType: AdminExam
                   stem: "这里填写客观机考题干。",
                   material: "这里填写材料，可为空。",
                   analysis: "这里填写解析。",
-                  score: 1,
                   correctAnswer: ["A"],
                   options: [
                     { optionKey: "A", content: "选项 A" },
@@ -310,7 +310,6 @@ export function ExamQuestionBankManagement({ paperType }: { paperType: AdminExam
                   stem: "这里填写客观机考多选题干。",
                   material: "这里填写材料，可为空。",
                   analysis: "这里填写解析。",
-                  score: 2,
                   correctAnswer: ["A", "B"],
                   options: [
                     { optionKey: "A", content: "选项 A" },
@@ -329,7 +328,6 @@ export function ExamQuestionBankManagement({ paperType }: { paperType: AdminExam
                   stem: "这里填写客观机考不定项题干。",
                   material: "这里填写材料，可为空。",
                   analysis: "这里填写解析。",
-                  score: 2,
                   correctAnswer: ["A", "C"],
                   options: [
                     { optionKey: "A", content: "选项 A" },
@@ -744,7 +742,12 @@ export function ExamQuestionBankManagement({ paperType }: { paperType: AdminExam
                     <Select
                       value={itemForm.type}
                       onValueChange={(value: AdminExamQuestionBankItemType) =>
-                        setItemForm((current) => ({ ...current, type: value, correctAnswer: value === "single_choice" ? current.correctAnswer?.slice(0, 1) : current.correctAnswer }))
+                        setItemForm((current) => ({
+                          ...current,
+                          type: value,
+                          score: getObjectiveQuestionScore(value),
+                          correctAnswer: value === "single_choice" ? current.correctAnswer?.slice(0, 1) : current.correctAnswer,
+                        }))
                       }
                     >
                       <SelectTrigger className="border-slate-200 bg-white"><SelectValue /></SelectTrigger>
@@ -903,10 +906,20 @@ export function ExamQuestionBankManagement({ paperType }: { paperType: AdminExam
               <h2 className="text-base font-semibold text-slate-900">题目信息</h2>
               <div className="mt-4 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>分值</Label>
-                    <Input type="number" className="border-slate-200 bg-white" value={itemForm.score} onChange={(event) => setItemForm((current) => ({ ...current, score: Number(event.target.value) || 0 }))} />
-                  </div>
+                  {paperType === "objective" ? (
+                    <div className="space-y-2">
+                      <Label>分值</Label>
+                      <div className="flex min-h-10 items-center rounded-md border border-blue-100 bg-blue-50 px-3 text-sm font-semibold text-blue-700">
+                        {getObjectiveQuestionScore(itemForm.type)} 分
+                      </div>
+                      <p className="text-xs leading-5 text-slate-500">客观机考固定分值：单选 1 分，多选/不定项 2 分，导入时无需填写分值。</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>分值</Label>
+                      <Input type="number" className="border-slate-200 bg-white" value={itemForm.score} onChange={(event) => setItemForm((current) => ({ ...current, score: Number(event.target.value) || 0 }))} />
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label>排序</Label>
                     <Input type="number" className="border-slate-200 bg-white" value={itemForm.sortOrder} onChange={(event) => setItemForm((current) => ({ ...current, sortOrder: Number(event.target.value) || 0 }))} />
@@ -1228,7 +1241,7 @@ export function ExamQuestionBankManagement({ paperType }: { paperType: AdminExam
               </div>
               <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-6 text-blue-800">
                 <div>单次最多 200 道题。</div>
-                <div>客观机考题必须有 options 和 correctAnswer。</div>
+                <div>客观机考题必须有 options 和 correctAnswer；分值由系统按题型自动设置，单选 1 分，多选/不定项 2 分。</div>
                 <div>主观机考题建议填写 subQuestions、referenceAnswer 和 rubricGuidance。</div>
               </div>
             </div>

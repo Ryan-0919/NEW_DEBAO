@@ -45,6 +45,15 @@ const toInt = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const getObjectiveQuestionScore = (type) => (type === "single_choice" ? 1 : 2);
+
+const readQuestionScore = (paperType, type, value) => {
+  if (paperType === "objective" && OBJECTIVE_TYPES.has(type)) {
+    return getObjectiveQuestionScore(type);
+  }
+  return Math.max(0, toInt(value, paperType === "subjective" ? 20 : 2));
+};
+
 const toStringArray = (value) =>
   [
     ...new Set(
@@ -257,7 +266,7 @@ const readItemPayload = (body = {}, paperType) => {
     lessonAudioUrl: `${body.lessonAudioUrl ?? ""}`.trim() || null,
     lessonAudioObjectKey: `${body.lessonAudioObjectKey ?? ""}`.trim() || null,
     lessonAudioDurationSeconds: Math.max(0, toInt(body.lessonAudioDurationSeconds, 0)),
-    score: Math.max(0, toInt(body.score, paperType === "subjective" ? 20 : 2)),
+    score: readQuestionScore(paperType, type, body.score),
     sortOrder: toInt(body.sortOrder, 0),
     correctAnswerJson: JSON.stringify(paperType === "subjective" ? [] : normalizeAnswerKeys(body.correctAnswer ?? body.correctAnswerKeys ?? body.correctAnswerJson)),
     questionMetaJson: buildQuestionMetaJson(paperType, body, stem),
