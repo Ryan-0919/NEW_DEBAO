@@ -92,9 +92,11 @@ const sumPositiveAnswerMarkScores = (marks = []) =>
     0,
   );
 
+const normalizeMarkScore = (value) => Math.max(0, Math.round(Number(value ?? 0) || 0));
+
 const getReviewItemMarkScore = (reviewItem, maxScore = 0) => {
   const answerMarks = normalizeAnswerMarks(reviewItem?.answerMarks);
-  return clampScore(sumPositiveAnswerMarkScores(answerMarks), 0, Math.max(0, Number(maxScore ?? reviewItem?.maxScore ?? 0) || 0));
+  return normalizeMarkScore(sumPositiveAnswerMarkScores(answerMarks));
 };
 
 const getAnswerReviewMarkScore = ({ answer, question }) => {
@@ -438,7 +440,7 @@ const serializeReviewDetail = (record, req, currentTime = new Date()) => {
           const maxScore = getSubjectiveMaxScore(question, subQuestion, questionMeta.subQuestions.length);
           const answerText = answerBySubQuestion[subQuestion.id] ?? "";
           const answerMarks = normalizeAnswerMarks(reviewItem?.answerMarks);
-          const score = clampScore(sumPositiveAnswerMarkScores(answerMarks), 0, maxScore);
+          const score = normalizeMarkScore(sumPositiveAnswerMarkScores(answerMarks));
           return {
             id: subQuestion.id,
             title: subQuestion.title,
@@ -551,7 +553,7 @@ const normalizeReviewPayload = ({ record, payloadAnswers = [] }) => {
         ...mark,
         id: mark.id || `mark_${index + 1}_${markIndex + 1}`,
       }));
-      const score = clampScore(sumPositiveAnswerMarkScores(answerMarks), 0, maxScore);
+      const score = normalizeMarkScore(sumPositiveAnswerMarkScores(answerMarks));
 
       return {
         id: subQuestion.id,
@@ -571,11 +573,7 @@ const normalizeReviewPayload = ({ record, payloadAnswers = [] }) => {
         skippedReviewReason: normalizeText(item?.skippedReviewReason ?? ""),
       };
     });
-    const totalScore = clampScore(
-      subQuestions.reduce((sum, item) => sum + Number(item.score ?? 0), 0),
-      0,
-      Number(question.score ?? 0) || subQuestions.reduce((sum, item) => sum + Number(item.maxScore ?? 0), 0),
-    );
+    const totalScore = normalizeMarkScore(subQuestions.reduce((sum, item) => sum + Number(item.score ?? 0), 0));
 
     return {
       question,

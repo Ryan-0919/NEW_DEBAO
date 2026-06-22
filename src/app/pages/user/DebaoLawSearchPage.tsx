@@ -221,8 +221,9 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
   const [leftWidth, setLeftWidth] = useState(390);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [internalFullscreen, setInternalFullscreen] = useState(false);
-  const dragRef = useRef<{ x: number; width: number } | null>(null);
+  const dragRef = useRef<{ x: number; width: number; maxWidth: number } | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   const treeRef = useRef<HTMLDivElement | null>(null);
   const rightRef = useRef<HTMLDivElement | null>(null);
   const matchIndexRef = useRef(0);
@@ -248,7 +249,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
         setTree(nextTree);
         const initialId = data.initialNodeId || nextTree[0]?.id || "";
         setActiveNodeId(initialId);
-        setContentNodeId(initialId);
+        setContentNodeId("");
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "法条目录加载失败");
       } finally {
@@ -337,13 +338,14 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
     const handleMove = (event: MouseEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
-      const nextWidth = drag.width + event.pageX - drag.x;
+      const nextWidth = drag.width + event.clientX - drag.x;
       if (nextWidth <= LEFT_COLLAPSE_THRESHOLD) {
         setLeftCollapsed(true);
       } else {
         setLeftCollapsed(false);
-        setLeftWidth(clamp(nextWidth, LEFT_WIDTH_MIN, LEFT_WIDTH_MAX));
+        setLeftWidth(clamp(nextWidth, LEFT_WIDTH_MIN, drag.maxWidth));
       }
+      event.preventDefault();
       event.stopPropagation();
     };
 
@@ -498,8 +500,20 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
     setInternalFullscreen((current) => !current);
   };
 
+  const getMaxLeftWidth = () => {
+    const bodyWidth = bodyRef.current?.getBoundingClientRect().width ?? 0;
+    const reservedRightWidth = embedded ? 360 : 480;
+    const containerLimit = bodyWidth > 0 ? Math.max(LEFT_WIDTH_MIN, bodyWidth - reservedRightWidth) : LEFT_WIDTH_MAX;
+    const modeLimit = embedded ? 560 : LEFT_WIDTH_MAX;
+    return Math.max(LEFT_WIDTH_MIN, Math.min(modeLimit, containerLimit));
+  };
+
   const startDrag = (event: ReactMouseEvent<HTMLDivElement>) => {
-    dragRef.current = { x: event.pageX, width: leftCollapsed ? 0 : leftWidth };
+    dragRef.current = {
+      x: event.clientX,
+      width: leftCollapsed ? 0 : leftWidth,
+      maxWidth: getMaxLeftWidth(),
+    };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     event.preventDefault();
@@ -536,10 +550,10 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
               ) : null}
             </div>
           </div>
-          <div className="debao-law-body">
+          <div className="debao-law-body" ref={bodyRef}>
             {!leftCollapsed ? (
               <>
-                <div className="debao-law-left" style={{ width: embedded ? Math.min(leftWidth, 320) : leftWidth }}>
+                <div className="debao-law-left" style={{ width: leftWidth }}>
                   <div className="debao-law-nav">
                     <div>章节导航</div>
                     <button type="button" className="debao-law-nav-button" aria-label="收起导航" onClick={() => setLeftCollapsed(true)}>

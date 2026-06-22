@@ -105,7 +105,7 @@ const parseScore = (value: unknown) => {
   return Number.isFinite(numericValue) ? numericValue : 0;
 };
 
-const clampScore = (value: unknown, maxScore: number) => Math.min(Math.max(0, parseScore(value)), Math.max(0, Number(maxScore) || 0));
+const normalizeScore = (value: unknown) => Math.max(0, Math.round(parseScore(value)));
 
 const isPositiveMark = (mark: Pick<ReviewAnswerMark, "status">) => mark.status === "correct" || mark.status === "score";
 
@@ -113,7 +113,7 @@ const sumPositiveMarkScores = (marks: ReviewAnswerMark[]) =>
   (Array.isArray(marks) ? marks : []).reduce((sum, mark) => sum + (isPositiveMark(mark) ? Math.max(0, parseScore(mark.score)) : 0), 0);
 
 const getSubQuestionMarkScore = (subQuestion: AdminMockExamReviewSubQuestion) =>
-  clampScore(sumPositiveMarkScores(subQuestion.answerMarks ?? []), subQuestion.maxScore);
+  normalizeScore(sumPositiveMarkScores(subQuestion.answerMarks ?? []));
 
 const getQuestionTotalScore = (question?: ReviewFormQuestion | null) =>
   (question?.subQuestions ?? []).reduce((sum, item) => sum + getSubQuestionMarkScore(item), 0);
@@ -477,10 +477,10 @@ function SubQuestionReviewWorkbench({
 
   const handleMarksChange = (nextMarks: ReviewAnswerMark[]) => {
     const normalizedMarks = normalizeAnswerMarks(nextMarks);
-    const markScore = sumPositiveMarkScores(normalizedMarks);
+    const markScore = normalizeScore(sumPositiveMarkScores(normalizedMarks));
     onChange({
       answerMarks: normalizedMarks,
-      score: clampScore(markScore, subQuestion.maxScore),
+      score: markScore,
     });
   };
 
