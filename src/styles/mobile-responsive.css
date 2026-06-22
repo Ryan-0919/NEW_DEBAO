@@ -1177,11 +1177,19 @@ textarea {
     width: 100%;
   }
 
+  .debao-audio-controls .debao-audio-mobile-repeat-button {
+    display: inline-flex !important;
+  }
+
   .debao-audio-right-controls {
     width: auto !important;
     min-width: 0;
     justify-content: flex-end !important;
     gap: 6px !important;
+  }
+
+  .debao-audio-right-controls > .debao-audio-repeat-button:not(.debao-audio-mobile-repeat-button) {
+    display: none !important;
   }
 
   .debao-audio-volume {
@@ -2470,13 +2478,17 @@ textarea {
     gap: 14px !important;
   }
 
-  .debao-audio-controls > div:first-child button:nth-child(2) {
+  .debao-audio-controls > div:first-child button:nth-child(3) {
     width: 40px !important;
     height: 40px !important;
   }
 
   .debao-audio-repeat-button span {
     display: none !important;
+  }
+
+  .debao-audio-controls .debao-audio-mobile-repeat-button span {
+    display: inline !important;
   }
 }
 

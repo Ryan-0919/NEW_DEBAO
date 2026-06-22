@@ -226,6 +226,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
   const treeRef = useRef<HTMLDivElement | null>(null);
   const rightRef = useRef<HTMLDivElement | null>(null);
   const matchIndexRef = useRef(0);
+  const searchRequestSeqRef = useRef(0);
   const contentCacheRef = useRef<Map<string, LawContentPayload>>(new Map());
 
   const nodeMap = useMemo(() => buildNodeMap(tree), [tree]);
@@ -397,7 +398,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
     updateNode(node.id, (current) => ({ ...current, isOpen: !current.isOpen }));
   };
 
-  const findMatches = (rawKeyword: string) => {
+  const findMatches = async (rawKeyword: string) => {
     const query = rawKeyword.trim();
     setKeyword(query);
     setLeftCollapsed(false);
@@ -409,27 +410,42 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
       return;
     }
 
+    const requestSeq = searchRequestSeqRef.current + 1;
+    searchRequestSeqRef.current = requestSeq;
     const nextMatches: SearchMatch[] = [];
     const seenIds = new Set<string>();
     const terms = query.split(/\s+/).filter(Boolean);
     const matchedAncestorIds = new Set<string>();
+    const addMatch = (node: LawTreeStateNode) => {
+      if (seenIds.has(node.id)) return;
+      seenIds.add(node.id);
+      nextMatches.push({ id: node.id });
+      let current = node.parentId ? nodeMap.get(node.parentId) : null;
+      while (current) {
+        matchedAncestorIds.add(current.id);
+        current = current.parentId ? nodeMap.get(current.parentId) : null;
+      }
+    };
 
     const searchNodes = (nodes: LawTreeStateNode[]) => {
       nodes.forEach((node) => {
         const compactTitle = node.title.replace(/\s*/g, "");
-        if (terms.some((term) => compactTitle.includes(term)) && !seenIds.has(node.id)) {
-          seenIds.add(node.id);
-          nextMatches.push({ id: node.id });
-          let current = node.parentId ? nodeMap.get(node.parentId) : null;
-          while (current) {
-            matchedAncestorIds.add(current.id);
-            current = current.parentId ? nodeMap.get(current.parentId) : null;
-          }
-        }
+        if (terms.some((term) => compactTitle.includes(term))) addMatch(node);
         if (node.children?.length) searchNodes(node.children);
       });
     };
     searchNodes(tree);
+
+    try {
+      const remoteMatches = await lawService.search(query);
+      if (searchRequestSeqRef.current !== requestSeq) return;
+      remoteMatches.forEach((item) => {
+        const recordNode = nodeMap.get(`record:${item.id}`);
+        if (recordNode) addMatch(recordNode);
+      });
+    } catch {
+      // Directory matches still work when full-text search is temporarily unavailable.
+    }
 
     const walk = (nodes: LawTreeStateNode[]): LawTreeStateNode[] =>
       nodes.map((node) => ({
@@ -538,7 +554,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
                         value={keyword}
                         onChange={(event) => setKeyword(event.target.value)}
                         onKeyDown={(event) => {
-                          if (event.key === "Enter") findMatches(keyword);
+                          if (event.key === "Enter") void findMatches(keyword);
                         }}
                         onPaste={(event) => event.preventDefault()}
                       />

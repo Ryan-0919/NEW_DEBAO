@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BookOpenCheck, CheckCircle2, Eye, EyeOff, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, BookOpenCheck, Eye, EyeOff, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
 import { cn } from "../../components/ui/utils";
@@ -101,9 +101,7 @@ function DictationPaperItem({
               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                 答对 {correctCount}/{item.blankCount}
               </span>
-            ) : (
-              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">{item.blankCount} 个挖空</span>
-            )}
+            ) : null}
             <Button
               type="button"
               size="sm"
@@ -134,22 +132,6 @@ function DictationPaperItem({
             )}
           </div>
 
-          {showAnswer ? (
-            <div className="mt-4 rounded-xl border border-[#d9e5ea] bg-[#f8fbfd] p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-black text-[#31556d]">
-                <CheckCircle2 className="size-4 text-emerald-600" />
-                标准答案
-              </div>
-              <div className="flex flex-wrap gap-2 text-sm">
-                {item.blanks.map((blank) => (
-                  <span key={blank.id} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-slate-700">
-                    {blank.index}. <strong className="text-slate-950">{blank.answer || "未配置"}</strong>
-                  </span>
-                ))}
-              </div>
-              {item.explanation ? <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-600">{item.explanation}</div> : null}
-            </div>
-          ) : null}
         </div>
       </div>
     </article>
@@ -210,9 +192,9 @@ export function DictationNotebook({ setPage }: { setPage?: (page: string) => voi
 
   useEffect(() => {
     if (!activeSubjectId || isPracticePage) {
-      setChapters([]);
+      if (!isPracticePage) setChapters([]);
       if (!isPracticePage) setActiveChapterId("");
-      setItems([]);
+      if (!isPracticePage) setItems([]);
       return;
     }
 

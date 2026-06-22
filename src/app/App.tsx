@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ChangeEvent, FormEvent, MouseEvent as ReactMouseEvent, ReactNode, SyntheticEvent } from "react";
+import type { ChangeEvent, FormEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
 import Hls from "hls.js";
 import {
@@ -90,9 +90,9 @@ const getImageTargetPreviewSource = () => {
 
 /* ══════════════════════ SHARED DATA ══════════════════════ */
 
-const navItems = ["首页", "课程中心", "商城", "题库", "我的"];
-const navIcons = [House, PlayCircle, ShoppingBag, BookOpen, UserRound];
-const navPages = ["home", "courses", "shop", "questionBankHome", "myProfile"];
+const navItems = ["首页", "课程中心", "商城", "我的"];
+const navIcons = [House, PlayCircle, ShoppingBag, UserRound];
+const navPages = ["home", "courses", "shop", "myProfile"];
 type DebaoThemeMode = "dark" | "light";
 const DEBAO_THEME_STORAGE_KEY = "debao:theme-mode";
 
@@ -701,13 +701,19 @@ const OFFICIAL_EXAM_EXTRA_CSS = `
 [data-v-6e05b77a] .debao-resizable-dialog{min-width:360px;min-height:260px}
 [data-v-6e05b77a] .debao-resize-edge-right{position:absolute;top:0;right:0;width:7px;height:100%;cursor:ew-resize;z-index:220}
 [data-v-6e05b77a] .debao-resize-edge-bottom{position:absolute;left:0;bottom:0;width:100%;height:7px;cursor:ns-resize;z-index:220}
+[data-v-6e05b77a] .debao-resize-edge-left{position:absolute;top:0;left:0;width:7px;height:100%;cursor:ew-resize;z-index:220}
+[data-v-6e05b77a] .debao-resize-edge-top{position:absolute;left:0;top:0;width:100%;height:7px;cursor:ns-resize;z-index:220}
 [data-v-6e05b77a] .debao-resize-grip{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;z-index:230;background:linear-gradient(135deg, transparent 0 48%, rgba(64,64,64,.32) 48% 55%, transparent 55% 65%, rgba(64,64,64,.32) 65% 72%, transparent 72%)}
+[data-v-6e05b77a] .debao-resize-grip-nw{position:absolute;left:0;top:0;width:14px;height:14px;cursor:nwse-resize;z-index:230}
+[data-v-6e05b77a] .debao-resize-grip-ne{position:absolute;right:0;top:0;width:14px;height:14px;cursor:nesw-resize;z-index:230}
+[data-v-6e05b77a] .debao-resize-grip-sw{position:absolute;left:0;bottom:0;width:14px;height:14px;cursor:nesw-resize;z-index:230}
 [data-v-6e05b77a] .mock-stem-highlight{background:#fff59d;color:inherit}
 `;
 type OfficialThemeId = 1 | 2 | 3 | 4 | 5;
 type OfficialSubjectivePanelHeight = "300px" | "100%";
 type OfficialAnswerPanelHeight = "340px" | "100%";
 type OfficialDialogRect = { left: number; top: number; width: number; height: number };
+type OfficialDialogResizeDirection = "n" | "e" | "s" | "w" | "ne" | "nw" | "se" | "sw";
 type OfficialHighlightBlock = "prompt" | "subjective-block";
 type OfficialHighlightSelection = { block: OfficialHighlightBlock; key: string; start: number; end: number };
 const OFFICIAL_THEME_BG: Record<OfficialThemeId, string> = { 1: "#ddebf6", 2: "#cae0e0", 3: "#f5e9dc", 4: "#f5dce4", 5: "#deddf6" };
@@ -824,6 +830,19 @@ const createOfficialDialogRect = (): OfficialDialogRect => {
     top: Math.round(viewportHeight * 0.15),
     width: Math.round(viewportWidth * 0.5),
     height: Math.round(viewportHeight * 0.7),
+  };
+};
+
+const createOfficialAnalysisDialogRect = (): OfficialDialogRect => {
+  const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
+  const width = Math.round(viewportWidth * 0.56);
+  const height = Math.round(viewportHeight * 0.78);
+  return {
+    left: Math.round((viewportWidth - width) / 2),
+    top: Math.round(viewportHeight * 0.09),
+    width,
+    height,
   };
 };
 
@@ -994,8 +1013,8 @@ const buildMockExamRoomPath = (target: MockExamSessionTarget) => {
 const navIndexForPage = (page: string) => {
   if (page === "courses" || page === "audioDetail" || page === "courseDetail") return 1;
   if (page === "shop" || page === "shopOrder") return 2;
-  if (page === "questionBankHome" || page === "myQuestionBank" || page === "questionBank" || page === "mockExamHome" || page === "subjectiveGrading" || page === "mockExamRoom" || page === "lawSearch" || page === "lawPractice" || page === "recitationTraining" || page === "dictationNotebook" || page === "typingPractice") return 3;
-  if (page === "myProfile" || page === "myNotes" || page === "editProfile" || page === "settings") return 4;
+  if (page === "myProfile" || page === "myNotes" || page === "editProfile" || page === "settings") return 3;
+  if (page === "questionBankHome" || page === "myQuestionBank" || page === "questionBank" || page === "mockExamHome" || page === "subjectiveGrading" || page === "mockExamRoom" || page === "lawSearch" || page === "lawPractice" || page === "recitationTraining" || page === "dictationNotebook" || page === "typingPractice") return -1;
   return 0;
 };
 
@@ -2114,10 +2133,32 @@ function CoursesPage({ setPage, goToCourse, notify, courses, loadingCourses, stu
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
             >
               {/* Card cover */}
-              <div className="debao-course-card-cover" style={{ height: 110, position: "relative", background: categoryGrad[c.category] || "linear-gradient(135deg,#0f1826,#1a2a3a)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              <div className="debao-course-card-cover" style={{ height: 110, position: "relative", background: categoryGrad[c.category] || "linear-gradient(135deg,#0f1826,#1a2a3a)", overflow: "hidden" }}>
                 {/* decorative glow */}
                 <div style={{ position: "absolute", right: -20, top: -20, width: 120, height: 120, borderRadius: "50%", background: `${c.color}15`, filter: "blur(30px)" }} />
-                <div style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 28, fontWeight: 800, color: "rgba(255,255,255,0.86)", letterSpacing: 0, userSelect: "none", textAlign: "center", padding: "0 22px", lineHeight: 1.22, maxWidth: "92%", textShadow: "0 2px 12px rgba(0,0,0,0.28)" }}>{c.title}</div>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 18,
+                    right: 18,
+                    bottom: 18,
+                    fontFamily: "'Noto Serif SC',serif",
+                    fontSize: 22,
+                    fontWeight: 800,
+                    color: "rgba(255,255,255,0.9)",
+                    letterSpacing: 0,
+                    userSelect: "none",
+                    textAlign: "center",
+                    lineHeight: 1.24,
+                    textShadow: "0 2px 12px rgba(0,0,0,0.35)",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {c.title}
+                </div>
                 {/* tag */}
                 <div style={{ position: "absolute", top: 12, left: 14, display: "flex", gap: 6 }}>
                   <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: `${c.color}22`, color: c.color, border: `1px solid ${c.color}30` }}>{c.category}</span>
@@ -2856,6 +2897,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
   const [currentLesson, setCurrentLesson] = useState<LessonModel>(() => getCurrentLesson(chapters)!);
   const currentAudioLessonRef = useRef<LessonModel | null>(currentLesson);
   const pendingAudioAutoplayRef = useRef(false);
+  const suppressAudioSeekClickRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(() => calcLessonPercent(getCurrentLesson(chapters)));
   const [volume, setVolume] = useState(80);
@@ -3060,6 +3102,48 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
         // Progress saving should not block listening.
       })
       .finally(() => setSyncingProgress(false));
+  };
+
+  const seekAudioByClientX = (clientX: number, element: HTMLElement, persist = false) => {
+    if (!currentLesson.mediaUrl) {
+      notify(currentLesson.id === "__empty__" ? "å½“å‰è¯¾ç¨‹æš‚æ— å¯æ’­æ”¾è¯¾æ—¶" : "å½“å‰éŸ³é¢‘æš‚æœªé…ç½®åª’ä½“", "warning");
+      return;
+    }
+    const rect = element.getBoundingClientRect();
+    const ratio = rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
+    const next = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+    const nextSeconds = Math.round((next / 100) * currentDurationSec);
+    if (audioRef.current && Number.isFinite(audioRef.current.duration)) audioRef.current.currentTime = nextSeconds;
+    setProgress(next);
+    if (persist) saveAudioSeconds(nextSeconds, next >= 100, true);
+  };
+
+  const startAudioSeekDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    event.preventDefault();
+    const target = event.currentTarget as HTMLElement;
+    if (!currentLesson.mediaUrl) {
+      seekAudioByClientX(event.clientX, target, false);
+      return;
+    }
+    suppressAudioSeekClickRef.current = false;
+    const startX = event.clientX;
+    target.setPointerCapture?.(event.pointerId);
+    seekAudioByClientX(event.clientX, target, false);
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      if (Math.abs(moveEvent.clientX - startX) > 3) suppressAudioSeekClickRef.current = true;
+      seekAudioByClientX(moveEvent.clientX, target, false);
+    };
+    const handleEnd = (endEvent: PointerEvent) => {
+      seekAudioByClientX(endEvent.clientX, target, true);
+      target.releasePointerCapture?.(event.pointerId);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleEnd);
+      window.removeEventListener("pointercancel", handleEnd);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleEnd);
+    window.addEventListener("pointercancel", handleEnd);
   };
 
   const moveAudioLesson = (direction: LessonDirection) => {
@@ -3357,7 +3441,7 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
                 {Array.from({ length: 80 }, (_, i) => {
                   const filled = (i / 80) * 100 <= progress;
                   const h = 4 + Math.abs(Math.sin(i * 0.7 + 1.2) * 12) + Math.abs(Math.cos(i * 0.4) * 6);
-                  return <div key={i} style={{ width: 2, borderRadius: 1, height: `${h}px`, background: filled ? c.color : "rgba(255,255,255,0.07)", flexShrink: 0 }} />;
+                  return <div key={i} className={`debao-audio-waveform-bar ${filled ? "is-filled" : "is-empty"}`} style={{ width: 2, borderRadius: 1, height: `${h}px`, background: filled ? c.color : "rgba(255,255,255,0.07)", flexShrink: 0 }} />;
                 })}
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontFamily: "'JetBrains Mono',monospace" }}>
@@ -3403,6 +3487,17 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
                 style={{ background: "none", border: "none", cursor: "pointer", color: "#5a7898", display: "flex", alignItems: "center", padding: 4 }}>
                 <SkipBack size={18} />
               </button>
+              <button
+                className={`debao-audio-repeat-button debao-audio-mobile-repeat-button debao-audio-repeat-${audioRepeatMode}`}
+                type="button"
+                onClick={toggleAudioRepeatMode}
+                title={audioRepeatModeMeta.title}
+                aria-label={audioRepeatModeMeta.title}
+                style={{ display: "none", padding: "6px 10px", borderRadius: 8, fontSize: 12, background: audioRepeatMode === "none" ? "rgba(255,255,255,0.06)" : `${c.color}18`, border: `1px solid ${audioRepeatMode === "none" ? "rgba(255,255,255,0.09)" : `${c.color}45`}`, cursor: "pointer", color: audioRepeatMode === "none" ? "#8fa3be" : c.color, alignItems: "center", gap: 5, fontWeight: 700, whiteSpace: "nowrap" }}
+              >
+                <RotateCcw size={13} />
+                <span>{audioRepeatModeMeta.shortLabel}</span>
+              </button>
               <button onClick={toggleAudioPlayback}
                 style={{ width: 44, height: 44, borderRadius: "50%", background: currentLesson.mediaUrl ? `linear-gradient(145deg,${c.color},${c.color}cc)` : "rgba(255,255,255,0.08)", border: "none", cursor: currentLesson.mediaUrl ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: currentLesson.mediaUrl ? `0 4px 16px ${c.color}40` : "none" }}>
                 {isPlaying
@@ -3417,8 +3512,14 @@ function AudioPlayerPage({ setPage, course, notify }: { setPage: (p: string) => 
             {/* Seek bar */}
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "#3a5570", width: 36, textAlign: "right", flexShrink: 0 }}>{fmt(elapsed)}</span>
-              <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 2, cursor: "pointer", position: "relative" }}
+              <div
+                style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 2, cursor: "pointer", position: "relative", touchAction: "none" }}
+                onPointerDown={startAudioSeekDrag}
                 onClick={e => {
+                  if (suppressAudioSeekClickRef.current) {
+                    suppressAudioSeekClickRef.current = false;
+                    return;
+                  }
                   if (!currentLesson.mediaUrl) {
                     notify(currentLesson.id === "__empty__" ? "当前课程暂无可播放课时" : "当前音频暂未配置媒体", "warning");
                     return;
@@ -4825,6 +4926,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   const [officialStemHeight, setOfficialStemHeight] = useState<OfficialSubjectivePanelHeight>("300px");
   const [officialAnswerHeight, setOfficialAnswerHeight] = useState<OfficialAnswerPanelHeight>("340px");
   const [officialAnalysisDialogOpen, setOfficialAnalysisDialogOpen] = useState(false);
+  const [officialAnalysisDialogRect, setOfficialAnalysisDialogRect] = useState<OfficialDialogRect>(() => createOfficialAnalysisDialogRect());
   const [officialOpenAnalysisAfterSubmit, setOfficialOpenAnalysisAfterSubmit] = useState(false);
   const [officialLawDialogOpen, setOfficialLawDialogOpen] = useState(false);
   const [officialLawDialogRect, setOfficialLawDialogRect] = useState<OfficialDialogRect>(() => createOfficialDialogRect());
@@ -5267,6 +5369,30 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
     setOfficialAnalysisDialogOpen(true);
   };
 
+  const startOfficialAnalysisDialogDrag = (event: ReactMouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startRect = officialAnalysisDialogRect;
+    const handleMove = (moveEvent: MouseEvent) => {
+      setOfficialAnalysisDialogRect(current => {
+        const maxLeft = Math.max(0, window.innerWidth - current.width);
+        const maxTop = Math.max(0, window.innerHeight - current.height);
+        return {
+          ...current,
+          left: Math.min(maxLeft, Math.max(0, startRect.left + moveEvent.clientX - startX)),
+          top: Math.min(maxTop, Math.max(0, startRect.top + moveEvent.clientY - startY)),
+        };
+      });
+    };
+    const handleEnd = () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleEnd);
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleEnd);
+  };
+
   const handleOfficialConfirmReveal = () => {
     setOfficialOpenAnalysisAfterSubmit(true);
     void handleSubmit();
@@ -5424,7 +5550,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
     window.addEventListener("mouseup", handleEnd);
   };
 
-  const startOfficialLawDialogResize = (event: ReactMouseEvent<HTMLElement>, mode: "right" | "bottom" | "corner") => {
+  const startOfficialLawDialogResize = (event: ReactMouseEvent<HTMLElement>, direction: OfficialDialogResizeDirection) => {
     if (officialLawDialogMaximized) return;
     event.preventDefault();
     event.stopPropagation();
@@ -5433,15 +5559,69 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
     const startRect = officialLawDialogRect;
     const handleMove = (moveEvent: MouseEvent) => {
       setOfficialLawDialogRect(() => {
-        const maxWidth = Math.max(360, window.innerWidth - startRect.left);
-        const maxHeight = Math.max(260, window.innerHeight - startRect.top);
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+        let nextLeft = startRect.left;
+        let nextTop = startRect.top;
+        let nextWidth = startRect.width;
+        let nextHeight = startRect.height;
+        if (direction.includes("e")) nextWidth = startRect.width + dx;
+        if (direction.includes("s")) nextHeight = startRect.height + dy;
+        if (direction.includes("w")) {
+          nextLeft = startRect.left + dx;
+          nextWidth = startRect.width - dx;
+        }
+        if (direction.includes("n")) {
+          nextTop = startRect.top + dy;
+          nextHeight = startRect.height - dy;
+        }
+        const minWidth = 360;
+        const minHeight = 260;
+        if (nextWidth < minWidth) {
+          if (direction.includes("w")) nextLeft = startRect.left + startRect.width - minWidth;
+          nextWidth = minWidth;
+        }
+        if (nextHeight < minHeight) {
+          if (direction.includes("n")) nextTop = startRect.top + startRect.height - minHeight;
+          nextHeight = minHeight;
+        }
+        nextLeft = Math.max(0, Math.min(nextLeft, window.innerWidth - minWidth));
+        nextTop = Math.max(0, Math.min(nextTop, window.innerHeight - minHeight));
+        nextWidth = Math.min(nextWidth, window.innerWidth - nextLeft);
+        nextHeight = Math.min(nextHeight, window.innerHeight - nextTop);
+        return {
+          left: nextLeft,
+          top: nextTop,
+          width: nextWidth,
+          height: nextHeight,
+        };
+      });
+    };
+    const handleEnd = () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleEnd);
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleEnd);
+  };
+
+  const startOfficialAnalysisDialogResize = (event: ReactMouseEvent<HTMLElement>, mode: "right" | "bottom" | "corner") => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startRect = officialAnalysisDialogRect;
+    const handleMove = (moveEvent: MouseEvent) => {
+      setOfficialAnalysisDialogRect(() => {
+        const maxWidth = Math.max(420, window.innerWidth - startRect.left);
+        const maxHeight = Math.max(300, window.innerHeight - startRect.top);
         const nextWidth = mode === "bottom" ? startRect.width : startRect.width + moveEvent.clientX - startX;
         const nextHeight = mode === "right" ? startRect.height : startRect.height + moveEvent.clientY - startY;
         return {
           left: startRect.left,
           top: startRect.top,
-          width: Math.min(maxWidth, Math.max(360, nextWidth)),
-          height: Math.min(maxHeight, Math.max(260, nextHeight)),
+          width: Math.min(maxWidth, Math.max(420, nextWidth)),
+          height: Math.min(maxHeight, Math.max(300, nextHeight)),
         };
       });
     };
@@ -5777,9 +5957,14 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
               </div>
               {officialLawDialogMaximized ? null : (
                 <>
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-right" onMouseDown={(event) => startOfficialLawDialogResize(event, "right")} />
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-bottom" onMouseDown={(event) => startOfficialLawDialogResize(event, "bottom")} />
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip" onMouseDown={(event) => startOfficialLawDialogResize(event, "corner")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-top" onMouseDown={(event) => startOfficialLawDialogResize(event, "n")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-right" onMouseDown={(event) => startOfficialLawDialogResize(event, "e")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-bottom" onMouseDown={(event) => startOfficialLawDialogResize(event, "s")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-left" onMouseDown={(event) => startOfficialLawDialogResize(event, "w")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip-nw" onMouseDown={(event) => startOfficialLawDialogResize(event, "nw")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip-ne" onMouseDown={(event) => startOfficialLawDialogResize(event, "ne")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip" onMouseDown={(event) => startOfficialLawDialogResize(event, "se")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip-sw" onMouseDown={(event) => startOfficialLawDialogResize(event, "sw")} />
                 </>
               )}
             </div>
@@ -5787,23 +5972,24 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
           {officialAnalysisDialogOpen ? (
             <div
               {...OFFICIAL_EXAM_SCOPE}
-              className="dialogOut"
+              className="dialogOut debao-resizable-dialog"
               style={{
-                left: "22%",
-                top: "9%",
-                width: "56%",
-                height: "78%",
+                left: officialAnalysisDialogRect.left,
+                top: officialAnalysisDialogRect.top,
+                width: officialAnalysisDialogRect.width,
+                height: officialAnalysisDialogRect.height,
                 zIndex: 920,
                 backgroundColor: "#fff",
                 overflow: "hidden",
               }}
             >
-              <div {...OFFICIAL_EXAM_SCOPE} className="wind-head">
+              <div {...OFFICIAL_EXAM_SCOPE} className="wind-head" onMouseDown={startOfficialAnalysisDialogDrag}>
                 <span {...OFFICIAL_EXAM_SCOPE}>查看解析</span>
                 <button
                   {...OFFICIAL_EXAM_SCOPE}
                   type="button"
                   onClick={() => setOfficialAnalysisDialogOpen(false)}
+                  onMouseDown={(event) => event.stopPropagation()}
                   style={{ border: "none", background: "transparent", color: "#606266", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}
                 >
                   ×
@@ -5856,6 +6042,9 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                   )}
                 </div>
               </div>
+              <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-right" onMouseDown={(event) => startOfficialAnalysisDialogResize(event, "right")} />
+              <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-bottom" onMouseDown={(event) => startOfficialAnalysisDialogResize(event, "bottom")} />
+              <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip" onMouseDown={(event) => startOfficialAnalysisDialogResize(event, "corner")} />
             </div>
           ) : null}
         </div>
@@ -9644,7 +9833,7 @@ function DebaoAppShell() {
 
   const openShopOrder = (order: ShopOrder) => {
     setPageState("shopOrder");
-    setActiveNav(1);
+    setActiveNav(navIndexForPage("shopOrder"));
     if (typeof window !== "undefined") {
       window.history.pushState({ page: "shopOrder", orderId: order.id }, "", `/shop/orders/${encodeURIComponent(order.id)}`);
       setLocationPath(window.location.pathname);
@@ -9659,7 +9848,7 @@ function DebaoAppShell() {
     setSelectedQuestionChapter(chapter);
     setRouteQuestionId(undefined);
     setPageState("questionBank");
-    setActiveNav(2);
+    setActiveNav(navIndexForPage("questionBank"));
     if (typeof window !== "undefined") {
       const nextPath = buildQuestionPracticePath(mode, chapter);
       window.history.pushState({ page: "questionBank", mode, chapter }, "", nextPath);
@@ -9681,7 +9870,7 @@ function DebaoAppShell() {
   const openMyQuestionBankDirectly = (paperType: "objective" | "subjective") => {
     setMyQuestionBankPaperType(paperType);
     setPageState("myQuestionBank");
-    setActiveNav(2);
+    setActiveNav(navIndexForPage("myQuestionBank"));
     if (typeof window !== "undefined") {
       const nextPath = `/question-bank/my?paperType=${paperType}`;
       window.history.pushState({ page: "myQuestionBank", paperType }, "", nextPath);
@@ -9702,7 +9891,7 @@ function DebaoAppShell() {
     setSelectedMockExamTarget(nextTarget);
     setMockExamMode(nextTarget?.mode ?? mockExamMode);
     setPageState("mockExamRoom");
-    setActiveNav(2);
+    setActiveNav(navIndexForPage("mockExamRoom"));
     if (typeof window !== "undefined") {
       window.history.pushState({ page: "mockExamRoom", ...nextTarget }, "", buildMockExamRoomPath(nextTarget));
     }
