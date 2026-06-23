@@ -162,6 +162,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   const activeChapter = useMemo(() => chapters.find((chapter) => chapter.id === activeChapterId) ?? null, [activeChapterId, chapters]);
   const step: QuizStep = quizMode === "shuffle" ? "practice" : activeChapterId ? "practice" : activeSubjectId ? "chapters" : "subjects";
   const isShuffleMode = quizMode === "shuffle";
+  const showLeaderboard = step === "subjects";
 
   const goHome = () => {
     if (setPage) {
@@ -461,11 +462,13 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
 
   return (
     <div className="min-h-screen bg-[#e8f0f3] px-4 py-8 text-slate-900 md:px-8">
-      <div className="mx-auto grid max-w-[1900px] gap-5 2xl:grid-cols-[310px_minmax(0,1120px)_310px] 2xl:items-start">
-        <div className="order-2 2xl:sticky 2xl:top-24 2xl:order-1">
-          <LeaderboardPanel title="总排行榜" subtitle="按累计积分排序" entries={leaderboard.total} myPoints={leaderboard.myTotalPoints} icon="total" />
-        </div>
-        <main className="order-1 min-w-0 2xl:order-2">
+      <div className={cn("mx-auto gap-5", showLeaderboard ? "grid max-w-[1900px] 2xl:grid-cols-[310px_minmax(0,1120px)_310px] 2xl:items-start" : "max-w-6xl")}>
+        {showLeaderboard ? (
+          <div className="order-2 2xl:sticky 2xl:top-24 2xl:order-1">
+            <LeaderboardPanel title="总排行榜" subtitle="按累计积分排序" entries={leaderboard.total} myPoints={leaderboard.myTotalPoints} icon="total" />
+          </div>
+        ) : null}
+        <main className={cn("min-w-0", showLeaderboard ? "order-1 2xl:order-2" : "")}>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <button type="button" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-500 transition hover:text-slate-900" onClick={goTrainingHome}>
@@ -698,9 +701,11 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
           </section>
         ) : null}
         </main>
-        <div className="order-3 2xl:sticky 2xl:top-24">
-          <LeaderboardPanel title="今日排行榜" subtitle="按今日积分排序" entries={leaderboard.today} myPoints={leaderboard.myTodayPoints} icon="today" />
-        </div>
+        {showLeaderboard ? (
+          <div className="order-3 2xl:sticky 2xl:top-24">
+            <LeaderboardPanel title="今日排行榜" subtitle="按今日积分排序" entries={leaderboard.today} myPoints={leaderboard.myTodayPoints} icon="today" />
+          </div>
+        ) : null}
       </div>
     </div>
   );
