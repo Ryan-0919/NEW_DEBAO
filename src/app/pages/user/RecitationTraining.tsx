@@ -68,6 +68,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   const [loadingItems, setLoadingItems] = useState(false);
   const [answerDraft, setAnswerDraft] = useState("");
   const [answerState, setAnswerState] = useState<AnswerState>("idle");
+  const [countdown, setCountdown] = useState(30);
 
   const activeSubject = useMemo(() => subjects.find((subject) => subject.id === activeSubjectId) ?? null, [activeSubjectId, subjects]);
   const activeChapter = useMemo(() => chapters.find((chapter) => chapter.id === activeChapterId) ?? null, [activeChapterId, chapters]);
@@ -176,6 +177,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
     setSeenKeys(available.length > 0 ? [...sourceSeenKeys, next.key] : [next.key]);
     setAnswerDraft("");
     setAnswerState("idle");
+    setCountdown(30);
   };
 
   const openChapter = async (chapterId: string) => {
@@ -196,6 +198,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
         const first = randomFrom(nextQuestions);
         setCurrentQuestion(first);
         setSeenKeys([first.key]);
+        setCountdown(30);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "抽背题加载失败");
@@ -240,6 +243,25 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   };
 
   const nextQuestion = () => chooseQuestion();
+
+  useEffect(() => {
+    if (!currentQuestion || answerState !== "idle") return;
+    setCountdown(30);
+  }, [currentQuestion?.key]);
+
+  useEffect(() => {
+    if (!currentQuestion || answerState !== "idle") return;
+    if (countdown <= 0) {
+      if (answerDraft.trim()) {
+        checkAnswer();
+      } else {
+        setAnswerState("wrong");
+      }
+      return;
+    }
+    const timer = window.setTimeout(() => setCountdown((current) => Math.max(0, current - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [answerDraft, answerState, countdown, currentQuestion]);
 
   if (view === "home") {
     return (
@@ -434,12 +456,22 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
                 <RecallPrompt question={currentQuestion} />
 
                 <div className="rounded-3xl border border-white bg-white/90 p-6 text-center shadow-sm">
-                  <div className="mb-3 text-sm font-black text-slate-700">3、输入答案</div>
+                  <div className="mb-3 flex flex-wrap items-center justify-center gap-3 text-sm font-black text-slate-700">
+                    <span>3、输入答案</span>
+                    {answerState === "idle" ? (
+                      <span className={cn("rounded-full px-3 py-1 text-xs", countdown <= 5 ? "bg-rose-50 text-rose-700" : "bg-[#edf4f7] text-[#31556d]")}>
+                        倒计时 {countdown}s
+                      </span>
+                    ) : null}
+                  </div>
                   <textarea
                     value={answerDraft}
                     onChange={(event) => {
                       setAnswerDraft(event.target.value);
-                      if (answerState === "wrong") setAnswerState("idle");
+                      if (answerState === "wrong") {
+                        setAnswerState("idle");
+                        setCountdown(30);
+                      }
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) checkAnswer();
@@ -463,9 +495,9 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
                         {answerState === "correct" ? <CheckCircle2 className="size-5" /> : answerState === "wrong" ? <XCircle className="size-5" /> : <Eye className="size-5" />}
                         {answerState === "correct" ? "答对了" : answerState === "wrong" ? "错误，再想一下" : "已查看答案"}
                       </div>
-                      <div className="mt-2 text-sm leading-6">
+                      {answerState === "revealed" ? <div className="mt-2 text-sm leading-6">
                         正确答案：<strong className="whitespace-pre-wrap">{currentQuestion.item.answer || "未配置答案"}</strong>
-                      </div>
+                      </div> : null}
                     </div>
                   ) : null}
 
