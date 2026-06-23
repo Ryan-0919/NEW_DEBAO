@@ -97,6 +97,37 @@ recitationUserRouter.get("/chapters", async (req, res) => {
   }
 });
 
+recitationUserRouter.get("/items", async (_req, res) => {
+  try {
+    const items = await prisma.recitationItem.findMany({
+      where: {
+        status: "published",
+        chapter: {
+          is: {
+            isActive: true,
+            subject: { is: { isActive: true } },
+          },
+        },
+      },
+      include: {
+        chapter: {
+          include: {
+            subject: true,
+          },
+        },
+      },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    });
+
+    return ok(res, {
+      items: items.map((item) => serializeRecitationItem(item, { includeAnswers: true })),
+      total: items.length,
+    });
+  } catch (error) {
+    return fail(res, error.message || "加载乱序抽背题失败", error.statusCode || 400);
+  }
+});
+
 recitationUserRouter.get("/chapters/:chapterId/items", async (req, res) => {
   try {
     const chapter = await prisma.recitationChapter.findFirst({

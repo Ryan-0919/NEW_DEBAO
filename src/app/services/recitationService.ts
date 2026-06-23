@@ -53,11 +53,17 @@ export type RecitationChapterItemsPayload = {
   items: RecitationItem[];
 };
 
+export type RecitationAllItemsPayload = {
+  items: RecitationItem[];
+  total: number;
+};
+
 export const recitationService = {
   getSubjects: () => request<RecitationSubject[]>("/api/user/recitation/subjects"),
   getChapters: (subjectId: string) =>
     request<RecitationChapter[]>(`/api/user/recitation/chapters?subjectId=${encodeURIComponent(subjectId)}`),
   getChapterItems: (chapterId: string) =>
     request<RecitationChapterItemsPayload>(`/api/user/recitation/chapters/${encodeURIComponent(chapterId)}/items`),
+  getAllItems: () => request<RecitationAllItemsPayload>("/api/user/recitation/items"),
 };
 

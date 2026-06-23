@@ -12,6 +12,7 @@ import {
 
 type TrainingView = "home" | "quiz";
 type QuizStep = "subjects" | "chapters" | "practice";
+type QuizMode = "subject" | "shuffle";
 type AnswerState = "idle" | "correct" | "wrong" | "revealed";
 
 type RecallQuestion = {
@@ -41,6 +42,8 @@ function RecallPrompt({ question }: { question: RecallQuestion }) {
     <div className="rounded-3xl border border-[#d8e6ee] bg-white p-6 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="rounded-full bg-[#edf4f7] px-3 py-1 text-xs font-black text-[#31556d]">随机抽背</span>
+        {question.item.subjectName ? <span className="rounded-full bg-[#31556d] px-3 py-1 text-xs font-black text-white">{question.item.subjectName}</span> : null}
+        {question.item.chapterTitle ? <span className="rounded-full bg-[#eef2f6] px-3 py-1 text-xs font-bold text-slate-600">{question.item.chapterTitle}</span> : null}
         <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">第 {question.itemIndex + 1} 题</span>
         {question.item.source ? <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">{question.item.source}</span> : null}
       </div>
@@ -60,6 +63,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   const [questions, setQuestions] = useState<RecallQuestion[]>([]);
   const [seenKeys, setSeenKeys] = useState<string[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<RecallQuestion | null>(null);
+  const [quizMode, setQuizMode] = useState<QuizMode>("subject");
   const [activeSubjectId, setActiveSubjectId] = useState("");
   const [activeChapterId, setActiveChapterId] = useState("");
   const [loadingSubjects, setLoadingSubjects] = useState(false);
@@ -72,7 +76,8 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
 
   const activeSubject = useMemo(() => subjects.find((subject) => subject.id === activeSubjectId) ?? null, [activeSubjectId, subjects]);
   const activeChapter = useMemo(() => chapters.find((chapter) => chapter.id === activeChapterId) ?? null, [activeChapterId, chapters]);
-  const step: QuizStep = activeChapterId ? "practice" : activeSubjectId ? "chapters" : "subjects";
+  const step: QuizStep = quizMode === "shuffle" ? "practice" : activeChapterId ? "practice" : activeSubjectId ? "chapters" : "subjects";
+  const isShuffleMode = quizMode === "shuffle";
 
   const goHome = () => {
     if (setPage) {
@@ -87,6 +92,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
     setActiveSubjectId("");
     setActiveChapterId("");
     setCurrentQuestion(null);
+    setQuizMode("subject");
     setQuestions([]);
     setItems([]);
     if (typeof window !== "undefined" && window.location.pathname !== "/user/recitation") {
@@ -96,6 +102,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
 
   const openQuiz = () => {
     setView("quiz");
+    setQuizMode("subject");
     if (subjects.length === 0) setSubjectsLoaded(false);
     if (typeof window !== "undefined" && window.location.pathname !== "/user/recitation/quiz") {
       window.history.pushState({ page: "recitationTraining", mode: "quiz" }, "", "/user/recitation/quiz");
@@ -141,7 +148,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   }, [subjectsLoaded, view]);
 
   useEffect(() => {
-    if (view !== "quiz" || !activeSubjectId) return;
+    if (view !== "quiz" || quizMode !== "subject" || !activeSubjectId) return;
     let active = true;
     const load = async () => {
       setLoadingChapters(true);
@@ -162,7 +169,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
     return () => {
       active = false;
     };
-  }, [activeSubjectId, view]);
+  }, [activeSubjectId, quizMode, view]);
 
   const chooseQuestion = (sourceQuestions = questions, sourceSeenKeys = seenKeys) => {
     if (sourceQuestions.length === 0) {
@@ -181,6 +188,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   };
 
   const openChapter = async (chapterId: string) => {
+    setQuizMode("subject");
     setActiveChapterId(chapterId);
     setLoadingItems(true);
     setCurrentQuestion(null);
@@ -207,7 +215,37 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
     }
   };
 
+  const openShuffleQuiz = async () => {
+    setQuizMode("shuffle");
+    setActiveSubjectId("");
+    setActiveChapterId("");
+    setChapters([]);
+    setLoadingItems(true);
+    setCurrentQuestion(null);
+    setAnswerDraft("");
+    setAnswerState("idle");
+    try {
+      const payload = await recitationService.getAllItems();
+      const nextQuestions = buildQuestions(payload.items);
+      setItems(payload.items);
+      setQuestions(nextQuestions);
+      setSeenKeys([]);
+      if (nextQuestions.length > 0) {
+        const first = randomFrom(nextQuestions);
+        setCurrentQuestion(first);
+        setSeenKeys([first.key]);
+        setCountdown(30);
+      }
+    } catch (error) {
+      setQuizMode("subject");
+      toast.error(error instanceof Error ? error.message : "乱序抽背题加载失败");
+    } finally {
+      setLoadingItems(false);
+    }
+  };
+
   const backToSubjects = () => {
+    setQuizMode("subject");
     setActiveSubjectId("");
     setActiveChapterId("");
     setChapters([]);
@@ -219,6 +257,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   };
 
   const backToChapters = () => {
+    setQuizMode("subject");
     setActiveChapterId("");
     setItems([]);
     setQuestions([]);
@@ -332,19 +371,35 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
               重新选科
             </Button>
           ) : null}
-          {step === "practice" ? (
+          {step === "practice" && !isShuffleMode ? (
             <Button variant="outline" className="rounded-full border-[#bfd2dc] bg-white text-slate-700 hover:bg-[#f5fafc]" onClick={backToChapters}>
               <ArrowLeft className="size-4" />
               章节目录
+            </Button>
+          ) : null}
+          {step === "practice" && isShuffleMode ? (
+            <Button variant="outline" className="rounded-full border-[#bfd2dc] bg-white text-slate-700 hover:bg-[#f5fafc]" onClick={backToSubjects}>
+              <ArrowLeft className="size-4" />
+              抽背入口
             </Button>
           ) : null}
         </div>
 
         {step === "subjects" ? (
           <section className="rounded-3xl border border-white bg-white/85 p-5 shadow-sm">
-            <div className="mb-4">
-              <h2 className="text-lg font-black text-slate-950">1、选择学科</h2>
-              <p className="mt-1 text-sm text-slate-500">选择学科后进入章节目录。</p>
+            <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-black text-slate-950">1、选择抽背方式</h2>
+                <p className="mt-1 text-sm text-slate-500">可以按科目抽背，也可以不分科目乱序随机抽背。</p>
+              </div>
+              <Button className="rounded-full bg-[#31556d] text-white hover:bg-[#27475d]" disabled={loadingItems} onClick={() => void openShuffleQuiz()}>
+                {loadingItems ? <Loader2 className="size-4 animate-spin" /> : <Shuffle className="size-4" />}
+                乱序随机抽背
+              </Button>
+            </div>
+            <div className="mb-4 rounded-2xl border border-dashed border-[#bfd2dc] bg-[#f8fbfd] p-4">
+              <div className="font-black text-slate-950">科目随机抽背</div>
+              <div className="mt-1 text-sm text-slate-500">选择一个学科后进入章节，再从该章节内随机抽题。</div>
             </div>
             {loadingSubjects ? (
               <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
@@ -427,9 +482,10 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
             <div className="rounded-3xl border border-white bg-white/90 p-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-lg font-black text-slate-950">{activeSubject?.name ?? "抽背"} · {activeChapter?.title ?? "当前章节"}</div>
+                  <div className="text-lg font-black text-slate-950">{isShuffleMode ? "乱序随机抽背" : `${activeSubject?.name ?? "抽背"} · ${activeChapter?.title ?? "当前章节"}`}</div>
                   <div className="mt-1 text-xs text-slate-500">
                     共 {items.length} 道题 · 已抽 {Math.min(seenKeys.length, questions.length)}/{questions.length}
+                    {isShuffleMode ? " · 不按科目限制，题目上方会显示所属科目和章节" : ""}
                   </div>
                 </div>
                 <Button variant="outline" className="rounded-full border-[#bfd2dc] bg-white text-slate-700 hover:bg-[#f5fafc]" onClick={() => chooseQuestion(questions, [])}>
