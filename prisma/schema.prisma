@@ -210,8 +210,9 @@ model User {
   bookQuestionBankPermissions UserBookQuestionBankPermission[]
   bookQuestionBankProgresses  UserBookQuestionBankProgress[]
   bookQuestionBankItemStates  UserBookQuestionBankItemState[]
-  typingPracticeRecords       TypingPracticeRecord[]
-  lawPracticeRecords          LawPracticeRecord[]
+    typingPracticeRecords       TypingPracticeRecord[]
+    lawPracticeRecords          LawPracticeRecord[]
+    recitationPracticePoints    RecitationPracticePoint[]
 }
 
 model UserDevice {
@@ -789,11 +790,27 @@ model RecitationItem {
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
-  chapter RecitationChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+    chapter RecitationChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+    practicePoints RecitationPracticePoint[]
 
-  @@index([chapterId, status, sortOrder])
-  @@index([createdAt])
-}
+    @@index([chapterId, status, sortOrder])
+    @@index([createdAt])
+  }
+
+  model RecitationPracticePoint {
+    id        String   @id @default(cuid())
+    userId    String
+    itemId    String
+    points    Int      @default(1)
+    createdAt DateTime @default(now())
+
+    user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+    item RecitationItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+    @@index([userId, createdAt])
+    @@index([itemId, createdAt])
+    @@index([createdAt])
+  }
 
 model MockExamSeries {
   id          String   @id @default(cuid())

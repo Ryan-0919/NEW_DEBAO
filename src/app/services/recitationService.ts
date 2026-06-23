@@ -58,6 +58,31 @@ export type RecitationAllItemsPayload = {
   total: number;
 };
 
+export type RecitationLeaderboardEntry = {
+  userId: string;
+  phone: string;
+  nickname: string;
+  avatarUrl: string;
+  points: number;
+  rank: number;
+  isMine: boolean;
+};
+
+export type RecitationLeaderboardPayload = {
+  total: RecitationLeaderboardEntry[];
+  today: RecitationLeaderboardEntry[];
+  myTotalPoints: number;
+  myTodayPoints: number;
+};
+
+export type RecitationSubmitAnswerPayload = {
+  correct: boolean;
+  pointsAwarded: number;
+  totalPoints: number;
+  todayPoints: number;
+  leaderboard: RecitationLeaderboardPayload;
+};
+
 export const recitationService = {
   getSubjects: () => request<RecitationSubject[]>("/api/user/recitation/subjects"),
   getChapters: (subjectId: string) =>
@@ -65,5 +90,12 @@ export const recitationService = {
   getChapterItems: (chapterId: string) =>
     request<RecitationChapterItemsPayload>(`/api/user/recitation/chapters/${encodeURIComponent(chapterId)}/items`),
   getAllItems: () => request<RecitationAllItemsPayload>("/api/user/recitation/items"),
+  getLeaderboard: () => request<RecitationLeaderboardPayload>("/api/user/recitation/leaderboard"),
+  submitAnswer: (itemId: string, answer: string) =>
+    request<RecitationSubmitAnswerPayload>(`/api/user/recitation/items/${encodeURIComponent(itemId)}/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answer }),
+    }),
 };
 

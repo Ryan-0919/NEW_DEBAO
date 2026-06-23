@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BookOpenCheck, CheckCircle2, Eye, Loader2, RefreshCw, Shuffle, XCircle } from "lucide-react";
+import { ArrowLeft, BookOpenCheck, CheckCircle2, Eye, Loader2, Medal, RefreshCw, Shuffle, Trophy, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
 import { cn } from "../../components/ui/utils";
@@ -7,6 +7,8 @@ import {
   recitationService,
   type RecitationChapter,
   type RecitationItem,
+  type RecitationLeaderboardEntry,
+  type RecitationLeaderboardPayload,
   type RecitationSubject,
 } from "../../services/recitationService";
 
@@ -36,6 +38,85 @@ const buildQuestions = (items: RecitationItem[]) =>
   }));
 
 const randomFrom = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
+
+const emptyLeaderboard: RecitationLeaderboardPayload = {
+  total: [],
+  today: [],
+  myTotalPoints: 0,
+  myTodayPoints: 0,
+};
+
+function LeaderboardPanel({
+  title,
+  subtitle,
+  entries,
+  myPoints,
+  icon,
+}: {
+  title: string;
+  subtitle: string;
+  entries: RecitationLeaderboardEntry[];
+  myPoints: number;
+  icon: "total" | "today";
+}) {
+  return (
+    <aside className="h-fit rounded-[28px] border border-white bg-white/80 p-4 shadow-sm backdrop-blur">
+      <div className="mb-4 flex items-center gap-3">
+        <div className={cn("grid size-10 place-items-center rounded-2xl", icon === "total" ? "bg-amber-50 text-amber-700" : "bg-[#edf4f7] text-[#31556d]")}>
+          {icon === "total" ? <Trophy className="size-5" /> : <Medal className="size-5" />}
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-base font-black text-slate-950">{title}</div>
+          <div className="mt-0.5 text-xs font-semibold text-slate-500">{subtitle}</div>
+        </div>
+      </div>
+
+      <div className="mb-3 rounded-2xl border border-[#d8e6ee] bg-[#f8fbfd] px-3 py-2">
+        <div className="text-xs font-bold text-slate-500">我的积分</div>
+        <div className="mt-1 text-2xl font-black tracking-tight text-[#31556d]">{myPoints}</div>
+      </div>
+
+      {entries.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-center text-sm text-slate-400">暂无积分记录</div>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((entry) => (
+            <div
+              key={`${title}-${entry.userId}`}
+              className={cn(
+                "flex items-center gap-3 rounded-2xl border px-3 py-2",
+                entry.isMine ? "border-[#8bb1c6] bg-[#edf6fa]" : "border-slate-100 bg-white",
+              )}
+            >
+              <div
+                className={cn(
+                  "grid size-7 shrink-0 place-items-center rounded-full text-xs font-black",
+                  entry.rank === 1
+                    ? "bg-amber-100 text-amber-700"
+                    : entry.rank === 2
+                      ? "bg-slate-100 text-slate-600"
+                      : entry.rank === 3
+                        ? "bg-orange-100 text-orange-700"
+                        : "bg-[#edf4f7] text-[#31556d]",
+                )}
+              >
+                {entry.rank}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-black text-slate-900">{entry.nickname || entry.phone || "得宝学员"}</div>
+                <div className="truncate text-xs text-slate-400">{entry.phone}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-black text-[#31556d]">{entry.points}</div>
+                <div className="text-[10px] font-bold text-slate-400">积分</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
 
 function RecallPrompt({ question }: { question: RecallQuestion }) {
   return (
@@ -73,6 +154,9 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
   const [answerDraft, setAnswerDraft] = useState("");
   const [answerState, setAnswerState] = useState<AnswerState>("idle");
   const [countdown, setCountdown] = useState(30);
+  const [leaderboard, setLeaderboard] = useState<RecitationLeaderboardPayload>(emptyLeaderboard);
+  const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
+  const [checkingAnswer, setCheckingAnswer] = useState(false);
 
   const activeSubject = useMemo(() => subjects.find((subject) => subject.id === activeSubjectId) ?? null, [activeSubjectId, subjects]);
   const activeChapter = useMemo(() => chapters.find((chapter) => chapter.id === activeChapterId) ?? null, [activeChapterId, chapters]);
@@ -146,6 +230,25 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
       active = false;
     };
   }, [subjectsLoaded, view]);
+
+  useEffect(() => {
+    if (view !== "quiz" || leaderboardLoaded) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const payload = await recitationService.getLeaderboard();
+        if (active) setLeaderboard(payload);
+      } catch (error) {
+        if (active) toast.error(error instanceof Error ? error.message : "抽背排行榜加载失败");
+      } finally {
+        if (active) setLeaderboardLoaded(true);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [leaderboardLoaded, view]);
 
   useEffect(() => {
     if (view !== "quiz" || quizMode !== "subject" || !activeSubjectId) return;
@@ -266,14 +369,25 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
     setAnswerState("idle");
   };
 
-  const checkAnswer = () => {
+  const checkAnswer = async () => {
     if (!currentQuestion) return;
+    if (answerState !== "idle" || checkingAnswer) return;
     if (!answerDraft.trim()) {
       toast.error("先输入答案再检查");
       return;
     }
-    const correct = normalizeAnswer(answerDraft) === normalizeAnswer(currentQuestion.item.answer);
-    setAnswerState(correct ? "correct" : "wrong");
+    setCheckingAnswer(true);
+    try {
+      const result = await recitationService.submitAnswer(currentQuestion.item.id, answerDraft);
+      setLeaderboard(result.leaderboard);
+      setLeaderboardLoaded(true);
+      setAnswerState(result.correct ? "correct" : "wrong");
+      if (result.correct && result.pointsAwarded > 0) toast.success("+1 积分");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "检查答案失败");
+    } finally {
+      setCheckingAnswer(false);
+    }
   };
 
   const revealAnswer = () => {
@@ -292,7 +406,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
     if (!currentQuestion || answerState !== "idle") return;
     if (countdown <= 0) {
       if (answerDraft.trim()) {
-        checkAnswer();
+        void checkAnswer();
       } else {
         setAnswerState("wrong");
       }
@@ -347,7 +461,11 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
 
   return (
     <div className="min-h-screen bg-[#e8f0f3] px-4 py-8 text-slate-900 md:px-8">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto grid max-w-[1900px] gap-5 2xl:grid-cols-[310px_minmax(0,1120px)_310px] 2xl:items-start">
+        <div className="order-2 2xl:sticky 2xl:top-24 2xl:order-1">
+          <LeaderboardPanel title="总排行榜" subtitle="按累计积分排序" entries={leaderboard.total} myPoints={leaderboard.myTotalPoints} icon="total" />
+        </div>
+        <main className="order-1 min-w-0 2xl:order-2">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <button type="button" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-500 transition hover:text-slate-900" onClick={goTrainingHome}>
@@ -530,7 +648,7 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
                       }
                     }}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) checkAnswer();
+                      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) void checkAnswer();
                     }}
                     className="min-h-[150px] w-full max-w-3xl rounded-2xl border border-[#cbdce6] bg-white px-4 py-3 text-left text-base font-semibold leading-7 text-slate-950 outline-none transition focus:border-[#31556d]"
                     placeholder="在这里输入答案，Ctrl + Enter 检查"
@@ -558,7 +676,8 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
                   ) : null}
 
                   <div className="mt-5 flex flex-wrap justify-center gap-3">
-                    <Button className="rounded-full bg-[#31556d] text-white hover:bg-[#27475d]" onClick={checkAnswer}>
+                    <Button className="rounded-full bg-[#31556d] text-white hover:bg-[#27475d]" disabled={answerState !== "idle" || checkingAnswer} onClick={() => void checkAnswer()}>
+                      {checkingAnswer ? <Loader2 className="size-4 animate-spin" /> : null}
                       检查答案
                     </Button>
                     {answerState === "wrong" ? (
@@ -578,6 +697,10 @@ export function RecitationTraining({ setPage }: { setPage?: (page: string) => vo
             )}
           </section>
         ) : null}
+        </main>
+        <div className="order-3 2xl:sticky 2xl:top-24">
+          <LeaderboardPanel title="今日排行榜" subtitle="按今日积分排序" entries={leaderboard.today} myPoints={leaderboard.myTodayPoints} icon="today" />
+        </div>
       </div>
     </div>
   );
