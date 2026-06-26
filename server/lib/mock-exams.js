@@ -6,6 +6,7 @@ import {
   AI_REVIEW_PROMPT_TEMPLATE_PLACEHOLDERS,
   getMissingMockExamAiReviewPromptTemplatePlaceholders,
 } from "../../src/shared/mock-exam-ai-review-config.js";
+import { normalizeCourseMockExamSeriesLinks } from "../../src/shared/portal-config.js";
 
 const SUBJECTIVE_TYPE = "subjective_case";
 const DEFAULT_OBJECTIVE_COVER = "/mock-exam/default-objective-cover.svg";
@@ -38,6 +39,46 @@ const createHttpError = (message, statusCode = 400) => {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+};
+
+export const getCourseLinkedMockExamSeriesIds = async ({ db, userId }) => {
+  const courses = await db.course.findMany({
+    where: {
+      status: "open",
+      OR: [
+        { isPublic: true },
+        {
+          permissions: {
+            some: {
+              userId,
+            },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+    },
+  });
+  const courseIdSet = new Set(courses.map((course) => course.id));
+  if (courseIdSet.size === 0) return new Set();
+
+  const config = await db.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { portalConfigJson: true },
+  });
+  let portalConfig = null;
+  try {
+    portalConfig = config?.portalConfigJson ? JSON.parse(config.portalConfigJson) : null;
+  } catch {
+    portalConfig = null;
+  }
+
+  return new Set(
+    normalizeCourseMockExamSeriesLinks(portalConfig?.courseMockExamSeriesLinks)
+      .filter((item) => courseIdSet.has(item.courseId))
+      .flatMap((item) => item.seriesIds),
+  );
 };
 
 const parseJsonSafely = (value, fallback) => {
@@ -1912,7 +1953,7 @@ const assertMockExamPaperPermission = async ({ db, userId, paperId }) => {
   if (paper.status !== "published") throw createHttpError("试卷不存在", 404);
   if (!paper.permissionRequired) return null;
 
-  const [paperPermission, seriesPermission] = await Promise.all([
+  const [paperPermission, seriesPermission, linkedSeriesIds] = await Promise.all([
     db.userMockExamPermission.findUnique({
       where: {
         userId_paperId: {
@@ -1931,9 +1972,10 @@ const assertMockExamPaperPermission = async ({ db, userId, paperId }) => {
           },
         })
       : null,
+    paper.seriesId ? getCourseLinkedMockExamSeriesIds({ db, userId }) : Promise.resolve(new Set()),
   ]);
 
-  if (!paperPermission && !seriesPermission) {
+  if (!paperPermission && !seriesPermission && !linkedSeriesIds.has(paper.seriesId)) {
     throw createHttpError("你暂未开通这张试卷", 403);
   }
 
@@ -2371,7 +2413,7 @@ export const saveMockExamReviewFeedback = async ({ db, recordId, userId, questio
   });
 
 export const listUserVisibleMockExamPapers = async ({ db, userId, paperType = "", currentTime = new Date() }) => {
-  const [seriesPermissionRows, paperPermissionRows] = await Promise.all([
+  const [seriesPermissionRows, paperPermissionRows, linkedSeriesIds] = await Promise.all([
     db.userMockExamSeriesPermission.findMany({
       where: { userId },
       select: { seriesId: true },
@@ -2380,8 +2422,9 @@ export const listUserVisibleMockExamPapers = async ({ db, userId, paperType = ""
       where: { userId },
       select: { paperId: true },
     }),
+    getCourseLinkedMockExamSeriesIds({ db, userId }),
   ]);
-  const visibleSeriesIds = seriesPermissionRows.map((item) => item.seriesId);
+  const visibleSeriesIds = [...new Set([...seriesPermissionRows.map((item) => item.seriesId), ...linkedSeriesIds])];
   const visiblePaperIds = paperPermissionRows.map((item) => item.paperId);
 
   const papers = await db.mockExamPaper.findMany({

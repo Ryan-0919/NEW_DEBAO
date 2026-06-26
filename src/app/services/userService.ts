@@ -45,6 +45,7 @@ export interface UserStudySummary {
     wrongCount: number;
     bookmarkedCount: number;
     authorizedQuestionBankCount: number;
+    authorizedMockExamSeriesCount: number;
     mockExamRecordCount: number;
     completedObjectiveExamCount: number;
     completedSubjectiveExamCount: number;

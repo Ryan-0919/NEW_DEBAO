@@ -15,6 +15,8 @@ import { Textarea } from "../../components/ui/textarea";
 import {
   AdminCourse,
   AdminCourseContent,
+  AdminMockExamPaper,
+  AdminMockExamSeries,
   AdminCourseStatus,
   AdminCourseTag,
   AdminCourseType,
@@ -23,7 +25,7 @@ import {
   AdminPagedResult,
   adminContentService,
 } from "../../services/adminContentService";
-import { adminOperationsService, type AdminCourseQuestionBankLink } from "../../services/adminOperationsService";
+import { adminOperationsService, type AdminCourseMockExamSeriesLink, type AdminCourseQuestionBankLink } from "../../services/adminOperationsService";
 import { adminQuestionBankService, type AdminQuestionBankBook } from "../../services/adminQuestionBankService";
 
 const statusMeta: Record<AdminCourseStatus, { label: string; className: string; helper: string }> = {
@@ -77,6 +79,11 @@ const mediaStatusMeta = (item: AdminMediaItem) => {
 };
 
 type CourseContentSection = AdminCourseContent["sections"][number];
+type SubjectiveReviewSeriesOption = AdminMockExamSeries & {
+  subjectivePaperCount: number;
+  publishedSubjectivePaperCount: number;
+  paperTitles: string[];
+};
 
 export function CourseManagement() {
   const [courses, setCourses] = useState<AdminCourse[]>([]);
@@ -115,6 +122,9 @@ export function CourseManagement() {
   const [authorizedQuestionBanks, setAuthorizedQuestionBanks] = useState<AdminQuestionBankBook[]>([]);
   const [courseQuestionBankLinks, setCourseQuestionBankLinks] = useState<AdminCourseQuestionBankLink[]>([]);
   const [linkedQuestionBankIds, setLinkedQuestionBankIds] = useState<string[]>([]);
+  const [subjectiveReviewSeries, setSubjectiveReviewSeries] = useState<SubjectiveReviewSeriesOption[]>([]);
+  const [courseMockExamSeriesLinks, setCourseMockExamSeriesLinks] = useState<AdminCourseMockExamSeriesLink[]>([]);
+  const [linkedMockExamSeriesIds, setLinkedMockExamSeriesIds] = useState<string[]>([]);
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkOptionsLoading, setLinkOptionsLoading] = useState(true);
   const [linkOptionsError, setLinkOptionsError] = useState("");
@@ -175,6 +185,7 @@ export function CourseManagement() {
   const allVisibleMediaSelected =
     visibleSelectableMediaIds.length > 0 && visibleSelectableMediaIds.every((mediaId) => selectedMediaSet.has(mediaId));
   const linkedQuestionBankSet = useMemo(() => new Set(linkedQuestionBankIds), [linkedQuestionBankIds]);
+  const linkedMockExamSeriesSet = useMemo(() => new Set(linkedMockExamSeriesIds), [linkedMockExamSeriesIds]);
 
   const totalContentItems = useMemo(
     () => courseContent?.sections.reduce((sum, section) => sum + section.items.length, 0) ?? 0,
@@ -208,14 +219,36 @@ export function CourseManagement() {
     setLinkOptionsLoading(true);
     setLinkOptionsError("");
     try {
-      const [objectiveBooks, subjectiveBooks, links] = await Promise.all([
+      const [objectiveBooks, subjectiveBooks, links, allSeries, subjectivePapers, examLinks] = await Promise.all([
         adminQuestionBankService.getBooks({ accessType: "authorized", paperType: "objective", status: "all", visibility: "all" }),
         adminQuestionBankService.getBooks({ accessType: "authorized", paperType: "subjective", status: "all", visibility: "all" }),
         adminOperationsService.getCourseQuestionBankLinks(),
+        adminContentService.getMockExamSeries(),
+        adminContentService.getMockExamPapers({ paperType: "subjective", status: "all", seriesId: "all" }),
+        adminOperationsService.getCourseMockExamSeriesLinks(),
       ]);
       setAuthorizedQuestionBanks([...objectiveBooks, ...subjectiveBooks]);
       setCourseQuestionBankLinks(links);
-      return links;
+      const subjectivePapersBySeries = new Map<string, AdminMockExamPaper[]>();
+      subjectivePapers.forEach((paper) => {
+        if (!paper.seriesId) return;
+        subjectivePapersBySeries.set(paper.seriesId, [...(subjectivePapersBySeries.get(paper.seriesId) ?? []), paper]);
+      });
+      setSubjectiveReviewSeries(
+        allSeries
+          .map((series) => {
+            const papers = subjectivePapersBySeries.get(series.id) ?? [];
+            return {
+              ...series,
+              subjectivePaperCount: papers.length,
+              publishedSubjectivePaperCount: papers.filter((paper) => paper.status === "published").length,
+              paperTitles: papers.slice(0, 6).map((paper) => paper.title),
+            };
+          })
+          .filter((series) => series.subjectivePaperCount > 0),
+      );
+      setCourseMockExamSeriesLinks(examLinks);
+      return { questionBankLinks: links, mockExamSeriesLinks: examLinks };
     } catch (error) {
       const message = error instanceof Error ? error.message : "加载课程题库关联失败";
       setLinkOptionsError(message);
@@ -293,14 +326,19 @@ export function CourseManagement() {
     });
     setEditMode("edit");
     let linkSnapshot = courseQuestionBankLinks;
+    let mockExamLinkSnapshot = courseMockExamSeriesLinks;
     if (linkOptionsLoading || linkOptionsError) {
       try {
-        linkSnapshot = await loadCourseQuestionBankLinks();
+        const snapshot = await loadCourseQuestionBankLinks();
+        linkSnapshot = snapshot.questionBankLinks;
+        mockExamLinkSnapshot = snapshot.mockExamSeriesLinks;
       } catch {
         linkSnapshot = [];
+        mockExamLinkSnapshot = [];
       }
     }
     setLinkedQuestionBankIds(linkSnapshot.find((item) => item.courseId === course.id)?.bookIds ?? []);
+    setLinkedMockExamSeriesIds(mockExamLinkSnapshot.find((item) => item.courseId === course.id)?.seriesIds ?? []);
     try {
       const detail = await adminContentService.getCourseDetail(course.id);
       setTags(detail.tags);
@@ -316,6 +354,7 @@ export function CourseManagement() {
     setTags([]);
     setTagName("");
     setLinkedQuestionBankIds([]);
+    setLinkedMockExamSeriesIds([]);
     setForm(defaultForm);
   };
 
@@ -325,11 +364,27 @@ export function CourseManagement() {
     );
   };
 
+  const toggleLinkedMockExamSeries = (seriesId: string, checked: boolean) => {
+    setLinkedMockExamSeriesIds((current) =>
+      checked ? [...new Set([...current, seriesId])] : current.filter((item) => item !== seriesId),
+    );
+  };
+
   const saveCourseQuestionBankLinks = async (courseId: string, bookIds: string[]) => {
     setLinkLoading(true);
     try {
       const nextLinks = await adminOperationsService.updateCourseQuestionBankLink(courseId, bookIds);
       setCourseQuestionBankLinks(nextLinks);
+    } finally {
+      setLinkLoading(false);
+    }
+  };
+
+  const saveCourseMockExamSeriesLinks = async (courseId: string, seriesIds: string[]) => {
+    setLinkLoading(true);
+    try {
+      const nextLinks = await adminOperationsService.updateCourseMockExamSeriesLink(courseId, seriesIds);
+      setCourseMockExamSeriesLinks(nextLinks);
     } finally {
       setLinkLoading(false);
     }
@@ -406,6 +461,7 @@ export function CourseManagement() {
       if (editingCourse) {
         await adminContentService.updateCourse(editingCourse.id, payload);
         await saveCourseQuestionBankLinks(editingCourse.id, linkedQuestionBankIds);
+        await saveCourseMockExamSeriesLinks(editingCourse.id, linkedMockExamSeriesIds);
         toast.success("课程已更新");
       } else {
         const createdCourse = await adminContentService.createCourse({
@@ -420,6 +476,9 @@ export function CourseManagement() {
         try {
           if (linkedQuestionBankIds.length > 0) {
             await saveCourseQuestionBankLinks(createdCourse.id, linkedQuestionBankIds);
+          }
+          if (linkedMockExamSeriesIds.length > 0) {
+            await saveCourseMockExamSeriesLinks(createdCourse.id, linkedMockExamSeriesIds);
           }
         } catch (error) {
           await loadCourses();
@@ -920,6 +979,47 @@ export function CourseManagement() {
                           <span>{book.status === "published" ? "已发布" : book.status === "closed" ? "已关闭" : "草稿"}</span>
                           <span>{book.isVisible ? "可见" : "隐藏"}</span>
                         </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-5 flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">关联批改权限</h2>
+                <p className="mt-1 text-sm text-slate-500">勾选后，拥有本课程权限的学员会在“主观题批改”中看到对应套卷分组下的试卷。</p>
+              </div>
+              <Badge variant="outline" className="border-emerald-100 bg-emerald-50 text-emerald-700">
+                {linkOptionsLoading ? "加载中" : linkOptionsError ? "未加载" : `已选 ${linkedMockExamSeriesIds.length} 个`}
+              </Badge>
+            </div>
+            {linkOptionsLoading ? (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">正在加载可关联批改套卷，请稍候。</div>
+            ) : linkOptionsError ? (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{linkOptionsError}</div>
+            ) : subjectiveReviewSeries.length === 0 ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">暂无主观题批改套卷分组。请先在机考试卷发布管理中创建主观题试卷并归入套卷。</div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {subjectiveReviewSeries.map((series) => {
+                  const checked = linkedMockExamSeriesSet.has(series.id);
+                  return (
+                    <label key={series.id} className={`flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition ${checked ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+                      <Checkbox checked={checked} disabled={linkOptionsLoading || Boolean(linkOptionsError)} onCheckedChange={(value) => toggleLinkedMockExamSeries(series.id, value === true)} />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-slate-900">{series.name}</span>
+                        <span className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                          <span>主观批改</span>
+                          <span>共 {series.subjectivePaperCount} 张</span>
+                          <span>已发布 {series.publishedSubjectivePaperCount} 张</span>
+                        </span>
+                        {series.paperTitles.length > 0 ? (
+                          <span className="mt-2 block truncate text-xs text-slate-400">{series.paperTitles.join(" / ")}</span>
+                        ) : null}
                       </span>
                     </label>
                   );

@@ -136,6 +136,17 @@ export const normalizeCourseQuestionBankLinks = (value) => {
     .filter((item) => item.courseId && item.bookIds.length > 0);
 };
 
+export const normalizeCourseMockExamSeriesLinks = (value) => {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      courseId: toTrimmedString(item.courseId, ""),
+      seriesIds: toStringArray(item.seriesIds, []),
+    }))
+    .filter((item) => item.courseId && item.seriesIds.length > 0);
+};
+
 const LEGACY_MEMBER_HOME_MOCK_EXAM_TITLE = "进入真机模考";
 const LEGACY_MEMBER_HOME_MOCK_EXAM_DESCRIPTION = "直接进入机考系统，继续客观题刷题或主观题实战演练。";
 const CURRENT_MEMBER_HOME_MOCK_EXAM_TITLE = "进入主观批改";
@@ -720,6 +731,7 @@ export const normalizePortalConfig = (value, options = {}) => {
   };
 
   fallback.courseQuestionBankLinks = normalizeCourseQuestionBankLinks(source.courseQuestionBankLinks);
+  fallback.courseMockExamSeriesLinks = normalizeCourseMockExamSeriesLinks(source.courseMockExamSeriesLinks);
 
   fallback.journey = {
     eyebrow: toTrimmedString(journeySource.eyebrow, fallback.journey.eyebrow),

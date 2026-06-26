@@ -7,7 +7,7 @@ import { getObjectBuffer, getSignedObjectUrl } from "../lib/upload.js";
 import { formatDateTime } from "../lib/time.js";
 import { requireUserAuth } from "../middleware/auth.js";
 import { mockExamRouter } from "./mock-exams.js";
-import { getRecentMockExamForUser } from "../lib/mock-exams.js";
+import { getCourseLinkedMockExamSeriesIds, getRecentMockExamForUser } from "../lib/mock-exams.js";
 import {
   buildAudioProgressMap,
   buildAudioTagContent,
@@ -276,6 +276,7 @@ const buildUserStudySummary = async (userId) => {
     typingRecords,
     lawPracticeRecords,
     explicitQuestionBankPermissions,
+    explicitMockExamSeriesPermissions,
     activeUserCount,
     recentOrders,
   ] = await Promise.all([
@@ -376,6 +377,10 @@ const buildUserStudySummary = async (userId) => {
       },
       select: { bookId: true },
     }),
+    prisma.userMockExamSeriesPermission.findMany({
+      where: { userId },
+      select: { seriesId: true },
+    }),
     prisma.user.count({ where: { status: "active" } }),
     prisma.shopOrder.findMany({
       where: { userId },
@@ -410,6 +415,11 @@ const buildUserStudySummary = async (userId) => {
           select: { id: true },
         });
   const questionBankCount = new Set([...explicitQuestionBankIds, ...linkedQuestionBanks.map((book) => book.id)]).size;
+  const linkedMockExamSeriesIds = await getCourseLinkedMockExamSeriesIds({ db: prisma, userId });
+  const mockExamSeriesCount = new Set([
+    ...explicitMockExamSeriesPermissions.map((permission) => permission.seriesId),
+    ...linkedMockExamSeriesIds,
+  ]).size;
   const [audioProgressByLearner, videoProgressByLearner] = await Promise.all([
     prisma.userProgress.groupBy({
       by: ["userId"],
@@ -538,6 +548,7 @@ const buildUserStudySummary = async (userId) => {
       wrongCount: wrongStates.length,
       bookmarkedCount: bookmarkedStates.length,
       authorizedQuestionBankCount: questionBankCount,
+      authorizedMockExamSeriesCount: mockExamSeriesCount,
       mockExamRecordCount: mockRecords.length,
       completedObjectiveExamCount: completedObjectiveRecords.length,
       completedSubjectiveExamCount: completedSubjectiveRecords.length,

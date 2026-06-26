@@ -212,6 +212,11 @@ export type AdminCourseQuestionBankLink = {
   bookIds: string[];
 };
 
+export type AdminCourseMockExamSeriesLink = {
+  courseId: string;
+  seriesIds: string[];
+};
+
 export type AdminExamRecordSummary = {
   total: number;
   submitted: number;
@@ -315,6 +320,9 @@ export const adminOperationsService = {
   getCourseQuestionBankLinks: () => adminRequest<AdminCourseQuestionBankLink[]>("/api/admin/course-question-bank-links"),
   updateCourseQuestionBankLink: (courseId: string, bookIds: string[]) =>
     adminPatchJson<AdminCourseQuestionBankLink[]>(`/api/admin/course-question-bank-links/${encodeURIComponent(courseId)}`, { bookIds }),
+  getCourseMockExamSeriesLinks: () => adminRequest<AdminCourseMockExamSeriesLink[]>("/api/admin/course-mock-exam-series-links"),
+  updateCourseMockExamSeriesLink: (courseId: string, seriesIds: string[]) =>
+    adminPatchJson<AdminCourseMockExamSeriesLink[]>(`/api/admin/course-mock-exam-series-links/${encodeURIComponent(courseId)}`, { seriesIds }),
   getLearningAnnouncements: () => adminRequest<AdminLearningAnnouncements>("/api/admin/learning-announcements"),
   updateLearningAnnouncements: (payload: Omit<AdminLearningAnnouncements, "updatedAt">) =>
     adminPatchJson<AdminLearningAnnouncements>("/api/admin/learning-announcements", payload),

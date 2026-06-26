@@ -14,7 +14,7 @@ import { cleanupObjectIfReplaced } from "../lib/assets.js";
 import { getReadableObjectUrl, uploadBuffer } from "../lib/upload.js";
 import { getMockExamAiReviewConfigForAdmin, saveMockExamAiReviewConfig } from "../lib/mock-exam-ai-review-config.js";
 import { readSmsConfigForAdmin, normalizeSmsConfig } from "../lib/sms-config.js";
-import { normalizeCourseQuestionBankLinks, normalizePortalConfig } from "../../src/shared/portal-config.js";
+import { normalizeCourseMockExamSeriesLinks, normalizeCourseQuestionBankLinks, normalizePortalConfig } from "../../src/shared/portal-config.js";
 
 const ALL_ADMIN_ROLES = ["super_admin", "operations_admin", "user_admin", "review_admin"];
 const SYSTEM_MANAGER_ROLES = ["super_admin", "operations_admin"];
@@ -1000,6 +1000,69 @@ adminOperationsRouter.patch("/course-question-bank-links/:courseId", requireAdmi
     return ok(res, normalizeCourseQuestionBankLinks(savedPortalConfig.courseQuestionBankLinks), "课程关联题库权限已保存");
   } catch (error) {
     return fail(res, error.message || "保存课程关联题库权限失败", error.statusCode || 500);
+  }
+});
+
+adminOperationsRouter.get("/course-mock-exam-series-links", requireAdminRoles(...SYSTEM_MANAGER_ROLES), async (_req, res) => {
+  const config = await prisma.systemConfig.upsert({
+    where: { id: 1 },
+    create: { id: 1, portalConfigJson: JSON.stringify(normalizePortalConfig(null)) },
+    update: {},
+  });
+  const portalConfig = readNormalizedPortalConfig(config);
+  return ok(res, normalizeCourseMockExamSeriesLinks(portalConfig.courseMockExamSeriesLinks));
+});
+
+adminOperationsRouter.patch("/course-mock-exam-series-links/:courseId", requireAdminRoles(...SYSTEM_MANAGER_ROLES), async (req, res) => {
+  try {
+    const courseId = `${req.params.courseId ?? ""}`.trim();
+    const seriesIds = toStringArray(req.body?.seriesIds);
+    if (!courseId) return fail(res, "课程不存在", 400);
+
+    const [course, seriesList] = await Promise.all([
+      prisma.course.findUnique({ where: { id: courseId }, select: { id: true } }),
+      seriesIds.length === 0
+        ? Promise.resolve([])
+        : prisma.mockExamSeries.findMany({
+            where: { id: { in: seriesIds } },
+            select: { id: true },
+          }),
+    ]);
+    if (!course) return fail(res, "课程不存在", 404);
+    if (seriesList.length !== seriesIds.length) return fail(res, "存在无效的批改套卷分组，请刷新后重试", 400);
+
+    const currentConfig = await prisma.systemConfig.upsert({
+      where: { id: 1 },
+      create: { id: 1, portalConfigJson: JSON.stringify(normalizePortalConfig(null)) },
+      update: {},
+    });
+    const portalConfig = readNormalizedPortalConfig(currentConfig);
+    const currentLinks = normalizeCourseMockExamSeriesLinks(portalConfig.courseMockExamSeriesLinks);
+    const nextLinks = [
+      ...currentLinks.filter((item) => item.courseId !== courseId),
+      ...(seriesIds.length > 0 ? [{ courseId, seriesIds }] : []),
+    ];
+    const nextPortalConfig = {
+      ...portalConfig,
+      courseMockExamSeriesLinks: nextLinks,
+    };
+
+    const config = await prisma.systemConfig.update({
+      where: { id: 1 },
+      data: { portalConfigJson: JSON.stringify(nextPortalConfig) },
+    });
+
+    await writeAdminAuditLog(req, {
+      action: "update_course_mock_exam_series_links",
+      entityType: "course",
+      entityId: courseId,
+      detail: { courseId, seriesIds },
+    });
+
+    const savedPortalConfig = readNormalizedPortalConfig(config);
+    return ok(res, normalizeCourseMockExamSeriesLinks(savedPortalConfig.courseMockExamSeriesLinks), "课程关联批改权限已保存");
+  } catch (error) {
+    return fail(res, error.message || "保存课程关联批改权限失败", error.statusCode || 500);
   }
 });
 
