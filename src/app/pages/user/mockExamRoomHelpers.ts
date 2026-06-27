@@ -1,4 +1,5 @@
 import { MockExamQuestion, MockExamQuestionAnswerState, MockExamRecordDetail, MockExamSubjectiveSubQuestion } from "../../lib/mockData";
+import { buildStableQuestionGroups } from "../../lib/mockExamGrouping.mjs";
 
 export interface QuestionGroup {
   key: string;
@@ -86,24 +87,7 @@ export const applyObjectiveAnswerToRecord = (
 };
 
 export const buildQuestionGroups = (questions: MockExamQuestion[]): QuestionGroup[] => {
-  const groups: QuestionGroup[] = [];
-
-  for (const question of questions) {
-    const lastGroup = groups[groups.length - 1];
-    if (lastGroup && lastGroup.label === question.sectionLabel) {
-      lastGroup.questions.push(question);
-      continue;
-    }
-
-    groups.push({
-      key: `${question.type}-${question.sectionLabel}-${groups.length}`,
-      label: question.sectionLabel,
-      description: question.sectionDescription,
-      questions: [question],
-    });
-  }
-
-  return groups;
+  return buildStableQuestionGroups(questions) as QuestionGroup[];
 };
 
 export const getExamPhaseLabel = (record: MockExamRecordDetail) => {
