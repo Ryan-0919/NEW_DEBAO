@@ -31,9 +31,10 @@ const RESTORE_ICON_URL = "https://oss.zhumavip.com/images/lawPage/ic-zuixiaohua.
 
 const lawStyles = `
 .debao-law-page{box-sizing:border-box;width:100%;height:100%;min-height:100vh;background:#f5f5f5;color:#404040;font-family:"PingFang SC","Microsoft YaHei",sans-serif}
+.debao-law-page.embedded{height:100%;min-height:0;overflow:hidden}
 .debao-law-page *{box-sizing:border-box}
 .debao-law-outer{display:flex;justify-content:center;min-height:100vh;padding:0 16px 40px}
-.debao-law-outer.embedded{min-height:100%;height:100%;padding:0;background:#f5f5f5}
+.debao-law-outer.embedded{min-height:0;height:100%;padding:0;background:#f5f5f5}
 .debao-law-box{display:flex;flex-direction:column;color:#404040;background:#fff;box-shadow:0 0 10px rgba(0,0,0,.1);border-radius:5px;overflow:hidden;user-select:none;width:1200px;height:calc(100vh - 80px);min-height:540px;margin-top:40px;margin-bottom:40px}
 .debao-law-box.fullscreen{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;min-height:0!important;margin:0!important;border-radius:0!important;z-index:1000}
 .debao-law-outer.embedded .debao-law-box{width:100%;height:100%;min-height:0;margin:0;border-radius:0;box-shadow:none}
@@ -43,7 +44,7 @@ const lawStyles = `
 .debao-law-fullscreen{display:block;width:12px;height:12px;margin:0;padding:14px 10px;border:0;background:transparent;cursor:pointer;box-sizing:content-box}
 .debao-law-fullscreen img{display:block;width:12px;height:12px}
 .debao-law-close{float:right;margin-top:9px;height:22px;border:1px solid #dfdfdf;border-radius:4px;background:#fafafa;color:#41485d;font-size:12px;line-height:20px;cursor:pointer}
-.debao-law-body{display:flex;position:relative;height:calc(100% - 40px);border-top:1px solid #dfdfdf}
+.debao-law-body{display:flex;position:relative;height:calc(100% - 40px);min-height:0;border-top:1px solid #dfdfdf}
 .debao-law-left{flex-shrink:0;display:flex;flex-direction:column;height:100%;min-width:0;border-right:1px solid #dfdfdf;overflow:hidden;background:#fff}
 .debao-law-left-collapsed{position:absolute;left:0;top:0;bottom:0;width:12px;border-right:1px solid #d7dbe5;background:linear-gradient(180deg,#f8f8f8 0%,#f1f1f1 100%);cursor:col-resize;z-index:3}
 .debao-law-nav{height:33px;width:100%;display:flex;align-items:center;justify-content:space-between;padding:0 13px;font-size:14px;line-height:33px;background:#fafafa;border-bottom:1px solid #dfdfdf}
@@ -81,7 +82,7 @@ const lawStyles = `
 .debao-law-selected-file{margin-left:-1px;padding:0 4px 0 0;background:#f2d493!important;z-index:3}
 .debao-law-movebar{flex-shrink:0;margin:0;width:12px;height:100%;cursor:col-resize;position:relative;z-index:2;background:linear-gradient(90deg,transparent 0,transparent 5px,#d7dbe5 5px,#d7dbe5 7px,transparent 7px,transparent 100%)}
 .debao-law-movebar:hover{background:linear-gradient(90deg,transparent 0,transparent 4px,#9fb3d9 4px,#9fb3d9 8px,transparent 8px,transparent 100%)}
-.debao-law-right{flex:1;min-width:0;width:auto;height:100%;line-height:22px;white-space:pre-wrap;user-select:text;overflow-y:auto;background:#fff;color:#404040}
+.debao-law-right{flex:1;min-width:0;width:auto;height:100%;min-height:0;line-height:22px;white-space:pre-wrap;user-select:text;overflow-y:auto;background:#fff;color:#404040}
 .debao-law-section{padding:20px 25px;font-family:"Songti SC","STSong",serif;line-height:28px;font-size:14px;color:#404040}
 .debao-law-section h4{text-align:center;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-weight:800}
 .debao-law-placeholder{padding:0!important;display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:#fff;font-size:46px;font-family:"Songti SC","STSong",serif;font-weight:700;text-align:left;color:#454545;line-height:46px}
@@ -529,7 +530,7 @@ export function DebaoLawSearchPage({ setPage, embedded = false, onClose, fullscr
   };
 
   return (
-    <div className="debao-law-page">
+    <div className={`debao-law-page${embedded ? " embedded" : ""}`}>
       <style>{lawStyles}</style>
       <div className={`debao-law-outer${embedded ? " embedded" : ""}`}>
         <div className={`debao-law-box${isFullscreen ? " fullscreen" : ""}`}>
