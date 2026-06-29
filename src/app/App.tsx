@@ -714,13 +714,26 @@ type OfficialSubjectivePanelHeight = "300px" | "100%";
 type OfficialAnswerPanelHeight = "340px" | "100%";
 type OfficialDialogRect = { left: number; top: number; width: number; height: number };
 type OfficialDialogResizeDirection = "n" | "e" | "s" | "w" | "ne" | "nw" | "se" | "sw";
+type OfficialLawDialogAction =
+  | { type: "move"; startX: number; startY: number; startRect: OfficialDialogRect }
+  | { type: "resize"; direction: OfficialDialogResizeDirection; startX: number; startY: number; startRect: OfficialDialogRect };
 type OfficialHighlightBlock = "prompt" | "subjective-block";
 type OfficialHighlightSelection = { block: OfficialHighlightBlock; key: string; start: number; end: number };
+const OFFICIAL_LAW_DIALOG_MIN_WIDTH = 640;
+const OFFICIAL_LAW_DIALOG_MIN_HEIGHT = 420;
+const OFFICIAL_LAW_DIALOG_MARGIN = 16;
+const OFFICIAL_LAW_DIALOG_TOP_MARGIN = 8;
+const OFFICIAL_LAW_DIALOG_Z_INDEX = 1010;
 const OFFICIAL_THEME_BG: Record<OfficialThemeId, string> = { 1: "#ddebf6", 2: "#cae0e0", 3: "#f5e9dc", 4: "#f5dce4", 5: "#deddf6" };
 const OFFICIAL_SECTION_ORDERS = ["一、", "二、", "三、", "四、", "五、", "六、"];
 const OFFICIAL_STEM_HIGHLIGHT_CLASS = "mock-stem-highlight";
 const officialOrderText = (index: number) => OFFICIAL_SECTION_ORDERS[index] ?? `${index + 1}. `;
 const officialToHtml = (text: string) => (!text ? "" : text.includes("<") ? text : text.replace(/\n/g, "<br />"));
+const clampOfficialLawValue = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+const getOfficialLawDialogViewport = () => ({
+  width: typeof window === "undefined" ? 1440 : window.innerWidth,
+  height: typeof window === "undefined" ? 900 : window.innerHeight,
+});
 const getOfficialSelectionFromNode = (node?: Node | null) => {
   const root = node?.getRootNode?.();
   const rootSelection =
@@ -822,15 +835,40 @@ const clearOfficialHighlightInHtml = (html: string, start?: number, end?: number
   cleanupOfficialHighlightContainer(container);
   return container.innerHTML;
 };
-const createOfficialDialogRect = (): OfficialDialogRect => {
-  const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
-  const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
-  return {
-    left: Math.round(viewportWidth * 0.25),
-    top: Math.round(viewportHeight * 0.15),
-    width: Math.round(viewportWidth * 0.5),
-    height: Math.round(viewportHeight * 0.7),
-  };
+const clampOfficialLawDialogRect = (rect: OfficialDialogRect) => {
+  const viewport = getOfficialLawDialogViewport();
+  const maxWidth = Math.max(420, viewport.width - OFFICIAL_LAW_DIALOG_MARGIN * 2);
+  const maxHeight = Math.max(320, viewport.height - OFFICIAL_LAW_DIALOG_TOP_MARGIN - OFFICIAL_LAW_DIALOG_MARGIN);
+  const minWidth = Math.min(OFFICIAL_LAW_DIALOG_MIN_WIDTH, maxWidth);
+  const minHeight = Math.min(OFFICIAL_LAW_DIALOG_MIN_HEIGHT, maxHeight);
+  const width = clampOfficialLawValue(rect.width, minWidth, maxWidth);
+  const height = clampOfficialLawValue(rect.height, minHeight, maxHeight);
+  const left = clampOfficialLawValue(
+    rect.left,
+    OFFICIAL_LAW_DIALOG_MARGIN,
+    Math.max(OFFICIAL_LAW_DIALOG_MARGIN, viewport.width - OFFICIAL_LAW_DIALOG_MARGIN - width),
+  );
+  const top = clampOfficialLawValue(
+    rect.top,
+    OFFICIAL_LAW_DIALOG_TOP_MARGIN,
+    Math.max(OFFICIAL_LAW_DIALOG_TOP_MARGIN, viewport.height - OFFICIAL_LAW_DIALOG_MARGIN - height),
+  );
+  return { left, top, width, height };
+};
+
+const buildOfficialLawDialogRect = () => {
+  const viewport = getOfficialLawDialogViewport();
+  const width = Math.min(Math.max(760, Math.round(viewport.width * 0.5)), viewport.width - OFFICIAL_LAW_DIALOG_MARGIN * 2);
+  const height = Math.min(
+    Math.max(560, Math.round(viewport.height * 0.7)),
+    viewport.height - OFFICIAL_LAW_DIALOG_TOP_MARGIN - OFFICIAL_LAW_DIALOG_MARGIN,
+  );
+  return clampOfficialLawDialogRect({
+    left: Math.round((viewport.width - width) / 2),
+    top: Math.max(OFFICIAL_LAW_DIALOG_TOP_MARGIN, Math.round((viewport.height - height) / 2)),
+    width,
+    height,
+  });
 };
 
 const createOfficialAnalysisDialogRect = (): OfficialDialogRect => {
@@ -846,15 +884,67 @@ const createOfficialAnalysisDialogRect = (): OfficialDialogRect => {
   };
 };
 
-const createOfficialLawDialogMaxRect = (): OfficialDialogRect => {
-  const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
-  const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
-  return {
-    left: 0,
-    top: 0,
-    width: viewportWidth,
-    height: viewportHeight,
+const buildOfficialLawDialogMaxRect = () => {
+  const viewport = getOfficialLawDialogViewport();
+  return clampOfficialLawDialogRect({
+    left: OFFICIAL_LAW_DIALOG_MARGIN,
+    top: OFFICIAL_LAW_DIALOG_TOP_MARGIN,
+    width: viewport.width - OFFICIAL_LAW_DIALOG_MARGIN * 2,
+    height: viewport.height - OFFICIAL_LAW_DIALOG_TOP_MARGIN - OFFICIAL_LAW_DIALOG_MARGIN,
+  });
+};
+
+const resizeOfficialLawDialogRect = (startRect: OfficialDialogRect, direction: OfficialDialogResizeDirection, dx: number, dy: number) => {
+  const viewport = getOfficialLawDialogViewport();
+  const maxWidth = Math.max(420, viewport.width - OFFICIAL_LAW_DIALOG_MARGIN * 2);
+  const maxHeight = Math.max(320, viewport.height - OFFICIAL_LAW_DIALOG_TOP_MARGIN - OFFICIAL_LAW_DIALOG_MARGIN);
+  const minWidth = Math.min(OFFICIAL_LAW_DIALOG_MIN_WIDTH, maxWidth);
+  const minHeight = Math.min(OFFICIAL_LAW_DIALOG_MIN_HEIGHT, maxHeight);
+  const right = startRect.left + startRect.width;
+  const bottom = startRect.top + startRect.height;
+  let { left, top, width, height } = startRect;
+
+  if (direction.includes("e")) {
+    width = clampOfficialLawValue(startRect.width + dx, minWidth, viewport.width - OFFICIAL_LAW_DIALOG_MARGIN - left);
+  }
+
+  if (direction.includes("s")) {
+    height = clampOfficialLawValue(startRect.height + dy, minHeight, viewport.height - OFFICIAL_LAW_DIALOG_MARGIN - top);
+  }
+
+  if (direction.includes("w")) {
+    const minLeft = Math.max(OFFICIAL_LAW_DIALOG_MARGIN, right - maxWidth);
+    const maxLeft = right - minWidth;
+    left = clampOfficialLawValue(startRect.left + dx, minLeft, maxLeft);
+    width = right - left;
+  }
+
+  if (direction.includes("n")) {
+    const minTop = Math.max(OFFICIAL_LAW_DIALOG_TOP_MARGIN, bottom - maxHeight);
+    const maxTop = bottom - minHeight;
+    top = clampOfficialLawValue(startRect.top + dy, minTop, maxTop);
+    height = bottom - top;
+  }
+
+  return clampOfficialLawDialogRect({ left, top, width, height });
+};
+
+const getOfficialLawDialogCursor = (action: OfficialLawDialogAction | null) => {
+  if (!action) return "";
+  if (action.type === "move") return "move";
+
+  const cursorMap: Record<OfficialDialogResizeDirection, string> = {
+    n: "n-resize",
+    e: "e-resize",
+    s: "s-resize",
+    w: "w-resize",
+    ne: "ne-resize",
+    nw: "nw-resize",
+    se: "se-resize",
+    sw: "sw-resize",
   };
+
+  return cursorMap[action.direction];
 };
 
 function OfficialExamShadowRoot({ children }: { children: ReactNode }) {
@@ -4929,8 +5019,9 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   const [officialAnalysisDialogRect, setOfficialAnalysisDialogRect] = useState<OfficialDialogRect>(() => createOfficialAnalysisDialogRect());
   const [officialOpenAnalysisAfterSubmit, setOfficialOpenAnalysisAfterSubmit] = useState(false);
   const [officialLawDialogOpen, setOfficialLawDialogOpen] = useState(false);
-  const [officialLawDialogRect, setOfficialLawDialogRect] = useState<OfficialDialogRect>(() => createOfficialDialogRect());
+  const [officialLawDialogRect, setOfficialLawDialogRect] = useState<OfficialDialogRect>(() => buildOfficialLawDialogRect());
   const [officialLawDialogMaximized, setOfficialLawDialogMaximized] = useState(false);
+  const [officialLawDialogInteracting, setOfficialLawDialogInteracting] = useState(false);
   const [officialPromptHighlightHtmlMap, setOfficialPromptHighlightHtmlMap] = useState<Record<string, string>>({});
   const [officialBlockPromptHighlightHtmlMap, setOfficialBlockPromptHighlightHtmlMap] = useState<Record<string, string>>({});
   const officialPromptRef = useRef<HTMLDivElement | null>(null);
@@ -4939,6 +5030,72 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   const officialAnswerComposingRef = useRef(false);
   const officialHighlightSelectionRef = useRef<OfficialHighlightSelection | null>(null);
   const officialLawDialogRestoreRectRef = useRef<OfficialDialogRect | null>(null);
+  const officialLawDialogActionRef = useRef<OfficialLawDialogAction | null>(null);
+
+  useEffect(() => {
+    const stopOfficialLawDialogAction = () => {
+      officialLawDialogActionRef.current = null;
+      setOfficialLawDialogInteracting(false);
+      document.body.style.userSelect = "";
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const action = officialLawDialogActionRef.current;
+      if (!action) return;
+
+      event.preventDefault();
+
+      if (action.type === "move") {
+        setOfficialLawDialogRect(
+          clampOfficialLawDialogRect({
+            ...action.startRect,
+            left: action.startRect.left + event.clientX - action.startX,
+            top: action.startRect.top + event.clientY - action.startY,
+          }),
+        );
+        return;
+      }
+
+      setOfficialLawDialogRect(
+        resizeOfficialLawDialogRect(action.startRect, action.direction, event.clientX - action.startX, event.clientY - action.startY),
+      );
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", stopOfficialLawDialogAction);
+    window.addEventListener("blur", stopOfficialLawDialogAction);
+    window.addEventListener("mouseleave", stopOfficialLawDialogAction);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", stopOfficialLawDialogAction);
+      window.removeEventListener("blur", stopOfficialLawDialogAction);
+      window.removeEventListener("mouseleave", stopOfficialLawDialogAction);
+      stopOfficialLawDialogAction();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!officialLawDialogOpen) return;
+
+    const handleResize = () => {
+      setOfficialLawDialogRect((current) => (officialLawDialogMaximized ? buildOfficialLawDialogMaxRect() : clampOfficialLawDialogRect(current)));
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeOfficialLawDialog();
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [officialLawDialogMaximized, officialLawDialogOpen]);
 
   const visiblePracticeBanks = initialChapter?.paperType ? banks.filter(book => book.paperType === initialChapter.paperType) : banks;
   const activeBook = visiblePracticeBanks.find(book => book.id === activeBookId) ?? visiblePracticeBanks[0] ?? banks[0] ?? null;
@@ -5525,84 +5682,49 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
     setOfficialOpenAnalysisAfterSubmit(false);
   }, [activeAnalysisKey, isSubmitted, isSubjectiveQuestion, officialOpenAnalysisAfterSubmit, useOfficialSubjectivePractice]);
 
+  const openOfficialLawDialog = () => {
+    setOfficialLawDialogRect((current) => clampOfficialLawDialogRect(officialLawDialogRestoreRectRef.current ?? current));
+    setOfficialLawDialogMaximized(false);
+    setOfficialLawDialogOpen(true);
+  };
+
+  const closeOfficialLawDialog = () => {
+    officialLawDialogActionRef.current = null;
+    setOfficialLawDialogInteracting(false);
+    document.body.style.userSelect = "";
+    if (officialLawDialogMaximized) {
+      setOfficialLawDialogRect(clampOfficialLawDialogRect(officialLawDialogRestoreRectRef.current ?? buildOfficialLawDialogRect()));
+    }
+    setOfficialLawDialogMaximized(false);
+    setOfficialLawDialogOpen(false);
+  };
+
   const startOfficialLawDialogDrag = (event: ReactMouseEvent<HTMLElement>) => {
     if (officialLawDialogMaximized) return;
     event.preventDefault();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const startRect = officialLawDialogRect;
-    const handleMove = (moveEvent: MouseEvent) => {
-      setOfficialLawDialogRect(current => {
-        const maxLeft = Math.max(0, window.innerWidth - current.width);
-        const maxTop = Math.max(0, window.innerHeight - current.height);
-        return {
-          ...current,
-          left: Math.min(maxLeft, Math.max(0, startRect.left + moveEvent.clientX - startX)),
-          top: Math.min(maxTop, Math.max(0, startRect.top + moveEvent.clientY - startY)),
-        };
-      });
+    setOfficialLawDialogInteracting(true);
+    officialLawDialogActionRef.current = {
+      type: "move",
+      startX: event.clientX,
+      startY: event.clientY,
+      startRect: officialLawDialogRect,
     };
-    const handleEnd = () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleEnd);
-    };
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleEnd);
+    document.body.style.userSelect = "none";
   };
 
-  const startOfficialLawDialogResize = (event: ReactMouseEvent<HTMLElement>, direction: OfficialDialogResizeDirection) => {
+  const startOfficialLawDialogResize = (direction: OfficialDialogResizeDirection) => (event: ReactMouseEvent<HTMLElement>) => {
     if (officialLawDialogMaximized) return;
     event.preventDefault();
     event.stopPropagation();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const startRect = officialLawDialogRect;
-    const handleMove = (moveEvent: MouseEvent) => {
-      setOfficialLawDialogRect(() => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-        let nextLeft = startRect.left;
-        let nextTop = startRect.top;
-        let nextWidth = startRect.width;
-        let nextHeight = startRect.height;
-        if (direction.includes("e")) nextWidth = startRect.width + dx;
-        if (direction.includes("s")) nextHeight = startRect.height + dy;
-        if (direction.includes("w")) {
-          nextLeft = startRect.left + dx;
-          nextWidth = startRect.width - dx;
-        }
-        if (direction.includes("n")) {
-          nextTop = startRect.top + dy;
-          nextHeight = startRect.height - dy;
-        }
-        const minWidth = 360;
-        const minHeight = 260;
-        if (nextWidth < minWidth) {
-          if (direction.includes("w")) nextLeft = startRect.left + startRect.width - minWidth;
-          nextWidth = minWidth;
-        }
-        if (nextHeight < minHeight) {
-          if (direction.includes("n")) nextTop = startRect.top + startRect.height - minHeight;
-          nextHeight = minHeight;
-        }
-        nextLeft = Math.max(0, Math.min(nextLeft, window.innerWidth - minWidth));
-        nextTop = Math.max(0, Math.min(nextTop, window.innerHeight - minHeight));
-        nextWidth = Math.min(nextWidth, window.innerWidth - nextLeft);
-        nextHeight = Math.min(nextHeight, window.innerHeight - nextTop);
-        return {
-          left: nextLeft,
-          top: nextTop,
-          width: nextWidth,
-          height: nextHeight,
-        };
-      });
+    setOfficialLawDialogInteracting(true);
+    officialLawDialogActionRef.current = {
+      type: "resize",
+      direction,
+      startX: event.clientX,
+      startY: event.clientY,
+      startRect: officialLawDialogRect,
     };
-    const handleEnd = () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleEnd);
-    };
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleEnd);
+    document.body.style.userSelect = "none";
   };
 
   const startOfficialAnalysisDialogResize = (event: ReactMouseEvent<HTMLElement>, mode: "right" | "bottom" | "corner") => {
@@ -5635,12 +5757,12 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
 
   const toggleOfficialLawDialogMaximize = () => {
     if (officialLawDialogMaximized) {
-      setOfficialLawDialogRect(officialLawDialogRestoreRectRef.current ?? createOfficialDialogRect());
+      setOfficialLawDialogRect(clampOfficialLawDialogRect(officialLawDialogRestoreRectRef.current ?? buildOfficialLawDialogRect()));
       setOfficialLawDialogMaximized(false);
       return;
     }
     officialLawDialogRestoreRectRef.current = officialLawDialogRect;
-    setOfficialLawDialogRect(createOfficialLawDialogMaxRect());
+    setOfficialLawDialogRect(buildOfficialLawDialogMaxRect());
     setOfficialLawDialogMaximized(true);
   };
 
@@ -5785,10 +5907,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                       {...OFFICIAL_EXAM_SCOPE}
                       type="button"
                       style={{ padding: "7px 12px", fontWeight: 600, fontSize: "14px", color: "black", background: "linear-gradient(#9bccf3, #478ec4)", border: "1px solid #5d8ab6", cursor: "pointer" }}
-                      onClick={() => {
-                        setOfficialLawDialogMaximized(false);
-                        setOfficialLawDialogOpen(true);
-                      }}
+                      onClick={openOfficialLawDialog}
                     >
                       法律法规汇编
                     </button>
@@ -5913,63 +6032,84 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
               {...OFFICIAL_EXAM_SCOPE}
               className="dialogOut debao-resizable-dialog"
               style={{
-                left: officialLawDialogRect.left,
-                top: officialLawDialogRect.top,
-                width: officialLawDialogRect.width,
-                height: officialLawDialogRect.height,
-                zIndex: 1010,
+                left: `${officialLawDialogRect.left}px`,
+                top: `${officialLawDialogRect.top}px`,
+                width: `${officialLawDialogRect.width}px`,
+                height: `${officialLawDialogRect.height}px`,
+                zIndex: OFFICIAL_LAW_DIALOG_Z_INDEX,
                 backgroundColor: "#fff",
                 overflow: "hidden",
               }}
             >
               <div {...OFFICIAL_EXAM_SCOPE} className="wind-head" onMouseDown={startOfficialLawDialogDrag}>
                 <span {...OFFICIAL_EXAM_SCOPE}>法律法规汇编</span>
-                <button
-                  {...OFFICIAL_EXAM_SCOPE}
-                  type="button"
-                  onClick={() => setOfficialLawDialogOpen(false)}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  style={{
-                    position: "relative",
-                    zIndex: 260,
-                    width: "28px",
-                    height: "28px",
-                    border: "none",
-                    background: "transparent",
-                    color: "#606266",
-                    cursor: "pointer",
-                    fontSize: "18px",
-                    lineHeight: "28px",
-                    padding: 0,
-                    textAlign: "center",
-                  }}
-                >
-                  ×
-                </button>
+                <div {...OFFICIAL_EXAM_SCOPE} style={{ display: "flex", alignItems: "center" }} onMouseDown={(event) => event.stopPropagation()}>
+                  <button
+                    {...OFFICIAL_EXAM_SCOPE}
+                    type="button"
+                    onClick={closeOfficialLawDialog}
+                    style={{
+                      position: "relative",
+                      zIndex: 260,
+                      width: "28px",
+                      height: "28px",
+                      border: "none",
+                      background: "transparent",
+                      color: "#606266",
+                      cursor: "pointer",
+                      fontSize: "18px",
+                      lineHeight: "28px",
+                      padding: 0,
+                      textAlign: "center",
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
-              <div {...OFFICIAL_EXAM_SCOPE} style={{ position: "absolute", left: 0, right: 0, top: "41px", bottom: 0, background: "#fff", overflow: "hidden" }}>
-                <div
-                  title="法律法规汇编"
-                  style={{ width: "100%", height: "100%", background: "#fff" }}
-                >
+              <div
+                {...OFFICIAL_EXAM_SCOPE}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: "41px",
+                  bottom: 0,
+                  background: "#fff",
+                  overflow: "hidden",
+                }}
+              >
+                <div title="法律法规汇编" style={{ width: "100%", height: "100%", background: "#fff" }}>
                   <DebaoLawSearchPage
-                    setPage={() => setOfficialLawDialogOpen(false)}
+                    setPage={() => closeOfficialLawDialog()}
                     embedded
-                    onClose={() => setOfficialLawDialogOpen(false)}
+                    onClose={closeOfficialLawDialog}
                     fullscreenBridge={{ isFullscreen: officialLawDialogMaximized, toggleFullscreen: toggleOfficialLawDialogMaximize }}
                   />
                 </div>
+                {officialLawDialogInteracting ? (
+                  <div
+                    {...OFFICIAL_EXAM_SCOPE}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "transparent",
+                      cursor: getOfficialLawDialogCursor(officialLawDialogActionRef.current) || "move",
+                      zIndex: 2,
+                    }}
+                  />
+                ) : null}
               </div>
               {officialLawDialogMaximized ? null : (
                 <>
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-top" onMouseDown={(event) => startOfficialLawDialogResize(event, "n")} />
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-right" onMouseDown={(event) => startOfficialLawDialogResize(event, "e")} />
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-bottom" onMouseDown={(event) => startOfficialLawDialogResize(event, "s")} />
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-edge-left" onMouseDown={(event) => startOfficialLawDialogResize(event, "w")} />
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip-nw" onMouseDown={(event) => startOfficialLawDialogResize(event, "nw")} />
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip-ne" onMouseDown={(event) => startOfficialLawDialogResize(event, "ne")} />
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip" onMouseDown={(event) => startOfficialLawDialogResize(event, "se")} />
-                  <div {...OFFICIAL_EXAM_SCOPE} className="debao-resize-grip-sw" onMouseDown={(event) => startOfficialLawDialogResize(event, "sw")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="border-row border-top" onMouseDown={startOfficialLawDialogResize("n")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="border-col border-right" onMouseDown={startOfficialLawDialogResize("e")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="border-row border-bottom" onMouseDown={startOfficialLawDialogResize("s")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="border-col" style={{ left: 0, cursor: "w-resize" }} onMouseDown={startOfficialLawDialogResize("w")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="horn left-top" onMouseDown={startOfficialLawDialogResize("nw")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="horn rig-top" onMouseDown={startOfficialLawDialogResize("ne")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="horn rig-bott" onMouseDown={startOfficialLawDialogResize("se")} />
+                  <div {...OFFICIAL_EXAM_SCOPE} className="horn left-bott" onMouseDown={startOfficialLawDialogResize("sw")} />
                 </>
               )}
             </div>
