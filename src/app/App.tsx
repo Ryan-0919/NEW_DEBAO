@@ -5948,12 +5948,17 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                 </button>
               </div>
               <div {...OFFICIAL_EXAM_SCOPE} style={{ position: "absolute", left: 0, right: 0, top: "41px", bottom: 0, background: "#fff", overflow: "hidden" }}>
-                <DebaoLawSearchPage
-                  setPage={() => setOfficialLawDialogOpen(false)}
-                  embedded
-                  onClose={() => setOfficialLawDialogOpen(false)}
-                  fullscreenBridge={{ isFullscreen: officialLawDialogMaximized, toggleFullscreen: toggleOfficialLawDialogMaximize }}
-                />
+                <div
+                  title="法律法规汇编"
+                  style={{ width: "100%", height: "100%", background: "#fff" }}
+                >
+                  <DebaoLawSearchPage
+                    setPage={() => setOfficialLawDialogOpen(false)}
+                    embedded
+                    onClose={() => setOfficialLawDialogOpen(false)}
+                    fullscreenBridge={{ isFullscreen: officialLawDialogMaximized, toggleFullscreen: toggleOfficialLawDialogMaximize }}
+                  />
+                </div>
               </div>
               {officialLawDialogMaximized ? null : (
                 <>
