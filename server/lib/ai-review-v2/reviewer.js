@@ -4,6 +4,11 @@ import { ReviewValidator } from './validator.js';
 
 const normalizeBaseUrl = (value = '') => `${value ?? ''}`.trim().replace(/\/+$/, '');
 const shouldPreferResponsesApi = (model = '') => /^gpt-5(?:$|[-.])/i.test(`${model ?? ''}`.trim());
+const isRetryableResponsesError = (status, responseText = '') => {
+  if (Number(status) >= 500) return true;
+  const normalized = `${responseText ?? ''}`.toLowerCase();
+  return normalized.includes('upstream request failed') || normalized.includes('upstream_error');
+};
 const isResponsesFallbackCandidate = (status, responseText = '') => {
   if (Number(status) >= 500) return true;
   if ([400, 404, 405, 415, 422, 501].includes(Number(status))) return true;
@@ -223,23 +228,38 @@ export class AiReviewer {
       };
 
       if (shouldPreferResponsesApi(model)) {
-        const responsesAttempt = await this.sendResponsesRequest({
-          baseUrl,
-          headers,
-          model,
-          maxTokens,
-          prompt,
-          requestText,
-          signal: controller.signal
-        });
+        let lastResponsesAttempt = null;
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          const responsesAttempt = await this.sendResponsesRequest({
+            baseUrl,
+            headers,
+            model,
+            maxTokens,
+            prompt,
+            requestText,
+            signal: controller.signal
+          });
+          lastResponsesAttempt = responsesAttempt;
 
-        if (responsesAttempt.ok) {
-          return responsesAttempt.result;
+          if (responsesAttempt.ok) {
+            return responsesAttempt.result;
+          }
+
+          const retryable = isRetryableResponsesError(responsesAttempt.status, responsesAttempt.responseText);
+          if (retryable && attempt < 3) {
+            console.warn(`[AI请求] responses接口失败，准备重试responses。attempt=${attempt}, status=${responsesAttempt.status}`);
+            continue;
+          }
+
+          console.warn(`[AI请求] responses接口失败，准备回退chat/completions。status=${responsesAttempt.status}`);
+          if (!isResponsesFallbackCandidate(responsesAttempt.status, responsesAttempt.responseText)) {
+            throw new Error(`AI API错误: ${responsesAttempt.status} - ${responsesAttempt.responseText.substring(0, 200)}`);
+          }
+          break;
         }
 
-        console.warn(`[AI请求] responses接口失败，准备回退chat/completions。status=${responsesAttempt.status}`);
-        if (!isResponsesFallbackCandidate(responsesAttempt.status, responsesAttempt.responseText)) {
-          throw new Error(`AI API错误: ${responsesAttempt.status} - ${responsesAttempt.responseText.substring(0, 200)}`);
+        if (lastResponsesAttempt && !isResponsesFallbackCandidate(lastResponsesAttempt.status, lastResponsesAttempt.responseText)) {
+          throw new Error(`AI API错误: ${lastResponsesAttempt.status} - ${lastResponsesAttempt.responseText.substring(0, 200)}`);
         }
       }
 

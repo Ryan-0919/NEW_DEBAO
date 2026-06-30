@@ -38,7 +38,7 @@ export class MultiSubQuestionHandler {
   }
 
   /**
-   * 逐个小问批改（使用分阶段模式 + 并发执行）
+   * 逐个小问批改（真正串行执行，降低上游限流与 502 概率）
    */
   async sequentialReview({ question, answer, recordId, questionMeta }) {
     const startTime = Date.now();
@@ -50,44 +50,44 @@ export class MultiSubQuestionHandler {
       total_tokens: 0
     };
 
-    console.log(`[多小问处理] 开始并发批改 ${questionMeta.subQuestions.length} 个小问`);
+    console.log(`[多小问处理] 开始串行批改 ${questionMeta.subQuestions.length} 个小问`);
 
-    // 记录并发数
-    this.monitor.recordConcurrent(questionMeta.subQuestions.length);
+    // 记录当前链路按 1 路串行执行
+    this.monitor.recordConcurrent(1);
 
-    // 并发批改所有小问
-    const batchPromises = questionMeta.subQuestions.map((sq, i) => {
+    const results = [];
+    for (let i = 0; i < questionMeta.subQuestions.length; i += 1) {
+      const sq = questionMeta.subQuestions[i];
       console.log(`[多小问处理] 启动小问${i + 1}/${questionMeta.subQuestions.length}: ${sq.id}`);
       const maxScore = this.getSubQuestionMaxScore(question, sq, questionMeta.subQuestions.length);
-
-      return this.phaseReviewer.reviewSubQuestion({
-        question,
-        subQuestion: sq,
-        answer: answerMap[sq.id] || '',
-        rubric: {
-          maxScore,
-          points: sq.rubricPoints || [],
-          referenceAnswer: sq.referenceAnswer || '',
-          guidance: sq.rubricGuidance || ''
-        }
-      }).then(result => ({
-        ...result,
-        index: i,
-        subQuestionId: sq.id
-      })).catch(error => {
+      try {
+        const result = await this.phaseReviewer.reviewSubQuestion({
+          question,
+          subQuestion: sq,
+          answer: answerMap[sq.id] || '',
+          rubric: {
+            maxScore,
+            points: sq.rubricPoints || [],
+            referenceAnswer: sq.referenceAnswer || '',
+            guidance: sq.rubricGuidance || ''
+          }
+        });
+        results.push({
+          ...result,
+          index: i,
+          subQuestionId: sq.id
+        });
+      } catch (error) {
         console.error(`[多小问处理] 小问${i + 1}异常:`, error);
-        return {
+        results.push({
           success: false,
           index: i,
           subQuestionId: sq.id,
           error: error.message,
           usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
-        };
-      });
-    });
-
-    // 等待所有批改完成
-    const results = await Promise.all(batchPromises);
+        });
+      }
+    }
 
     results.forEach((result) => {
       if (result.usage) {

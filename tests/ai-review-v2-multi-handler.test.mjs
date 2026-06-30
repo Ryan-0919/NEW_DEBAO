@@ -1,0 +1,76 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { MultiSubQuestionHandler } from "../server/lib/ai-review-v2/multi-handler.js";
+
+test("多小问处理器按顺序逐个批改，不再并发 Promise.all", async () => {
+  const handler = new MultiSubQuestionHandler(
+    { model: "gpt-5.5" },
+    { baseUrl: "https://ryanai.cc/v1", apiKey: "test-key" },
+  );
+
+  const started = [];
+  const finished = [];
+  const inFlight = [];
+
+  handler.phaseReviewer.reviewSubQuestion = async ({ subQuestion }) => {
+    started.push(subQuestion.id);
+    inFlight.push(subQuestion.id);
+    assert.equal(inFlight.length, 1, `检测到并发执行: ${inFlight.join(",")}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    finished.push(subQuestion.id);
+    inFlight.pop();
+    return {
+      success: true,
+      result: {
+        id: subQuestion.id,
+        title: subQuestion.title,
+        score: 1,
+        maxScore: 1,
+        answer: "",
+        reviewComment: "",
+        answerMarks: [],
+        rubricPoints: [],
+        missedPoints: [],
+      },
+      usage: {
+        prompt_tokens: 1,
+        completion_tokens: 1,
+        total_tokens: 2,
+      },
+      rawResponse: null,
+    };
+  };
+
+  const result = await handler.sequentialReview({
+    question: {
+      id: "q_1",
+      score: 4,
+      questionMetaJson: JSON.stringify({
+        subQuestions: [
+          { id: "sub_1", title: "小问1", maxScore: 1, rubricPoints: [] },
+          { id: "sub_2", title: "小问2", maxScore: 1, rubricPoints: [] },
+          { id: "sub_3", title: "小问3", maxScore: 1, rubricPoints: [] },
+        ],
+      }),
+    },
+    answer: {
+      answerJson: JSON.stringify({
+        sub_1: "a",
+        sub_2: "b",
+        sub_3: "c",
+      }),
+    },
+    recordId: "record_1",
+    questionMeta: {
+      subQuestions: [
+        { id: "sub_1", title: "小问1", maxScore: 1, rubricPoints: [] },
+        { id: "sub_2", title: "小问2", maxScore: 1, rubricPoints: [] },
+        { id: "sub_3", title: "小问3", maxScore: 1, rubricPoints: [] },
+      ],
+    },
+  });
+
+  assert.equal(result.success, true);
+  assert.deepEqual(started, ["sub_1", "sub_2", "sub_3"]);
+  assert.deepEqual(finished, ["sub_1", "sub_2", "sub_3"]);
+});

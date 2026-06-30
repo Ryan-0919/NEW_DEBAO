@@ -126,11 +126,11 @@ test("responses 不可用时会自动回退到 chat completions", async () => {
   }
 });
 
-test("responses 返回 502 upstream_error 时也会回退到 chat completions", async () => {
+test("gpt-5 responses 返回 502 upstream_error 时会先重试 responses", async () => {
   const calls = [];
   global.fetch = async (url, options) => {
     calls.push({ url, options });
-    if (calls.length === 1) {
+    if (calls.length < 3) {
       return createJsonResponse(
         {
           error: {
@@ -165,9 +165,10 @@ test("responses 返回 502 upstream_error 时也会回退到 chat completions", 
       userPrompt: "user prompt",
     });
 
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.equal(calls[0].url, "https://ryanai.cc/v1/responses");
-    assert.equal(calls[1].url, "https://ryanai.cc/v1/chat/completions");
+    assert.equal(calls[1].url, "https://ryanai.cc/v1/responses");
+    assert.equal(calls[2].url, "https://ryanai.cc/v1/responses");
     assert.equal(result.content, "{\"subQuestions\":[]}");
   } finally {
     global.fetch = originalFetch;
