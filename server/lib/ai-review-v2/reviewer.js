@@ -3,6 +3,7 @@ import { buildPrompt } from './base-prompt.js';
 import { ReviewValidator } from './validator.js';
 
 const normalizeBaseUrl = (value = '') => `${value ?? ''}`.trim().replace(/\/+$/, '');
+const isGpt5FamilyModel = (model = '') => /^gpt-5(?:$|[-.])/i.test(`${model ?? ''}`.trim());
 
 export class AiReviewer {
   constructor(strategy, runtimeConfig) {
@@ -232,18 +233,22 @@ export class AiReviewer {
 
   async sendChatCompletionsRequest({ baseUrl, headers, model, systemPrompt, temperature, maxTokens, requestText, signal }) {
     const endpoint = `${baseUrl}/chat/completions`;
-    const leadingRole = /^gpt-5(?:$|[-.])/i.test(`${model ?? ''}`.trim()) ? 'developer' : 'system';
+    const isGpt5Family = isGpt5FamilyModel(model);
+    const leadingRole = isGpt5Family ? 'developer' : 'system';
     const requestBody = {
       model,
       temperature,
-      max_tokens: maxTokens,
       messages: [
         { role: leadingRole, content: systemPrompt },
         { role: 'user', content: requestText }
       ]
     };
 
-    console.log(`[AI请求] endpoint=${endpoint}, model=${requestBody.model}, temp=${requestBody.temperature}, max_tokens=${requestBody.max_tokens}`);
+    if (!isGpt5Family) {
+      requestBody.max_tokens = maxTokens;
+    }
+
+    console.log(`[AI请求] endpoint=${endpoint}, model=${requestBody.model}, temp=${requestBody.temperature}, max_tokens=${requestBody.max_tokens ?? 'omitted'}`);
 
     const response = await fetch(endpoint, {
       method: 'POST',

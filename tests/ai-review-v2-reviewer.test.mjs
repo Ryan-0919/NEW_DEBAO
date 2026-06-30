@@ -56,8 +56,8 @@ test("gpt-5 family 只走 openai 兼容 chat completions 接口", async () => {
     assert.equal(calls[0].url, "https://ryanai.cc/v1/chat/completions");
     const body = JSON.parse(calls[0].options.body);
     assert.equal(body.model, "gpt-5.5");
-    assert.equal(body.max_tokens, 4321);
     assert.equal(body.temperature, 0.4);
+    assert.equal("max_tokens" in body, false);
     assert.equal(body.messages.length, 2);
     assert.deepEqual(body.messages[0], {
       role: "developer",
