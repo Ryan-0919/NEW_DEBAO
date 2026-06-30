@@ -5,6 +5,7 @@ import { ReviewValidator } from './validator.js';
 const normalizeBaseUrl = (value = '') => `${value ?? ''}`.trim().replace(/\/+$/, '');
 const shouldPreferResponsesApi = (model = '') => /^gpt-5(?:$|[-.])/i.test(`${model ?? ''}`.trim());
 const isResponsesFallbackCandidate = (status, responseText = '') => {
+  if (Number(status) >= 500) return true;
   if ([400, 404, 405, 415, 422, 501].includes(Number(status))) return true;
   const normalized = `${responseText ?? ''}`.toLowerCase();
   return (
@@ -12,7 +13,9 @@ const isResponsesFallbackCandidate = (status, responseText = '') => {
     normalized.includes('unknown parameter') ||
     normalized.includes('not found') ||
     normalized.includes('responses') ||
-    normalized.includes('max_output_tokens')
+    normalized.includes('max_output_tokens') ||
+    normalized.includes('upstream request failed') ||
+    normalized.includes('upstream_error')
   );
 };
 

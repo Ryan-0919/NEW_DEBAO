@@ -126,6 +126,54 @@ test("responses 不可用时会自动回退到 chat completions", async () => {
   }
 });
 
+test("responses 返回 502 upstream_error 时也会回退到 chat completions", async () => {
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    if (calls.length === 1) {
+      return createJsonResponse(
+        {
+          error: {
+            message: "Upstream request failed",
+            type: "upstream_error",
+          },
+        },
+        502,
+      );
+    }
+    return createJsonResponse({
+      choices: [
+        {
+          message: {
+            content: "{\"subQuestions\":[]}",
+          },
+          finish_reason: "stop",
+        },
+      ],
+      usage: {
+        prompt_tokens: 18,
+        completion_tokens: 19,
+        total_tokens: 37,
+      },
+    });
+  };
+
+  try {
+    const reviewer = createReviewer("gpt-5.5");
+    const result = await reviewer.callAi({
+      systemPrompt: "system prompt",
+      userPrompt: "user prompt",
+    });
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].url, "https://ryanai.cc/v1/responses");
+    assert.equal(calls[1].url, "https://ryanai.cc/v1/chat/completions");
+    assert.equal(result.content, "{\"subQuestions\":[]}");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("非 gpt-5 模型继续走 chat completions 且不带 anthropic-version 头", async () => {
   const calls = [];
   global.fetch = async (url, options) => {
