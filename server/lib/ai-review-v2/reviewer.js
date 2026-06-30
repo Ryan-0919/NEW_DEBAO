@@ -2,6 +2,20 @@
 import { buildPrompt } from './base-prompt.js';
 import { ReviewValidator } from './validator.js';
 
+const normalizeBaseUrl = (value = '') => `${value ?? ''}`.trim().replace(/\/+$/, '');
+const shouldPreferResponsesApi = (model = '') => /^gpt-5(?:$|[-.])/i.test(`${model ?? ''}`.trim());
+const isResponsesFallbackCandidate = (status, responseText = '') => {
+  if ([400, 404, 405, 415, 422, 501].includes(Number(status))) return true;
+  const normalized = `${responseText ?? ''}`.toLowerCase();
+  return (
+    normalized.includes('unsupported parameter') ||
+    normalized.includes('unknown parameter') ||
+    normalized.includes('not found') ||
+    normalized.includes('responses') ||
+    normalized.includes('max_output_tokens')
+  );
+};
+
 export class AiReviewer {
   constructor(strategy, runtimeConfig) {
     this.strategy = strategy;
@@ -190,63 +204,208 @@ export class AiReviewer {
    * 调用AI
    */
   async callAi(prompt) {
-    const endpoint = `${this.runtimeConfig.baseUrl}/chat/completions`;
     const controller = new AbortController();
     const timeoutMs = this.strategy.timeoutMs ?? this.strategy.timeout_ms ?? 120000;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const baseUrl = normalizeBaseUrl(this.runtimeConfig.baseUrl);
+    const model = this.strategy.model || 'claude-opus-4-8';
+    const maxTokens = Number(this.strategy.maxTokens ?? this.strategy.max_tokens) || 25000;
+    const temperature = Number(this.strategy.temperature) || 0.5;
 
     try {
-      const requestBody = {
-        model: this.strategy.model || 'claude-opus-4-8',
-        temperature: Number(this.strategy.temperature) || 0.5,
-        max_tokens: Number(this.strategy.maxTokens ?? this.strategy.max_tokens) || 25000,  // 增加到25000以应对长答案
-        messages: [
-          { role: 'system', content: prompt.systemPrompt },
-          { role: 'user', content: prompt.userPrompt + '\n\n直接返回JSON，不要```json代码块标记。\n\n⚠️ 关键：必须返回完整的JSON结构，包含所有字段直到最后的 }] }。不要中途停止！' }
-        ]
+      const requestText = `${prompt.userPrompt}\n\n直接返回JSON，不要\`\`\`json代码块标记。\n\n⚠️ 关键：必须返回完整的JSON结构，包含所有字段直到最后的 }] }。不要中途停止！`;
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.runtimeConfig.apiKey}`
       };
 
-      console.log(`[AI请求] endpoint=${endpoint}, model=${requestBody.model}, temp=${requestBody.temperature}, max_tokens=${requestBody.max_tokens}`);
+      if (shouldPreferResponsesApi(model)) {
+        const responsesAttempt = await this.sendResponsesRequest({
+          baseUrl,
+          headers,
+          model,
+          maxTokens,
+          prompt,
+          requestText,
+          signal: controller.signal
+        });
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.runtimeConfig.apiKey}`,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify(requestBody),
+        if (responsesAttempt.ok) {
+          return responsesAttempt.result;
+        }
+
+        console.warn(`[AI请求] responses接口失败，准备回退chat/completions。status=${responsesAttempt.status}`);
+        if (!isResponsesFallbackCandidate(responsesAttempt.status, responsesAttempt.responseText)) {
+          throw new Error(`AI API错误: ${responsesAttempt.status} - ${responsesAttempt.responseText.substring(0, 200)}`);
+        }
+      }
+
+      const chatAttempt = await this.sendChatCompletionsRequest({
+        baseUrl,
+        headers,
+        model,
+        systemPrompt: prompt.systemPrompt,
+        temperature,
+        maxTokens,
+        requestText,
         signal: controller.signal
       });
 
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        console.error(`[AI错误] status=${response.status}, response=${responseText.substring(0, 500)}`);
-        throw new Error(`AI API错误: ${response.status} - ${responseText.substring(0, 200)}`);
+      if (!chatAttempt.ok) {
+        console.error(`[AI错误] status=${chatAttempt.status}, response=${chatAttempt.responseText.substring(0, 500)}`);
+        throw new Error(`AI API错误: ${chatAttempt.status} - ${chatAttempt.responseText.substring(0, 200)}`);
       }
 
-      const data = JSON.parse(responseText);
-      const content = data.content?.[0]?.text || data.choices?.[0]?.message?.content || '';
-      const finishReason = data.content?.[0]?.stop_reason || data.choices?.[0]?.finish_reason || 'unknown';
-      const usage = {
-        prompt_tokens: data.usage?.input_tokens || data.usage?.prompt_tokens || 0,
-        completion_tokens: data.usage?.output_tokens || data.usage?.completion_tokens || 0,
-        total_tokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0) || data.usage?.total_tokens || 0
-      };
-
-      console.log(`[AI响应] finish_reason=${finishReason}, prompt_tokens=${usage.prompt_tokens}, completion_tokens=${usage.completion_tokens}, content_length=${content.length}`);
-
-      return {
-        raw: data,
-        content,
-        usage,
-        finishReason
-      };
+      return chatAttempt.result;
 
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  async sendResponsesRequest({ baseUrl, headers, model, maxTokens, prompt, requestText, signal }) {
+    const endpoint = `${baseUrl}/responses`;
+    const requestBody = {
+      model,
+      max_output_tokens: maxTokens,
+      instructions: prompt.systemPrompt,
+      input: requestText
+    };
+
+    console.log(`[AI请求] endpoint=${endpoint}, model=${model}, max_output_tokens=${requestBody.max_output_tokens}`);
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+      signal
+    });
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      console.warn(`[AI错误] status=${response.status}, response=${responseText.substring(0, 500)}`);
+      return {
+        ok: false,
+        status: response.status,
+        responseText
+      };
+    }
+
+    const data = JSON.parse(responseText);
+    return {
+      ok: true,
+      status: response.status,
+      responseText,
+      result: this.normalizeAiResponse({ data, apiType: 'responses' })
+    };
+  }
+
+  async sendChatCompletionsRequest({ baseUrl, headers, model, systemPrompt, temperature, maxTokens, requestText, signal }) {
+    const endpoint = `${baseUrl}/chat/completions`;
+    const requestBody = {
+      model,
+      temperature,
+      max_tokens: maxTokens,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: requestText }
+      ]
+    };
+
+    console.log(`[AI请求] endpoint=${endpoint}, model=${requestBody.model}, temp=${requestBody.temperature}, max_tokens=${requestBody.max_tokens}`);
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+      signal
+    });
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        responseText
+      };
+    }
+
+    const data = JSON.parse(responseText);
+    return {
+      ok: true,
+      status: response.status,
+      responseText,
+      result: this.normalizeAiResponse({ data, apiType: 'chat' })
+    };
+  }
+
+  normalizeAiResponse({ data, apiType }) {
+    const content = this.extractAiContent(data);
+    const finishReason = this.extractFinishReason(data);
+    const usage = this.extractUsage(data);
+
+    console.log(`[AI响应] api=${apiType}, finish_reason=${finishReason}, prompt_tokens=${usage.prompt_tokens}, completion_tokens=${usage.completion_tokens}, content_length=${content.length}`);
+
+    return {
+      raw: data,
+      content,
+      usage,
+      finishReason
+    };
+  }
+
+  extractAiContent(data) {
+    const directChatContent = data?.choices?.[0]?.message?.content;
+    if (typeof directChatContent === 'string') {
+      return directChatContent;
+    }
+
+    const directAnthropicContent = data?.content?.[0]?.text;
+    if (typeof directAnthropicContent === 'string') {
+      return directAnthropicContent;
+    }
+
+    const outputItems = Array.isArray(data?.output) ? data.output : [];
+    for (const item of outputItems) {
+      const contents = Array.isArray(item?.content) ? item.content : [];
+      for (const part of contents) {
+        if (typeof part?.text === 'string' && part.text) {
+          return part.text;
+        }
+        if (typeof part?.output_text === 'string' && part.output_text) {
+          return part.output_text;
+        }
+      }
+    }
+
+    if (typeof data?.output_text === 'string') {
+      return data.output_text;
+    }
+
+    return '';
+  }
+
+  extractFinishReason(data) {
+    return (
+      data?.content?.[0]?.stop_reason ||
+      data?.choices?.[0]?.finish_reason ||
+      data?.status ||
+      'unknown'
+    );
+  }
+
+  extractUsage(data) {
+    const promptTokens = data?.usage?.input_tokens || data?.usage?.prompt_tokens || 0;
+    const completionTokens = data?.usage?.output_tokens || data?.usage?.completion_tokens || 0;
+    const totalTokens = (promptTokens + completionTokens) || data?.usage?.total_tokens || 0;
+
+    return {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: totalTokens
+    };
   }
 
   /**
