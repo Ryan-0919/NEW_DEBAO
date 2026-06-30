@@ -24,27 +24,23 @@ const createJsonResponse = (payload, status = 200) =>
     headers: { "Content-Type": "application/json" },
   });
 
-test("gpt-5 family 优先走 responses 接口并使用 max_output_tokens", async () => {
+test("gpt-5 family 只走 openai 兼容 chat completions 接口", async () => {
   const calls = [];
   global.fetch = async (url, options) => {
     calls.push({ url, options });
     return createJsonResponse({
-      id: "resp_1",
-      status: "completed",
-      output: [
+      choices: [
         {
-          type: "message",
-          content: [
-            {
-              type: "output_text",
-              text: "{\"subQuestions\":[]}",
-            },
-          ],
+          message: {
+            content: "{\"subQuestions\":[]}",
+          },
+          finish_reason: "stop",
         },
       ],
       usage: {
-        input_tokens: 12,
-        output_tokens: 34,
+        prompt_tokens: 12,
+        completion_tokens: 34,
+        total_tokens: 46,
       },
     });
   };
@@ -57,12 +53,18 @@ test("gpt-5 family 优先走 responses 接口并使用 max_output_tokens", async
     });
 
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].url, "https://ryanai.cc/v1/responses");
+    assert.equal(calls[0].url, "https://ryanai.cc/v1/chat/completions");
     const body = JSON.parse(calls[0].options.body);
     assert.equal(body.model, "gpt-5.5");
-    assert.equal(body.max_output_tokens, 4321);
-    assert.equal(body.instructions, "system prompt");
-    assert.match(body.input, /user prompt/);
+    assert.equal(body.max_tokens, 4321);
+    assert.equal(body.temperature, 0.4);
+    assert.equal(body.messages.length, 2);
+    assert.deepEqual(body.messages[0], {
+      role: "developer",
+      content: "system prompt",
+    });
+    assert.equal(body.messages[1].role, "user");
+    assert.match(body.messages[1].content, /user prompt/);
     assert.equal(calls[0].options.headers["Content-Type"], "application/json");
     assert.equal(calls[0].options.headers.Authorization, "Bearer test-key");
     assert.equal("anthropic-version" in calls[0].options.headers, false);
@@ -72,104 +74,6 @@ test("gpt-5 family 优先走 responses 接口并使用 max_output_tokens", async
       completion_tokens: 34,
       total_tokens: 46,
     });
-  } finally {
-    global.fetch = originalFetch;
-  }
-});
-
-test("responses 不可用时会自动回退到 chat completions", async () => {
-  const calls = [];
-  global.fetch = async (url, options) => {
-    calls.push({ url, options });
-    if (calls.length === 1) {
-      return createJsonResponse(
-        {
-          error: {
-            message: "Not Found",
-          },
-        },
-        404,
-      );
-    }
-    return createJsonResponse({
-      choices: [
-        {
-          message: {
-            content: "{\"subQuestions\":[]}",
-          },
-          finish_reason: "stop",
-        },
-      ],
-      usage: {
-        prompt_tokens: 21,
-        completion_tokens: 22,
-        total_tokens: 43,
-      },
-    });
-  };
-
-  try {
-    const reviewer = createReviewer("gpt-5.5");
-    const result = await reviewer.callAi({
-      systemPrompt: "system prompt",
-      userPrompt: "user prompt",
-    });
-
-    assert.equal(calls.length, 2);
-    assert.equal(calls[0].url, "https://ryanai.cc/v1/responses");
-    assert.equal(calls[1].url, "https://ryanai.cc/v1/chat/completions");
-    const fallbackBody = JSON.parse(calls[1].options.body);
-    assert.equal(fallbackBody.max_tokens, 4321);
-    assert.equal(result.content, "{\"subQuestions\":[]}");
-  } finally {
-    global.fetch = originalFetch;
-  }
-});
-
-test("gpt-5 responses 返回 502 upstream_error 时会先重试 responses", async () => {
-  const calls = [];
-  global.fetch = async (url, options) => {
-    calls.push({ url, options });
-    if (calls.length < 3) {
-      return createJsonResponse(
-        {
-          error: {
-            message: "Upstream request failed",
-            type: "upstream_error",
-          },
-        },
-        502,
-      );
-    }
-    return createJsonResponse({
-      choices: [
-        {
-          message: {
-            content: "{\"subQuestions\":[]}",
-          },
-          finish_reason: "stop",
-        },
-      ],
-      usage: {
-        prompt_tokens: 18,
-        completion_tokens: 19,
-        total_tokens: 37,
-      },
-    });
-  };
-
-  try {
-    const reviewer = createReviewer("gpt-5.5");
-    const result = await reviewer.callAi({
-      systemPrompt: "system prompt",
-      userPrompt: "user prompt",
-    });
-
-    assert.equal(calls.length, 3);
-    assert.equal(calls[0].url, "https://ryanai.cc/v1/responses");
-    assert.equal(calls[1].url, "https://ryanai.cc/v1/responses");
-    assert.equal(calls[2].url, "https://ryanai.cc/v1/responses");
-    assert.equal(result.content, "{\"subQuestions\":[]}");
   } finally {
     global.fetch = originalFetch;
   }
@@ -207,6 +111,10 @@ test("非 gpt-5 模型继续走 chat completions 且不带 anthropic-version 头
     assert.equal(calls[0].url, "https://ryanai.cc/v1/chat/completions");
     const body = JSON.parse(calls[0].options.body);
     assert.equal(body.max_tokens, 4321);
+    assert.deepEqual(body.messages[0], {
+      role: "system",
+      content: "system prompt",
+    });
     assert.equal("anthropic-version" in calls[0].options.headers, false);
   } finally {
     global.fetch = originalFetch;

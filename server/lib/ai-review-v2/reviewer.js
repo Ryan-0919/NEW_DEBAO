@@ -3,26 +3,6 @@ import { buildPrompt } from './base-prompt.js';
 import { ReviewValidator } from './validator.js';
 
 const normalizeBaseUrl = (value = '') => `${value ?? ''}`.trim().replace(/\/+$/, '');
-const shouldPreferResponsesApi = (model = '') => /^gpt-5(?:$|[-.])/i.test(`${model ?? ''}`.trim());
-const isRetryableResponsesError = (status, responseText = '') => {
-  if (Number(status) >= 500) return true;
-  const normalized = `${responseText ?? ''}`.toLowerCase();
-  return normalized.includes('upstream request failed') || normalized.includes('upstream_error');
-};
-const isResponsesFallbackCandidate = (status, responseText = '') => {
-  if (Number(status) >= 500) return true;
-  if ([400, 404, 405, 415, 422, 501].includes(Number(status))) return true;
-  const normalized = `${responseText ?? ''}`.toLowerCase();
-  return (
-    normalized.includes('unsupported parameter') ||
-    normalized.includes('unknown parameter') ||
-    normalized.includes('not found') ||
-    normalized.includes('responses') ||
-    normalized.includes('max_output_tokens') ||
-    normalized.includes('upstream request failed') ||
-    normalized.includes('upstream_error')
-  );
-};
 
 export class AiReviewer {
   constructor(strategy, runtimeConfig) {
@@ -227,42 +207,6 @@ export class AiReviewer {
         'Authorization': `Bearer ${this.runtimeConfig.apiKey}`
       };
 
-      if (shouldPreferResponsesApi(model)) {
-        let lastResponsesAttempt = null;
-        for (let attempt = 1; attempt <= 3; attempt += 1) {
-          const responsesAttempt = await this.sendResponsesRequest({
-            baseUrl,
-            headers,
-            model,
-            maxTokens,
-            prompt,
-            requestText,
-            signal: controller.signal
-          });
-          lastResponsesAttempt = responsesAttempt;
-
-          if (responsesAttempt.ok) {
-            return responsesAttempt.result;
-          }
-
-          const retryable = isRetryableResponsesError(responsesAttempt.status, responsesAttempt.responseText);
-          if (retryable && attempt < 3) {
-            console.warn(`[AI请求] responses接口失败，准备重试responses。attempt=${attempt}, status=${responsesAttempt.status}`);
-            continue;
-          }
-
-          console.warn(`[AI请求] responses接口失败，准备回退chat/completions。status=${responsesAttempt.status}`);
-          if (!isResponsesFallbackCandidate(responsesAttempt.status, responsesAttempt.responseText)) {
-            throw new Error(`AI API错误: ${responsesAttempt.status} - ${responsesAttempt.responseText.substring(0, 200)}`);
-          }
-          break;
-        }
-
-        if (lastResponsesAttempt && !isResponsesFallbackCandidate(lastResponsesAttempt.status, lastResponsesAttempt.responseText)) {
-          throw new Error(`AI API错误: ${lastResponsesAttempt.status} - ${lastResponsesAttempt.responseText.substring(0, 200)}`);
-        }
-      }
-
       const chatAttempt = await this.sendChatCompletionsRequest({
         baseUrl,
         headers,
@@ -286,52 +230,15 @@ export class AiReviewer {
     }
   }
 
-  async sendResponsesRequest({ baseUrl, headers, model, maxTokens, prompt, requestText, signal }) {
-    const endpoint = `${baseUrl}/responses`;
-    const requestBody = {
-      model,
-      max_output_tokens: maxTokens,
-      instructions: prompt.systemPrompt,
-      input: requestText
-    };
-
-    console.log(`[AI请求] endpoint=${endpoint}, model=${model}, max_output_tokens=${requestBody.max_output_tokens}`);
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(requestBody),
-      signal
-    });
-
-    const responseText = await response.text();
-
-    if (!response.ok) {
-      console.warn(`[AI错误] status=${response.status}, response=${responseText.substring(0, 500)}`);
-      return {
-        ok: false,
-        status: response.status,
-        responseText
-      };
-    }
-
-    const data = JSON.parse(responseText);
-    return {
-      ok: true,
-      status: response.status,
-      responseText,
-      result: this.normalizeAiResponse({ data, apiType: 'responses' })
-    };
-  }
-
   async sendChatCompletionsRequest({ baseUrl, headers, model, systemPrompt, temperature, maxTokens, requestText, signal }) {
     const endpoint = `${baseUrl}/chat/completions`;
+    const leadingRole = /^gpt-5(?:$|[-.])/i.test(`${model ?? ''}`.trim()) ? 'developer' : 'system';
     const requestBody = {
       model,
       temperature,
       max_tokens: maxTokens,
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: leadingRole, content: systemPrompt },
         { role: 'user', content: requestText }
       ]
     };
