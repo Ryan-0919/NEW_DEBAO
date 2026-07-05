@@ -41,6 +41,12 @@ const createHttpError = (message, statusCode = 400) => {
   return error;
 };
 
+const assertMockExamRecordInProgress = (record) => {
+  if (`${record?.status ?? ""}`.trim() !== "in_progress") {
+    throw createHttpError("本次考试已交卷，不能继续作答", 409);
+  }
+};
+
 export const getCourseLinkedMockExamSeriesIds = async ({ db, userId }) => {
   const courses = await db.course.findMany({
     where: {
@@ -2170,15 +2176,15 @@ export const startMockExamRecord = async ({ db, paperId, userId, currentTime = n
 export const saveMockExamAnswer = async ({ db, recordId, userId, questionId, answerKeys, answerText, subQuestionId, currentTime = new Date() }) => {
   const currentRecord = await getMockExamRecordForUser({ db, recordId, userId, currentTime, finalizeExpired: true });
 
-  if (currentRecord.status !== "in_progress") {
-    throw createHttpError("本次考试已交卷，不能继续作答", 409);
-  }
+  assertMockExamRecordInProgress(currentRecord);
 
   return db.$transaction(async (tx) => {
     const record = await getRecordWithPaper(tx, recordId);
     if (!record || record.userId !== userId) {
       throw createHttpError("考试记录不存在", 404);
     }
+
+    assertMockExamRecordInProgress(record);
 
     const paper = getRecordPaper(record);
     const question = (paper.questions ?? []).find((item) => item.id === questionId);

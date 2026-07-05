@@ -13,6 +13,11 @@ import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import mockExamOfficialCss from "../../../styles/mock-exam-official.css?raw";
 import { MockExamQuestion, MockExamRecordDetail, MockExamSubjectiveSubQuestion, mockApi } from "../../lib/mockData";
+import {
+  shouldStartMockExamSubmit,
+  trackMockExamSaveTask,
+  waitForMockExamSaveTasks,
+} from "../../lib/mockExamSubmitHelpers.mjs";
 import { getUserPhone } from "../../lib/user-session";
 import {
   applyObjectiveAnswerToRecord,
@@ -365,6 +370,7 @@ export function MockExamRoom() {
   const copyTextRef = useRef("");
   const timersRef = useRef<Record<string, number>>({});
   const pendingRef = useRef<Record<string, PendingEntry>>({});
+  const inFlightSaveTasksRef = useRef<Record<string, { text: string; promise: Promise<unknown> }>>({});
   const undoHistoryRef = useRef<Record<string, string[]>>({});
   const redoHistoryRef = useRef<Record<string, string[]>>({});
   const lawDialogActionRef = useRef<LawDialogAction | null>(null);
@@ -576,30 +582,53 @@ export function MockExamRoom() {
   };
 
   const persistSubjective = async (entry: PendingEntry) => {
-    const active = recordRef.current;
-    if (!active || active.status !== "in_progress") return;
-    try {
-      const saved = await mockApi.saveMockExamAnswer(active.id, { questionId: entry.questionId, subQuestionId: entry.subQuestionId, answerText: entry.text });
-      setRecord(saved);
-      if (saved.status === "submitted") return void navigateAfterSubmit(saved.id, saved.reviewWorkflowStatus, saved.reviewEnabled);
-      const key = buildDraftKey(entry.questionId, entry.subQuestionId);
-      if (pendingRef.current[key]?.text === entry.text) delete pendingRef.current[key];
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "主观题答案保存失败");
-    }
+    const key = buildDraftKey(entry.questionId, entry.subQuestionId);
+    return trackMockExamSaveTask({
+      taskMap: inFlightSaveTasksRef.current,
+      key,
+      text: entry.text,
+      run: async () => {
+        const active = recordRef.current;
+        if (!active || active.status !== "in_progress") return;
+        try {
+          const saved = await mockApi.saveMockExamAnswer(active.id, {
+            questionId: entry.questionId,
+            subQuestionId: entry.subQuestionId,
+            answerText: entry.text,
+          });
+          recordRef.current = saved;
+          setRecord(saved);
+          if (saved.status === "submitted") {
+            navigateAfterSubmit(saved.id, saved.reviewWorkflowStatus, saved.reviewEnabled);
+            return;
+          }
+          if (pendingRef.current[key]?.text === entry.text) delete pendingRef.current[key];
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "主观题答案保存失败");
+          throw error;
+        }
+      },
+    });
   };
 
   const flushPending = async () => {
     commitAnswerTextarea({ force: true });
+    for (const key of Object.keys(timersRef.current)) {
+      if (timersRef.current[key]) {
+        window.clearTimeout(timersRef.current[key]);
+        delete timersRef.current[key];
+      }
+    }
+    await waitForMockExamSaveTasks(inFlightSaveTasksRef.current);
     for (const [key, entry] of Object.entries(pendingRef.current)) {
-      if (timersRef.current[key]) { window.clearTimeout(timersRef.current[key]); delete timersRef.current[key]; }
       await persistSubjective(entry);
     }
+    await waitForMockExamSaveTasks(inFlightSaveTasksRef.current);
   };
 
   const handleSubmit = async (isAuto = false) => {
     const active = recordRef.current;
-    if (!active || submitting) return;
+    if (!shouldStartMockExamSubmit({ hasActiveRecord: Boolean(active), submitting, submittingRefCurrent: submittingRef.current })) return;
     submittingRef.current = true;
     setSubmitting(true);
     try {
@@ -635,7 +664,11 @@ export function MockExamRoom() {
     setDraftAnswers(nextDrafts);
     pendingRef.current[key] = { questionId, subQuestionId: subQuestion.id, text: value };
     if (timersRef.current[key]) window.clearTimeout(timersRef.current[key]);
-    timersRef.current[key] = window.setTimeout(() => { delete timersRef.current[key]; const entry = pendingRef.current[key]; if (entry) void persistSubjective(entry); }, SAVE_DELAY);
+    timersRef.current[key] = window.setTimeout(() => {
+      delete timersRef.current[key];
+      const entry = pendingRef.current[key];
+      if (entry) void persistSubjective(entry).catch(() => {});
+    }, SAVE_DELAY);
   };
 
   if (!isMobileBlocked && (loading || !record)) return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>考试加载中...</div>;
