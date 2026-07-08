@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { getAdminRole } from "../../lib/admin-session";
-import { AdminMockExamReviewGlobalRecord, adminMockExamReviewService } from "../../services/adminMockExamReviewService";
+import {
+  AdminMockExamReviewGlobalRecord,
+  AdminMockExamReviewerWorkload,
+  adminMockExamReviewService,
+} from "../../services/adminMockExamReviewService";
 import { emptyReviewStats, ReviewMetricCard, ReviewRecordTable, reviewGlobalTabs, reviewPartTimeTabs } from "./reviewShared";
 
 export type RecordStatusGroup = "ai_pending" | "ai_processing" | "teacher" | "mine" | "ai_problem" | "locked" | "published";
@@ -15,18 +19,30 @@ type ReviewRecordsPageProps = {
 };
 
 export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }: ReviewRecordsPageProps = {}) {
-  const isPartTimeReviewer = getAdminRole() === "part_time_reviewer";
+  const adminRole = getAdminRole();
+  const isPartTimeReviewer = adminRole === "part_time_reviewer";
+  const canManageAssignments = adminRole === "super_admin" || adminRole === "operations_admin" || adminRole === "review_admin";
+
   const [records, setRecords] = useState<AdminMockExamReviewGlobalRecord[]>([]);
   const [stats, setStats] = useState(emptyReviewStats);
   const [status, setStatus] = useState<RecordStatusGroup>(initialStatus);
   const [keyword, setKeyword] = useState("");
+  const [assignedReviewerId, setAssignedReviewerId] = useState("");
   const [page, setPage] = useState({ page: initialPage, totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [reviewers, setReviewers] = useState<AdminMockExamReviewerWorkload[]>([]);
+  const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+  const [reviewerIdForBatchAssign, setReviewerIdForBatchAssign] = useState("");
+  const [batchAssignLoading, setBatchAssignLoading] = useState(false);
+  const [batchUnassignLoading, setBatchUnassignLoading] = useState(false);
+
   const tabs = isPartTimeReviewer ? reviewPartTimeTabs : reviewGlobalTabs;
   const currentTab = tabs.find((tab) => tab.key === status);
+  const selectedRecordIdSet = useMemo(() => new Set(selectedRecordIds), [selectedRecordIds]);
+  const allCurrentPageSelected = records.length > 0 && records.every((record) => selectedRecordIdSet.has(record.id));
 
-  const loadRecords = async (nextStatus = status, nextPage = page.page) => {
+  const loadRecords = async (nextStatus = status, nextPage = page.page, nextAssignedReviewerId = assignedReviewerId) => {
     setLoading(true);
     try {
       const payload = await adminMockExamReviewService.getRecords({
@@ -34,10 +50,12 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
         pageSize: 20,
         status: nextStatus,
         keyword: keyword.trim(),
+        assignedReviewerId: canManageAssignments ? nextAssignedReviewerId : undefined,
       });
       setRecords(payload.items);
       setStats(payload.stats);
       setPage({ page: payload.page, totalPages: payload.totalPages, total: payload.total });
+      setSelectedRecordIds([]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载试卷列表失败");
     } finally {
@@ -45,17 +63,31 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
     }
   };
 
+  const loadReviewers = async () => {
+    if (!canManageAssignments) return;
+    try {
+      const payload = await adminMockExamReviewService.getReviewers();
+      setReviewers(payload);
+      setReviewerIdForBatchAssign((current) => current || payload[0]?.id || "");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载兼职批改老师失败");
+    }
+  };
+
   useEffect(() => {
     void loadRecords(status, initialPage);
   }, []);
 
+  useEffect(() => {
+    if (!canManageAssignments) return;
+    void loadReviewers();
+  }, [canManageAssignments]);
+
   const buildReturnTo = (nextStatus = status, nextPage = page.page) => {
     const params = new URLSearchParams();
     params.set("status", nextStatus);
-    if (nextPage > 1) {
-      params.set("page", `${nextPage}`);
-    }
-
+    if (nextPage > 1) params.set("page", `${nextPage}`);
+    if (canManageAssignments && assignedReviewerId) params.set("assignedReviewerId", assignedReviewerId);
     const pathname = typeof window !== "undefined" && window.location.pathname.startsWith("/adminpg/mine") ? "/adminpg/mine" : "/adminpg/reviews";
     return `${pathname}?${params.toString()}`;
   };
@@ -71,6 +103,19 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
   const switchStatus = (nextStatus: RecordStatusGroup) => {
     setStatus(nextStatus);
     void loadRecords(nextStatus, 1);
+  };
+
+  const toggleRecord = (recordId: string, selected: boolean) => {
+    setSelectedRecordIds((current) => {
+      if (selected) {
+        return current.includes(recordId) ? current : [...current, recordId];
+      }
+      return current.filter((item) => item !== recordId);
+    });
+  };
+
+  const toggleAllRecords = (selected: boolean) => {
+    setSelectedRecordIds(selected ? records.map((record) => record.id) : []);
   };
 
   const claimRecord = async (record: AdminMockExamReviewGlobalRecord) => {
@@ -89,6 +134,80 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
     window.location.assign(buildRecordDetailUrl(record));
   };
 
+  const batchAssignReviewer = async () => {
+    if (!canManageAssignments) return;
+    if (selectedRecordIds.length === 0) {
+      toast.error("请先选择需要分配的试卷");
+      return;
+    }
+    if (!reviewerIdForBatchAssign) {
+      toast.error("请先选择兼职批改老师");
+      return;
+    }
+    const reviewer = reviewers.find((item) => item.id === reviewerIdForBatchAssign);
+    if (!reviewer) {
+      toast.error("当前选择的兼职批改老师不存在");
+      return;
+    }
+    if (!window.confirm(`确认将已选择的 ${selectedRecordIds.length} 份试卷分配/改派给 ${reviewer.name || reviewer.account} 吗？`)) return;
+
+    setBatchAssignLoading(true);
+    try {
+      const payload = await adminMockExamReviewService.batchAssignReviewer(selectedRecordIds, reviewer.id);
+      if (payload.failedCount > 0) {
+        const failedMessage = payload.results.find((item) => !item.success)?.message ?? "部分试卷分配失败";
+        toast.warning(`已分配 ${payload.successCount} 份，失败 ${payload.failedCount} 份：${failedMessage}`);
+      } else {
+        toast.success(`已将 ${payload.successCount} 份试卷分配给 ${reviewer.name || reviewer.account}`);
+      }
+      await Promise.all([loadRecords(status, page.page), loadReviewers()]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "批量分配失败");
+    } finally {
+      setBatchAssignLoading(false);
+    }
+  };
+
+  const batchUnassignReviewer = async () => {
+    if (!canManageAssignments) return;
+    if (selectedRecordIds.length === 0) {
+      toast.error("请先选择需要收回的试卷");
+      return;
+    }
+    if (!window.confirm(`确认将已选择的 ${selectedRecordIds.length} 份试卷收回到未分配公共池吗？`)) return;
+
+    setBatchUnassignLoading(true);
+    try {
+      const payload = await adminMockExamReviewService.batchUnassignReviewer(selectedRecordIds);
+      if (payload.failedCount > 0) {
+        const failedMessage = payload.results.find((item) => !item.success)?.message ?? "部分试卷收回失败";
+        toast.warning(`已收回 ${payload.successCount} 份，失败 ${payload.failedCount} 份：${failedMessage}`);
+      } else {
+        toast.success(`已收回 ${payload.successCount} 份试卷到公共池`);
+      }
+      await Promise.all([loadRecords(status, page.page), loadReviewers()]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "批量收回失败");
+    } finally {
+      setBatchUnassignLoading(false);
+    }
+  };
+
+  const unassignSingleRecord = async (record: AdminMockExamReviewGlobalRecord) => {
+    if (!canManageAssignments) return;
+    if (!window.confirm(`确认收回 ${record.userLabel} 的试卷到未分配公共池吗？`)) return;
+    setActionLoading(true);
+    try {
+      await adminMockExamReviewService.unassignReviewer(record.id);
+      toast.success("试卷已收回到公共池");
+      await Promise.all([loadRecords(status, page.page), loadReviewers()]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "收回试卷失败");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-[22px] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
@@ -97,28 +216,35 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">全局批改队列</p>
             <h1 className="mt-2 text-[26px] font-semibold leading-tight text-slate-950">{currentTab?.label ?? "试卷列表"}</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-              {isPartTimeReviewer ? "这里只显示分配给当前兼职老师的试卷，领取后进入单卷工作台完成修改并发送。" : "按当前处理阶段汇总所有试卷记录，老师可以先领取，再进入单卷工作台批改。"}
+              {isPartTimeReviewer
+                ? "这里只显示分配给当前兼职老师的试卷，领取后进入单卷工作台完成修改并发送。"
+                : "这里支持在全局待老师批改队列中直接分配、改派和收回兼职老师名下试卷。"}
             </p>
           </div>
-          <Button className="h-11 justify-self-start rounded-full border-slate-200 bg-white px-5 text-slate-700 hover:bg-slate-50 xl:justify-self-end" variant="outline" disabled={loading} onClick={() => void loadRecords(status, page.page)}>
+          <Button
+            className="h-11 justify-self-start rounded-full border-slate-200 bg-white px-5 text-slate-700 hover:bg-slate-50 xl:justify-self-end"
+            variant="outline"
+            disabled={loading}
+            onClick={() => void loadRecords(status, page.page)}
+          >
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
             刷新
           </Button>
         </div>
 
-        <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-7">
-          <ReviewMetricCard label="AI待批改" value={stats.aiPending} tone="amber" />
-          <ReviewMetricCard label="AI正在批改" value={stats.aiProcessing} tone="blue" />
+        <div className={`mt-4 grid gap-2 md:grid-cols-3 ${isPartTimeReviewer ? "xl:grid-cols-3" : "xl:grid-cols-7"}`}>
+          {!isPartTimeReviewer ? <ReviewMetricCard label="AI待批改" value={stats.aiPending} tone="amber" /> : null}
+          {!isPartTimeReviewer ? <ReviewMetricCard label="AI正在批改" value={stats.aiProcessing} tone="blue" /> : null}
           <ReviewMetricCard label="待老师批改" value={stats.manualPending} tone="violet" />
           <ReviewMetricCard label="我领取的" value={stats.mine} tone="blue" />
           <ReviewMetricCard label="已批改" value={stats.published} tone="emerald" />
-          <ReviewMetricCard label="已锁定" value={stats.locked} />
-          <ReviewMetricCard label="AI异常" value={stats.aiProblem} tone="amber" />
+          {!isPartTimeReviewer ? <ReviewMetricCard label="已锁定" value={stats.locked} /> : null}
+          {!isPartTimeReviewer ? <ReviewMetricCard label="AI异常" value={stats.aiProblem} tone="amber" /> : null}
         </div>
       </section>
 
       <section className="sticky top-0 z-10 rounded-[16px] border border-slate-200 bg-white/95 p-3 shadow-[0_12px_32px_rgba(15,23,42,0.06)] backdrop-blur">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,460px)] xl:items-center">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,520px)] xl:items-center">
           <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -158,22 +284,131 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
             })}
           </div>
           <div className="flex min-w-0 justify-end gap-2">
+            {canManageAssignments ? (
+              <select
+                className="h-11 min-w-[220px] rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-300"
+                value={assignedReviewerId}
+                onChange={(event) => setAssignedReviewerId(event.target.value)}
+              >
+                <option value="">全部老师</option>
+                {reviewers.map((reviewer) => (
+                  <option key={reviewer.id} value={reviewer.id}>
+                    {reviewer.name || reviewer.account}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <div className="relative w-full max-w-[420px]">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input className="h-11 rounded-full pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void loadRecords(status, 1); }} placeholder="搜索试卷、编号、学员、手机号" />
+              <Input
+                className="h-11 rounded-full pl-9"
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void loadRecords(status, 1);
+                }}
+                placeholder="搜索试卷、编号、学员、手机号"
+              />
             </div>
-            <Button className="h-11 rounded-full px-5" variant="outline" onClick={() => void loadRecords(status, 1)}>搜索</Button>
+            <Button className="h-11 rounded-full px-5" variant="outline" onClick={() => void loadRecords(status, 1)}>
+              搜索
+            </Button>
           </div>
         </div>
       </section>
 
-      <ReviewRecordTable records={records} loading={loading || actionLoading} showPaper onOpen={(record) => openRecord(record as AdminMockExamReviewGlobalRecord)} onClaim={(record) => void claimRecord(record as AdminMockExamReviewGlobalRecord)} />
+      {canManageAssignments && reviewers.length > 0 ? (
+        <section className="rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">兼职批改老师</h2>
+              <p className="mt-1 text-sm text-slate-500">点击卡片可筛选某位老师名下的试卷；在待老师批改全局队列中可直接批量分配、改派或收回到公共池。</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select
+                className="h-11 min-w-[320px] rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-300"
+                value={reviewerIdForBatchAssign}
+                onChange={(event) => setReviewerIdForBatchAssign(event.target.value)}
+              >
+                {reviewers.length === 0 ? <option value="">暂无兼职批改老师</option> : null}
+                {reviewers.map((reviewer) => (
+                  <option key={reviewer.id} value={reviewer.id}>
+                    {`${reviewer.name || reviewer.account} · 近1小时 ${reviewer.lastHourCount} · 今日 ${reviewer.todayCount} · 总量 ${reviewer.totalCount} · 待处理 ${reviewer.assignedPendingCount}`}
+                  </option>
+                ))}
+              </select>
+              <Button
+                className="h-11 rounded-full bg-indigo-600 px-5 text-white hover:bg-indigo-700"
+                disabled={selectedRecordIds.length === 0 || batchAssignLoading}
+                onClick={() => void batchAssignReviewer()}
+              >
+                批量分配/改派{selectedRecordIds.length > 0 ? `（${selectedRecordIds.length}）` : ""}
+              </Button>
+              <Button
+                className="h-11 rounded-full border-slate-200 bg-white px-5 text-slate-700 hover:bg-slate-50"
+                variant="outline"
+                disabled={selectedRecordIds.length === 0 || batchUnassignLoading}
+                onClick={() => void batchUnassignReviewer()}
+              >
+                收回到公共池{selectedRecordIds.length > 0 ? `（${selectedRecordIds.length}）` : ""}
+              </Button>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {reviewers.map((reviewer) => (
+              <button
+                key={reviewer.id}
+                type="button"
+                className={`rounded-2xl border px-4 py-3 text-left shadow-sm transition ${
+                  assignedReviewerId === reviewer.id ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40"
+                }`}
+                onClick={() => {
+                  const nextReviewerId = assignedReviewerId === reviewer.id ? "" : reviewer.id;
+                  setAssignedReviewerId(nextReviewerId);
+                  void loadRecords(status, 1, nextReviewerId);
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-slate-950">{reviewer.name || reviewer.account}</p>
+                    <p className="mt-1 truncate text-xs text-slate-500">{reviewer.account}</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">{reviewer.assignedPendingCount} 待处理</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                  <div className="rounded-xl bg-slate-50 px-3 py-2"><p>近1小时</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.lastHourCount}</p></div>
+                  <div className="rounded-xl bg-slate-50 px-3 py-2"><p>今日</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.todayCount}</p></div>
+                  <div className="rounded-xl bg-slate-50 px-3 py-2"><p>总量</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.totalCount}</p></div>
+                  <div className="rounded-xl bg-slate-50 px-3 py-2"><p>已领取</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.claimedCount}</p></div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <ReviewRecordTable
+        records={records}
+        loading={loading || actionLoading || batchAssignLoading || batchUnassignLoading}
+        showPaper
+        selectedRecordIds={selectedRecordIdSet}
+        allCurrentPageSelected={allCurrentPageSelected}
+        onToggleRecord={toggleRecord}
+        onToggleAll={toggleAllRecords}
+        onOpen={(record) => openRecord(record as AdminMockExamReviewGlobalRecord)}
+        onClaim={(record) => void claimRecord(record as AdminMockExamReviewGlobalRecord)}
+        onUnassign={canManageAssignments ? (record) => void unassignSingleRecord(record as AdminMockExamReviewGlobalRecord) : undefined}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-slate-200 bg-white px-5 py-4 text-sm text-slate-500">
         <span>第 {page.page} / {page.totalPages} 页，共 {page.total} 条</span>
         <div className="flex gap-2">
-          <Button variant="outline" disabled={page.page <= 1 || loading} onClick={() => void loadRecords(status, page.page - 1)}>上一页</Button>
-          <Button variant="outline" disabled={page.page >= page.totalPages || loading} onClick={() => void loadRecords(status, page.page + 1)}>下一页</Button>
+          <Button variant="outline" disabled={page.page <= 1 || loading} onClick={() => void loadRecords(status, page.page - 1)}>
+            上一页
+          </Button>
+          <Button variant="outline" disabled={page.page >= page.totalPages || loading} onClick={() => void loadRecords(status, page.page + 1)}>
+            下一页
+          </Button>
         </div>
       </div>
     </div>

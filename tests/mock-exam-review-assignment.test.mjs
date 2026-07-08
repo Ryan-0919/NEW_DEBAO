@@ -5,6 +5,7 @@ import {
   canAssignToPartTimeReviewer,
   canManageReviewAssignments,
   canReassignReviewRecord,
+  canUnassignReviewRecord,
   canReviewerAccessAssignedRecord,
   isPartTimeReviewerRole,
   summarizeReviewerStats,
@@ -29,6 +30,41 @@ test("只要没发送给学生，主管就可以改派", () => {
   assert.equal(canReassignReviewRecord({ publishedAt: null }), true);
   assert.equal(canReassignReviewRecord({ publishedAt: "" }), true);
   assert.equal(canReassignReviewRecord({ publishedAt: "2026-07-08 12:00:00" }), false);
+});
+
+test("收回到公共池仅限未发送且已分配的 manual_pending 试卷", () => {
+  assert.equal(
+    canUnassignReviewRecord({
+      publishedAt: null,
+      reviewWorkflowStatus: "manual_pending",
+      assignedReviewerId: "reviewer_a",
+    }),
+    true,
+  );
+  assert.equal(
+    canUnassignReviewRecord({
+      publishedAt: null,
+      reviewWorkflowStatus: "ai_processing",
+      assignedReviewerId: "reviewer_a",
+    }),
+    false,
+  );
+  assert.equal(
+    canUnassignReviewRecord({
+      publishedAt: "2026-07-08 12:00:00",
+      reviewWorkflowStatus: "manual_pending",
+      assignedReviewerId: "reviewer_a",
+    }),
+    false,
+  );
+  assert.equal(
+    canUnassignReviewRecord({
+      publishedAt: null,
+      reviewWorkflowStatus: "manual_pending",
+      assignedReviewerId: "",
+    }),
+    false,
+  );
 });
 
 test("兼职批改老师只能访问分配给自己的试卷", () => {

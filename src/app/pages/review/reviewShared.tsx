@@ -128,19 +128,40 @@ export function ReviewRecordTable({
   onOpen,
   onClaim,
   showPaper = false,
+  selectedRecordIds,
+  onToggleRecord,
+  onToggleAll,
+  allCurrentPageSelected = false,
+  onUnassign,
 }: {
   records: Array<AdminMockExamReviewRecord | AdminMockExamReviewGlobalRecord>;
   loading: boolean;
   onOpen: (record: AdminMockExamReviewRecord | AdminMockExamReviewGlobalRecord) => void;
   onClaim: (record: AdminMockExamReviewRecord | AdminMockExamReviewGlobalRecord) => void;
   showPaper?: boolean;
+  selectedRecordIds?: Set<string>;
+  onToggleRecord?: (recordId: string, selected: boolean) => void;
+  onToggleAll?: (selected: boolean) => void;
+  allCurrentPageSelected?: boolean;
+  onUnassign?: (record: AdminMockExamReviewRecord | AdminMockExamReviewGlobalRecord) => void;
 }) {
   return (
     <section className="rounded-[26px] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1240px] text-sm">
+        <table className="w-full min-w-[1320px] text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
             <tr>
+              {onToggleRecord ? (
+                <th className="px-5 py-4">
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    checked={allCurrentPageSelected}
+                    aria-label="选择当前页全部记录"
+                    onChange={(event) => onToggleAll?.(event.target.checked)}
+                  />
+                </th>
+              ) : null}
               {showPaper ? <th className="px-5 py-4">试卷</th> : null}
               <th className="px-5 py-4">学员</th>
               <th className="px-5 py-4">状态</th>
@@ -152,13 +173,24 @@ export function ReviewRecordTable({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {records.length === 0 ? (
-              <tr><td colSpan={showPaper ? 7 : 6} className="py-16 text-center text-slate-500">{loading ? "批改记录加载中..." : "暂无匹配记录"}</td></tr>
+              <tr><td colSpan={showPaper ? (onToggleRecord ? 8 : 7) : (onToggleRecord ? 7 : 6)} className="py-16 text-center text-slate-500">{loading ? "批改记录加载中..." : "暂无匹配记录"}</td></tr>
             ) : (
               records.map((record) => {
                 const status = reviewStatusMeta[record.reviewWorkflowStatus] ?? reviewStatusMeta.manual_pending;
                 const paper = "paper" in record ? record.paper : null;
                 return (
                   <tr key={record.id} className="group hover:bg-slate-50">
+                    {onToggleRecord ? (
+                      <td className="px-5 py-4">
+                        <input
+                          type="checkbox"
+                          className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          checked={selectedRecordIds?.has(record.id) ?? false}
+                          aria-label={`选择 ${record.userLabel}`}
+                          onChange={(event) => onToggleRecord(record.id, event.target.checked)}
+                        />
+                      </td>
+                    ) : null}
                     {showPaper ? (
                       <td className="max-w-[360px] px-5 py-4">
                         <p className="line-clamp-2 font-semibold text-slate-950">{paper?.title || "-"}</p>
@@ -171,6 +203,7 @@ export function ReviewRecordTable({
                     </td>
                     <td className="px-5 py-4">
                       <Badge variant="outline" className={status.className}>{status.label}</Badge>
+                      <p className="mt-2 text-xs text-slate-500">分配：{record.assignedReviewerName || "未分配"}</p>
                       {record.lock.active ? <p className="mt-2 text-xs text-slate-500">锁定：{record.lock.reviewerName || "老师"} 至 {record.lock.expiresAt}</p> : null}
                       {record.lastAiReviewError ? <p className="mt-2 line-clamp-2 text-xs text-rose-600">{record.lastAiReviewError}</p> : null}
                     </td>
@@ -196,6 +229,11 @@ export function ReviewRecordTable({
                           <Button variant="outline" size="sm" className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" onClick={() => onClaim(record)}>
                             <UserCheck className="size-4" />
                             {record.lock.ownedByMe ? "继续批改" : "领取"}
+                          </Button>
+                        ) : null}
+                        {onUnassign && record.assignedReviewerId && !record.publishedAt ? (
+                          <Button variant="outline" size="sm" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50" onClick={() => onUnassign(record)}>
+                            收回到公共池
                           </Button>
                         ) : null}
                         <Button variant="outline" size="sm" onClick={() => onOpen(record)}>

@@ -153,7 +153,7 @@ export function ReviewDashboard() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-950">近期批改试卷</h2>
-          <Button variant="outline" onClick={() => window.location.assign("/adminpg/papers")}>查看全部</Button>
+          <Button variant="outline" onClick={() => window.location.assign(isPartTimeReviewer ? "/adminpg/reviews?status=teacher" : "/adminpg/papers")}>查看全部</Button>
         </div>
         {loading ? (
           <div className="rounded-lg border border-slate-200 bg-white py-16 text-center text-slate-500">工作台加载中...</div>

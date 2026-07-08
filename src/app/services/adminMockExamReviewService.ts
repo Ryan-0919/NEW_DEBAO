@@ -235,6 +235,16 @@ export type AdminMockExamReviewBatchAssignResult = {
   }[];
 };
 
+export type AdminMockExamReviewBatchUnassignResult = {
+  successCount: number;
+  failedCount: number;
+  results: {
+    recordId: string;
+    success: boolean;
+    message: string;
+  }[];
+};
+
 export type AdminMockExamReviewReturnForRedoResult = {
   recordId: string;
   reviewWorkflowStatus: "returned_for_redo";
@@ -244,11 +254,11 @@ export const adminMockExamReviewService = {
   getSummary: () => adminRequest<AdminMockExamReviewStats>("/api/admin/mock-exam-reviews/summary"),
   getPapers: (params: { page?: number; pageSize?: number; keyword?: string } = {}) =>
     adminRequest<AdminMockExamReviewPaged<AdminMockExamReviewPaper>>(`/api/admin/mock-exam-reviews/papers${buildAdminQueryString(params)}`),
-  getRecords: (params: { page?: number; pageSize?: number; status?: string; keyword?: string } = {}) =>
+  getRecords: (params: { page?: number; pageSize?: number; status?: string; keyword?: string; assignedReviewerId?: string } = {}) =>
     adminRequest<AdminMockExamReviewGlobalRecordPage>(`/api/admin/mock-exam-reviews/records${buildAdminQueryString(params)}`),
   getPaperRecords: (
     paperId: string,
-    params: { page?: number; pageSize?: number; status?: string; keyword?: string } = {},
+    params: { page?: number; pageSize?: number; status?: string; keyword?: string; assignedReviewerId?: string } = {},
   ) => adminRequest<AdminMockExamReviewRecordPage>(`/api/admin/mock-exam-reviews/papers/${encodeURIComponent(paperId)}/records${buildAdminQueryString(params)}`),
   getRecord: (recordId: string) => adminRequest<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}`),
   getReviewers: () => adminRequest<AdminMockExamReviewerWorkload[]>("/api/admin/mock-exam-reviews/reviewers"),
@@ -256,6 +266,10 @@ export const adminMockExamReviewService = {
     adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/assign-reviewer`, { reviewerId }),
   batchAssignReviewer: (recordIds: string[], reviewerId: string) =>
     adminPostJson<AdminMockExamReviewBatchAssignResult>("/api/admin/mock-exam-reviews/records/batch-assign-reviewer", { recordIds, reviewerId }),
+  unassignReviewer: (recordId: string) =>
+    adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/unassign-reviewer`),
+  batchUnassignReviewer: (recordIds: string[]) =>
+    adminPostJson<AdminMockExamReviewBatchUnassignResult>("/api/admin/mock-exam-reviews/records/batch-unassign-reviewer", { recordIds }),
   claimRecord: (recordId: string) => adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/claim`),
   runAiReview: (recordId: string) => adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/ai-review`),
   batchRunAiReview: (recordIds: string[]) =>

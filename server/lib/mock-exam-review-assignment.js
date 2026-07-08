@@ -10,6 +10,9 @@ export const canAssignToPartTimeReviewer = (record) =>
 
 export const canReassignReviewRecord = (record) => !normalizeText(record?.publishedAt);
 
+export const canUnassignReviewRecord = (record) =>
+  !normalizeText(record?.publishedAt) && normalizeText(record?.reviewWorkflowStatus) === "manual_pending" && normalizeText(record?.assignedReviewerId) !== "";
+
 export const canReviewerAccessAssignedRecord = ({ adminRole = "", adminId = "", assignedReviewerId = "" }) => {
   if (!isPartTimeReviewerRole(adminRole)) {
     return true;

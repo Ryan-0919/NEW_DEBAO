@@ -7,6 +7,7 @@ import {
   canAssignToPartTimeReviewer,
   canManageReviewAssignments,
   canReassignReviewRecord,
+  canUnassignReviewRecord,
   canReviewerAccessAssignedRecord,
   isPartTimeReviewerRole,
   summarizeReviewerStats,
@@ -61,6 +62,14 @@ const assertReviewAssignmentManager = (req) => {
 
 const buildAssignedReviewerFilter = (req) =>
   isPartTimeReviewerRole(getAdminRole(req)) ? { assignedReviewerId: req.auth.adminId } : {};
+
+const buildRequestedAssignedReviewerFilter = (req) => {
+  if (isPartTimeReviewerRole(getAdminRole(req))) {
+    return { assignedReviewerId: req.auth.adminId };
+  }
+  const requestedReviewerId = `${req.query?.assignedReviewerId ?? ""}`.trim();
+  return requestedReviewerId ? { assignedReviewerId: requestedReviewerId } : {};
+};
 
 const assertRecordVisibleToReviewer = (record, req) => {
   if (
@@ -743,6 +752,7 @@ const countPaperStats = async ({ paperIds, currentAdminId, currentAdminRole = ""
 
 const buildReviewPaperWhere = (keyword = "", req = null) => {
   const trimmedKeyword = normalizeText(keyword);
+  const assignedReviewerFilter = req ? buildRequestedAssignedReviewerFilter(req) : {};
   return {
     reviewEnabled: true,
     OR: [{ paperType: "subjective" }, { questions: { some: { isActive: true, type: SUBJECTIVE_TYPE } } }],
@@ -751,7 +761,7 @@ const buildReviewPaperWhere = (keyword = "", req = null) => {
         some: {
           status: "submitted",
           reviewWorkflowStatus: { in: REVIEW_WORKFLOW_STATUS_VALUES },
-          ...buildAssignedReviewerFilter(req),
+          ...assignedReviewerFilter,
         },
       },
     } : {}),
@@ -835,6 +845,32 @@ const assignReviewRecordToReviewer = async ({ tx, recordId, reviewer, req, curre
   await tx.mockExamRecord.update({
     where: { id: record.id },
     data: updateData,
+  });
+  return getAdminReviewRecord(tx, record.id);
+};
+
+const unassignReviewRecordToPool = async ({ tx, recordId }) => {
+  const record = await getAdminReviewRecord(tx, recordId);
+  assertReviewableRecord(record);
+  if (!canUnassignReviewRecord(record)) {
+    const error = new Error("这份试卷当前不能收回到待分配公共池");
+    error.statusCode = 409;
+    throw error;
+  }
+  await tx.mockExamRecord.update({
+    where: { id: record.id },
+    data: {
+      assignedReviewerId: null,
+      assignedReviewerName: null,
+      assignedAt: null,
+      assignedByAdminId: null,
+      assignedByAdminName: null,
+      manualReviewerId: null,
+      manualReviewerName: null,
+      manualReviewLockToken: null,
+      manualReviewClaimedAt: null,
+      manualReviewLockExpiresAt: null,
+    },
   });
   return getAdminReviewRecord(tx, record.id);
 };
@@ -1008,7 +1044,7 @@ adminMockExamReviewRouter.get("/records", async (req, res) => {
       status: "submitted",
       reviewWorkflowStatus: { in: REVIEW_WORKFLOW_STATUS_VALUES },
       paper: buildReviewPaperWhere("", req),
-      ...buildAssignedReviewerFilter(req),
+      ...buildRequestedAssignedReviewerFilter(req),
     };
     const statusWhere =
       WORKFLOW_STATUSES.has(statusGroup)
@@ -1142,7 +1178,7 @@ adminMockExamReviewRouter.get("/papers/:paperId/records", async (req, res) => {
       ...(status === "mine" ? { manualReviewerId: req.auth.adminId, manualReviewLockExpiresAt: { gt: currentTime } } : {}),
       ...(status === "locked" ? { manualReviewLockExpiresAt: { gt: currentTime } } : {}),
       ...(status === "ai_problem" ? { lastAiReviewError: { not: null } } : {}),
-      ...buildAssignedReviewerFilter(req),
+      ...buildRequestedAssignedReviewerFilter(req),
       ...(keyword
         ? {
             user: {
@@ -1303,6 +1339,76 @@ adminMockExamReviewRouter.post("/records/batch-assign-reviewer", async (req, res
     );
   } catch (error) {
     return fail(res, error.message || "批量分配失败", error.statusCode || 500);
+  }
+});
+
+adminMockExamReviewRouter.post("/records/:recordId/unassign-reviewer", async (req, res) => {
+  try {
+    assertReviewAssignmentManager(req);
+    const recordId = `${req.params.recordId ?? ""}`.trim();
+    const currentTime = new Date();
+    const updatedRecord = await prisma.$transaction((tx) => unassignReviewRecordToPool({ tx, recordId }));
+
+    await writeAdminAuditLog(req, {
+      action: "unassign_mock_exam_review_reviewer",
+      entityType: "mock_exam_record",
+      entityId: recordId,
+      entityName: updatedRecord?.paper?.title ?? "",
+      detail: {
+        recordId,
+        paperId: updatedRecord?.paperId,
+      },
+    });
+
+    return ok(res, serializeReviewDetail(updatedRecord, req, currentTime), "已收回到待分配公共池");
+  } catch (error) {
+    return fail(res, error.message || "收回试卷失败", error.statusCode || 500);
+  }
+});
+
+adminMockExamReviewRouter.post("/records/batch-unassign-reviewer", async (req, res) => {
+  try {
+    assertReviewAssignmentManager(req);
+    const recordIds = [
+      ...new Set((Array.isArray(req.body?.recordIds) ? req.body.recordIds : []).map((item) => `${item ?? ""}`.trim()).filter(Boolean)),
+    ];
+    if (recordIds.length === 0) {
+      return fail(res, "请选择需要收回的试卷", 400);
+    }
+
+    const results = [];
+    for (const recordId of recordIds) {
+      try {
+        await prisma.$transaction((tx) => unassignReviewRecordToPool({ tx, recordId }));
+        results.push({ recordId, success: true, message: "已收回到公共池" });
+      } catch (error) {
+        results.push({ recordId, success: false, message: error.message || "收回失败" });
+      }
+    }
+
+    const successCount = results.filter((item) => item.success).length;
+    const failedCount = results.length - successCount;
+
+    if (successCount > 0) {
+      await writeAdminAuditLog(req, {
+        action: "batch_unassign_mock_exam_review_reviewer",
+        entityType: "mock_exam_record",
+        detail: {
+          successCount,
+          failedCount,
+          recordIds,
+          results,
+        },
+      });
+    }
+
+    return ok(
+      res,
+      { successCount, failedCount, results },
+      successCount > 0 ? "已批量收回到公共池" : "没有试卷收回成功",
+    );
+  } catch (error) {
+    return fail(res, error.message || "批量收回失败", error.statusCode || 500);
   }
 });
 
