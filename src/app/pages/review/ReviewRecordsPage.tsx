@@ -70,7 +70,7 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
       setReviewers(payload);
       setReviewerIdForBatchAssign((current) => current || payload[0]?.id || "");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "加载兼职批改老师失败");
+      toast.error(error instanceof Error ? error.message : "加载批改老师失败");
     }
   };
 
@@ -141,12 +141,12 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
       return;
     }
     if (!reviewerIdForBatchAssign) {
-      toast.error("请先选择兼职批改老师");
+      toast.error("请先选择批改老师");
       return;
     }
     const reviewer = reviewers.find((item) => item.id === reviewerIdForBatchAssign);
     if (!reviewer) {
-      toast.error("当前选择的兼职批改老师不存在");
+      toast.error("当前选择的批改老师不存在");
       return;
     }
     if (!window.confirm(`确认将已选择的 ${selectedRecordIds.length} 份试卷分配/改派给 ${reviewer.name || reviewer.account} 吗？`)) return;
@@ -217,8 +217,8 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
             <h1 className="mt-2 text-[26px] font-semibold leading-tight text-slate-950">{currentTab?.label ?? "试卷列表"}</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
               {isPartTimeReviewer
-                ? "这里只显示分配给当前兼职老师的试卷，领取后进入单卷工作台完成修改并发送。"
-                : "这里支持在全局待老师批改队列中直接分配、改派和收回兼职老师名下试卷。"}
+                ? "这里只显示分配给当前老师的试卷，领取后进入单卷工作台完成修改并发送。"
+                : "这里支持在全局待老师批改队列中直接分配、改派和收回老师名下试卷。"}
             </p>
           </div>
           <Button
@@ -298,6 +298,20 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
                 ))}
               </select>
             ) : null}
+            {canManageAssignments ? (
+              <select
+                className="h-11 min-w-[320px] rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-300"
+                value={reviewerIdForBatchAssign}
+                onChange={(event) => setReviewerIdForBatchAssign(event.target.value)}
+              >
+                {reviewers.length === 0 ? <option value="">暂无批改老师</option> : null}
+                {reviewers.map((reviewer) => (
+                  <option key={reviewer.id} value={reviewer.id}>
+                    {`${reviewer.name || reviewer.account} · 近1小时 ${reviewer.lastHourCount} · 今日 ${reviewer.todayCount} · 总量 ${reviewer.totalCount} · 待处理 ${reviewer.assignedPendingCount}`}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <div className="relative w-full max-w-[420px]">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <Input
@@ -313,30 +327,7 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
             <Button className="h-11 rounded-full px-5" variant="outline" onClick={() => void loadRecords(status, 1)}>
               搜索
             </Button>
-          </div>
-        </div>
-      </section>
-
-      {canManageAssignments && reviewers.length > 0 ? (
-        <section className="rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950">兼职批改老师</h2>
-              <p className="mt-1 text-sm text-slate-500">点击卡片可筛选某位老师名下的试卷；在待老师批改全局队列中可直接批量分配、改派或收回到公共池。</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <select
-                className="h-11 min-w-[320px] rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-300"
-                value={reviewerIdForBatchAssign}
-                onChange={(event) => setReviewerIdForBatchAssign(event.target.value)}
-              >
-                {reviewers.length === 0 ? <option value="">暂无兼职批改老师</option> : null}
-                {reviewers.map((reviewer) => (
-                  <option key={reviewer.id} value={reviewer.id}>
-                    {`${reviewer.name || reviewer.account} · 近1小时 ${reviewer.lastHourCount} · 今日 ${reviewer.todayCount} · 总量 ${reviewer.totalCount} · 待处理 ${reviewer.assignedPendingCount}`}
-                  </option>
-                ))}
-              </select>
+            {canManageAssignments ? (
               <Button
                 className="h-11 rounded-full bg-indigo-600 px-5 text-white hover:bg-indigo-700"
                 disabled={selectedRecordIds.length === 0 || batchAssignLoading}
@@ -344,6 +335,8 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
               >
                 批量分配/改派{selectedRecordIds.length > 0 ? `（${selectedRecordIds.length}）` : ""}
               </Button>
+            ) : null}
+            {canManageAssignments ? (
               <Button
                 className="h-11 rounded-full border-slate-200 bg-white px-5 text-slate-700 hover:bg-slate-50"
                 variant="outline"
@@ -352,40 +345,10 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
               >
                 收回到公共池{selectedRecordIds.length > 0 ? `（${selectedRecordIds.length}）` : ""}
               </Button>
-            </div>
+            ) : null}
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {reviewers.map((reviewer) => (
-              <button
-                key={reviewer.id}
-                type="button"
-                className={`rounded-2xl border px-4 py-3 text-left shadow-sm transition ${
-                  assignedReviewerId === reviewer.id ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40"
-                }`}
-                onClick={() => {
-                  const nextReviewerId = assignedReviewerId === reviewer.id ? "" : reviewer.id;
-                  setAssignedReviewerId(nextReviewerId);
-                  void loadRecords(status, 1, nextReviewerId);
-                }}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-slate-950">{reviewer.name || reviewer.account}</p>
-                    <p className="mt-1 truncate text-xs text-slate-500">{reviewer.account}</p>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">{reviewer.assignedPendingCount} 待处理</span>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                  <div className="rounded-xl bg-slate-50 px-3 py-2"><p>近1小时</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.lastHourCount}</p></div>
-                  <div className="rounded-xl bg-slate-50 px-3 py-2"><p>今日</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.todayCount}</p></div>
-                  <div className="rounded-xl bg-slate-50 px-3 py-2"><p>总量</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.totalCount}</p></div>
-                  <div className="rounded-xl bg-slate-50 px-3 py-2"><p>已领取</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.claimedCount}</p></div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
+        </div>
+      </section>
 
       <ReviewRecordTable
         records={records}

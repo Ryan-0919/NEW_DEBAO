@@ -6,6 +6,7 @@ import { ReviewDashboard } from "./ReviewDashboard";
 import { ReviewLogin } from "./ReviewLogin";
 import { ReviewPapersPage } from "./ReviewPapersPage";
 import { RecordStatusGroup, ReviewRecordsPage } from "./ReviewRecordsPage";
+import { ReviewTeacherAssignmentsPage } from "./ReviewTeacherAssignmentsPage";
 
 const getPaperIdFromPath = (pathname: string) => {
   const match = pathname.match(/^\/adminpg\/papers\/([^/?#]+)\/?$/);
@@ -57,6 +58,14 @@ export function ReviewRouter() {
     pageTitle = "我领取的试卷";
     pageDescription = "当前账号已领取且仍在锁定中的批改记录";
     content = <ReviewRecordsPage initialStatus="mine" initialPage={initialPage} />;
+  } else if (pathname.startsWith("/adminpg/reviewers")) {
+    if (isPartTimeReviewer) {
+      window.location.replace("/adminpg/dashboard");
+      return null;
+    }
+    pageTitle = "批改老师";
+    pageDescription = "查看兼职批改老师列表，以及每位老师名下已批改 / 未批改试卷。";
+    content = <ReviewTeacherAssignmentsPage />;
   } else if (paperId) {
     pageTitle = "单卷批改";
     pageDescription = isPartTimeReviewer ? "仅展示当前兼职老师被分配到这张试卷的记录" : "当前试卷自己的批改队列和老师工作台";

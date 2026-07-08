@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { AlertTriangle, BarChart3, FileText, ListChecks, LogOut, RefreshCw, ShieldCheck, UserCheck } from "lucide-react";
+import { AlertTriangle, BarChart3, FileText, ListChecks, LogOut, RefreshCw, ShieldCheck, UserCheck, Users } from "lucide-react";
 import { AppLogo } from "../components/branding/AppLogo";
 import { Button } from "../components/ui/button";
 import { clearAdminSession, getAdminAccount, getAdminRole, getAdminToken, isReviewManagementRole } from "../lib/admin-session";
@@ -12,6 +12,7 @@ type ReviewLayoutProps = {
 
 const managerNavItems = [
   { href: "/adminpg/dashboard", label: "工作台", icon: BarChart3 },
+  { href: "/adminpg/reviewers", label: "批改老师", icon: Users },
   { href: "/adminpg/mine", label: "我领取的试卷", icon: UserCheck },
   { href: "/adminpg/reviews?status=teacher", label: "待老师批改", icon: ListChecks },
   { href: "/adminpg/reviews?status=ai_processing", label: "AI正在批改", icon: RefreshCw },
