@@ -110,9 +110,15 @@ export function AdminLayout({ children, pageTitle = "后台管理", pageDescript
   const role = getAdminRole();
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/admin/users";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isPartTimeReviewer = role === "part_time_reviewer";
 
   if (!token) {
     window.location.replace("/admin/login");
+    return null;
+  }
+
+  if (isPartTimeReviewer) {
+    window.location.replace("/adminpg/dashboard");
     return null;
   }
 

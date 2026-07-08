@@ -1235,6 +1235,11 @@ model MockExamRecord {
   paperSnapshotJson         String?                      @db.LongText
   status                    MockExamRecordStatus         @default(in_progress)
   reviewWorkflowStatus      MockExamReviewWorkflowStatus @default(not_required)
+  assignedReviewerId        String?                      @db.VarChar(191)
+  assignedReviewerName      String?                      @db.VarChar(100)
+  assignedAt                DateTime?
+  assignedByAdminId         String?                      @db.VarChar(191)
+  assignedByAdminName       String?                      @db.VarChar(100)
   manualReviewerId          String?                      @db.VarChar(191)
   manualReviewerName        String?                      @db.VarChar(100)
   manualReviewLockToken     String?                      @db.VarChar(191)
@@ -1257,6 +1262,8 @@ model MockExamRecord {
   aiReviewRetryCount        Int                          @default(0)
   aiReviewNextRetryAt       DateTime?
   publishedAt               DateTime?
+  publishedReviewerId       String?                      @db.VarChar(191)
+  publishedReviewerName     String?                      @db.VarChar(100)
   lastAiReviewError         String?                      @db.LongText
   createdAt                 DateTime                     @default(now())
   updatedAt                 DateTime                     @updatedAt
@@ -1271,6 +1278,8 @@ model MockExamRecord {
   @@index([userId, reviewWorkflowStatus, updatedAt])
   @@index([paperId, manualReviewLockExpiresAt])
   @@index([manualReviewerId, manualReviewLockExpiresAt])
+  @@index([assignedReviewerId, reviewWorkflowStatus, submittedAt])
+  @@index([publishedReviewerId, publishedAt])
   @@index([reviewWorkflowStatus, aiReviewNextRetryAt, submittedAt])
 }
 

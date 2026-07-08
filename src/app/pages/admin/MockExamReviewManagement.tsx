@@ -9,10 +9,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
+import { getAdminRole } from "../../lib/admin-session";
 import {
   AdminMockExamReviewDetail,
   AdminMockExamReviewPaper,
   AdminMockExamReviewRecord,
+  AdminMockExamReviewerWorkload,
   AdminMockExamReviewStats,
   AdminMockExamReviewSubQuestion,
   adminMockExamReviewService,
@@ -403,6 +405,7 @@ function RecordRow({
       </td>
       <td className="px-5 py-4">
         <Badge variant="outline" className={status.className}>{status.label}</Badge>
+        <p className="mt-2 text-xs text-slate-500">分配：{record.assignedReviewerName || "未分配"}</p>
         {record.lock.active ? <p className="mt-2 text-xs text-slate-500">锁定：{record.lock.reviewerName || "老师"} 至 {record.lock.expiresAt}</p> : null}
         {record.lastAiReviewError ? <p className="mt-2 line-clamp-2 text-xs text-rose-600">{record.lastAiReviewError}</p> : null}
       </td>
@@ -890,6 +893,8 @@ function ReviewQuestionWorkbench({
 }
 
 export function MockExamReviewManagement({ initialPaperId = "", initialRecordId = "", initialRecordStatus = "", returnTo = "", embedded = false }: MockExamReviewManagementProps = {}) {
+  const adminRole = getAdminRole();
+  const canManageAssignments = adminRole === "super_admin" || adminRole === "operations_admin" || adminRole === "review_admin";
   const [viewMode, setViewMode] = useState<ViewMode>(initialPaperId ? "queue" : "papers");
   const [summary, setSummary] = useState<AdminMockExamReviewStats>(emptyStats);
   const [papers, setPapers] = useState<AdminMockExamReviewPaper[]>([]);
@@ -908,6 +913,9 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
   const [aiReviewLoading, setAiReviewLoading] = useState(false);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [batchAiReviewLoading, setBatchAiReviewLoading] = useState(false);
+  const [reviewers, setReviewers] = useState<AdminMockExamReviewerWorkload[]>([]);
+  const [reviewerIdForBatchAssign, setReviewerIdForBatchAssign] = useState("");
+  const [assigningReviewer, setAssigningReviewer] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>("idle");
   const autoSaveTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const autoSaveInFlightRef = useRef(false);
@@ -990,6 +998,17 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
     }
   };
 
+  const loadReviewers = async () => {
+    if (!canManageAssignments) return;
+    try {
+      const payload = await adminMockExamReviewService.getReviewers();
+      setReviewers(payload);
+      setReviewerIdForBatchAssign((current) => current || payload[0]?.id || "");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载兼职批改老师列表失败");
+    }
+  };
+
   const loadRecords = async (paper = selectedPaper, page = recordsPage.page, status = recordStatus) => {
     if (!paper) return;
     const nextStatus = normalizeQueueStatus(status);
@@ -1039,6 +1058,11 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
     if (initialPaperId) return;
     void loadPapers(1);
   }, [initialPaperId]);
+
+  useEffect(() => {
+    if (!canManageAssignments) return;
+    void loadReviewers();
+  }, [canManageAssignments]);
 
   useEffect(() => {
     if (!initialPaperId) return;
@@ -1383,6 +1407,45 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
     }
   };
 
+  const batchAssignReviewer = async () => {
+    if (!canManageAssignments) return;
+    if (selectedRecordIds.length === 0) {
+      toast.error("请先选择需要分配的试卷");
+      return;
+    }
+    if (!reviewerIdForBatchAssign) {
+      toast.error("请先选择兼职批改老师");
+      return;
+    }
+
+    const reviewer = reviewers.find((item) => item.id === reviewerIdForBatchAssign);
+    if (!reviewer) {
+      toast.error("当前选择的兼职批改老师不存在，请刷新后重试");
+      return;
+    }
+
+    if (!window.confirm(`确认将已选择的 ${selectedRecordIds.length} 份试卷分配/改派给 ${reviewer.name || reviewer.account} 吗？\n仅 AI 批改完成后的试卷可分配给兼职老师。`)) {
+      return;
+    }
+
+    setAssigningReviewer(true);
+    try {
+      const payload = await adminMockExamReviewService.batchAssignReviewer(selectedRecordIds, reviewer.id);
+      if (payload.failedCount > 0) {
+        const failedMessage = payload.results.find((item) => !item.success)?.message ?? "部分试卷分配失败";
+        toast.warning(`已分配 ${payload.successCount} 份，失败 ${payload.failedCount} 份：${failedMessage}`);
+      } else {
+        toast.success(`已将 ${payload.successCount} 份试卷分配给 ${reviewer.name || reviewer.account}`);
+      }
+      setSelectedRecordIds([]);
+      await Promise.all([loadRecords(selectedPaper, recordsPage.page), loadReviewers()]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "批量分配失败");
+    } finally {
+      setAssigningReviewer(false);
+    }
+  };
+
   const publishReview = async () => {
     if (!detail) return;
     const isRepublish = Boolean(detail.record.hasPublishedReview || detail.record.publishedAt);
@@ -1664,6 +1727,32 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
               <Input className="h-11 rounded-full bg-white pl-9" value={recordKeyword} onChange={(event) => setRecordKeyword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void loadRecords(selectedPaper, 1); }} placeholder="搜索手机号、昵称或用户ID" />
             </div>
             <Button className="h-11 rounded-full px-5" variant="outline" onClick={() => void loadRecords(selectedPaper, 1)}>搜索</Button>
+            {canManageAssignments ? (
+              <>
+                <div className="min-w-[320px] flex-1">
+                  <select
+                    className="h-11 w-full rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-300"
+                    value={reviewerIdForBatchAssign}
+                    onChange={(event) => setReviewerIdForBatchAssign(event.target.value)}
+                  >
+                    {reviewers.length === 0 ? <option value="">暂无兼职批改老师</option> : null}
+                    {reviewers.map((reviewer) => (
+                      <option key={reviewer.id} value={reviewer.id}>
+                        {`${reviewer.name || reviewer.account} · 近1小时 ${reviewer.lastHourCount} · 今日 ${reviewer.todayCount} · 总量 ${reviewer.totalCount} · 待处理 ${reviewer.assignedPendingCount}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Button
+                  className="h-11 rounded-full bg-indigo-600 px-5 text-white hover:bg-indigo-700"
+                  disabled={selectedRecordIds.length === 0 || assigningReviewer || reviewers.length === 0}
+                  onClick={() => void batchAssignReviewer()}
+                >
+                  <UserCheck className={`size-4 ${assigningReviewer ? "animate-pulse" : ""}`} />
+                  批量分配/改派{selectedRecordIds.length > 0 ? `（${selectedRecordIds.length}）` : ""}
+                </Button>
+              </>
+            ) : null}
             <Button
               className="h-11 rounded-full bg-amber-600 px-5 text-white hover:bg-amber-700"
               disabled={selectedRecordIds.length === 0 || batchAiReviewLoading}
@@ -1673,6 +1762,41 @@ export function MockExamReviewManagement({ initialPaperId = "", initialRecordId 
               批量AI重批{selectedRecordIds.length > 0 ? `（${selectedRecordIds.length}）` : ""}
             </Button>
           </div>
+          {canManageAssignments && reviewers.length > 0 ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {reviewers.map((reviewer) => (
+                <div
+                  key={reviewer.id}
+                  className={`rounded-2xl border px-4 py-3 text-sm shadow-sm transition ${
+                    reviewer.id === reviewerIdForBatchAssign
+                      ? "border-blue-300 bg-blue-50"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-950">{reviewer.name || reviewer.account}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">{reviewer.account}</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      onClick={() => setReviewerIdForBatchAssign(reviewer.id)}
+                    >
+                      选中
+                    </Button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                    <div className="rounded-xl bg-slate-50 px-3 py-2"><p>近1小时</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.lastHourCount}</p></div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2"><p>今日</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.todayCount}</p></div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2"><p>总量</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.totalCount}</p></div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2"><p>待处理</p><p className="mt-1 text-base font-semibold text-slate-950">{reviewer.assignedPendingCount}</p></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded-[26px] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.05)]">

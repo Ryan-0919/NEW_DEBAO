@@ -30,6 +30,8 @@ import { UserList } from "./UserList";
 
 export function AdminRouter() {
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/admin/users";
+  const role = getAdminRole();
+  const isPartTimeReviewer = role === "part_time_reviewer";
 
   if (pathname === "/admin/login") {
     return <AdminLogin />;
@@ -40,8 +42,12 @@ export function AdminRouter() {
     return null;
   }
 
+  if (isPartTimeReviewer) {
+    window.location.replace("/adminpg/dashboard");
+    return null;
+  }
+
   if (pathname === "/admin" || pathname === "/admin/") {
-    const role = getAdminRole();
     const fallbackPath = isAnyAdminRole(role)
       ? "/admin/dashboard"
       : isUserManagementRole(role)

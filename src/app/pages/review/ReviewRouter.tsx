@@ -15,6 +15,8 @@ const getPaperIdFromPath = (pathname: string) => {
 export function ReviewRouter() {
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/adminpg/dashboard";
   const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const role = getAdminRole();
+  const isPartTimeReviewer = role === "part_time_reviewer";
 
   if (pathname === "/adminpg/login") {
     return <ReviewLogin />;
@@ -25,7 +27,7 @@ export function ReviewRouter() {
     return null;
   }
 
-  if (!isReviewManagementRole(getAdminRole())) {
+  if (!isReviewManagementRole(role)) {
     window.location.replace("/adminpg/login");
     return null;
   }
@@ -49,7 +51,7 @@ export function ReviewRouter() {
 
   if (pathname.startsWith("/adminpg/reviews")) {
     pageTitle = "全局记录";
-    pageDescription = "所有试卷下的领取、待老师、AI异常、AI队列和已批改记录";
+    pageDescription = isPartTimeReviewer ? "这里只显示分配给当前兼职老师的试卷记录" : "所有试卷下的领取、待老师、AI异常、AI队列和已批改记录";
     content = <ReviewRecordsPage initialStatus={initialRecordStatus} initialPage={initialPage} />;
   } else if (pathname.startsWith("/adminpg/mine")) {
     pageTitle = "我领取的试卷";
@@ -57,9 +59,13 @@ export function ReviewRouter() {
     content = <ReviewRecordsPage initialStatus="mine" initialPage={initialPage} />;
   } else if (paperId) {
     pageTitle = "单卷批改";
-    pageDescription = "当前试卷自己的批改队列和老师工作台";
+    pageDescription = isPartTimeReviewer ? "仅展示当前兼职老师被分配到这张试卷的记录" : "当前试卷自己的批改队列和老师工作台";
     content = <MockExamReviewManagement initialPaperId={paperId} initialRecordId={searchParams.get("recordId") ?? ""} initialRecordStatus={initialPaperStatus} returnTo={searchParams.get("returnTo") ?? ""} embedded />;
   } else if (pathname.startsWith("/adminpg/papers")) {
+    if (isPartTimeReviewer) {
+      window.location.replace("/adminpg/reviews?status=teacher");
+      return null;
+    }
     pageTitle = "单卷队列";
     pageDescription = "先选试卷，再进入单卷批改队列";
     content = <ReviewPapersPage />;

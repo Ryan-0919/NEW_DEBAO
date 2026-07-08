@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
+import { getAdminRole } from "../../lib/admin-session";
 import { AdminMockExamReviewPaper, adminMockExamReviewService } from "../../services/adminMockExamReviewService";
 import { emptyReviewStats, ReviewMetricCard, ReviewPaperCard } from "./reviewShared";
 
@@ -8,6 +9,7 @@ export function ReviewDashboard() {
   const [stats, setStats] = useState(emptyReviewStats);
   const [papers, setPapers] = useState<AdminMockExamReviewPaper[]>([]);
   const [loading, setLoading] = useState(true);
+  const isPartTimeReviewer = getAdminRole() === "part_time_reviewer";
 
   useEffect(() => {
     const load = async () => {
@@ -40,6 +42,14 @@ export function ReviewDashboard() {
 
   const taskCards = [
     {
+      title: isPartTimeReviewer ? "我分配的试卷" : "我领取的试卷",
+      value: isPartTimeReviewer ? stats.manualPending : stats.mine,
+      helper: isPartTimeReviewer ? "这里只显示已经分配给你的待处理试卷" : "继续处理已经领取的记录",
+      href: isPartTimeReviewer ? "/adminpg/reviews?status=teacher" : "/adminpg/mine",
+      className: "border-sky-200 bg-sky-50 text-sky-900",
+      button: isPartTimeReviewer ? "查看分配" : "继续批改",
+    },
+    {
       title: "我领取的试卷",
       value: stats.mine,
       helper: "继续处理已经领取的记录",
@@ -47,30 +57,35 @@ export function ReviewDashboard() {
       className: "border-sky-200 bg-sky-50 text-sky-900",
       button: "继续批改",
     },
-    {
+    ...(!isPartTimeReviewer ? [{
       title: "待老师批改",
       value: stats.manualPending,
       helper: "可领取的人工确认记录",
       href: "/adminpg/reviews?status=teacher",
       className: "border-violet-200 bg-violet-50 text-violet-900",
       button: "去领取",
-    },
-    {
+    }, {
       title: "AI异常",
       value: stats.aiProblem,
       helper: "需要人工检查或重新入队",
       href: "/adminpg/reviews?status=ai_problem",
       className: "border-rose-200 bg-rose-50 text-rose-900",
       button: "查看异常",
-    },
-    {
+    }, {
       title: "AI正在批改",
       value: stats.aiProcessing,
       helper: "观察队列是否正常流转",
       href: "/adminpg/reviews?status=ai_processing",
       className: "border-blue-200 bg-blue-50 text-blue-900",
       button: "查看队列",
-    },
+    }] : [{
+      title: "已批改",
+      value: stats.published,
+      helper: "查看已经发送给学生的记录",
+      href: "/adminpg/reviews?status=published",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-900",
+      button: "查看记录",
+    }]),
   ];
 
   return (
@@ -79,16 +94,16 @@ export function ReviewDashboard() {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
           <div>
             <h1 className="text-2xl font-semibold text-slate-950">主观题批改工作台</h1>
-            <p className="mt-2 text-sm text-slate-500">优先处理自己已领取和待老师确认的记录；AI 队列只作为监控入口。</p>
+            <p className="mt-2 text-sm text-slate-500">{isPartTimeReviewer ? "这里只展示分配给你的试卷、你自己领取的试卷和已发送给学生的记录。" : "优先处理自己已领取和待老师确认的记录；AI 队列只作为监控入口。"}</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => window.location.assign("/adminpg/mine")}>我领取的试卷</Button>
-            <Button onClick={() => window.location.assign("/adminpg/reviews")}>进入批改队列</Button>
+            <Button onClick={() => window.location.assign(isPartTimeReviewer ? "/adminpg/reviews?status=teacher" : "/adminpg/reviews")}>{isPartTimeReviewer ? "我分配的试卷" : "进入批改队列"}</Button>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-4">
+      <section className={`grid gap-4 ${isPartTimeReviewer ? "xl:grid-cols-3" : "xl:grid-cols-4"}`}>
         {taskCards.map((task) => (
           <button
             key={task.title}
@@ -108,14 +123,14 @@ export function ReviewDashboard() {
         ))}
       </section>
 
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
-        <ReviewMetricCard label="开启批改试卷" value={stats.paperCount ?? 0} />
-        <ReviewMetricCard label="AI待批改" value={stats.aiPending} tone="amber" />
-        <ReviewMetricCard label="AI正在批改" value={stats.aiProcessing} tone="blue" />
-        <ReviewMetricCard label="待老师批改" value={stats.manualPending} tone="violet" />
+      <div className={`grid gap-4 md:grid-cols-3 ${isPartTimeReviewer ? "xl:grid-cols-4" : "xl:grid-cols-7"}`}>
+        <ReviewMetricCard label={isPartTimeReviewer ? "分配试卷" : "开启批改试卷"} value={stats.paperCount ?? 0} />
+        {!isPartTimeReviewer ? <ReviewMetricCard label="AI待批改" value={stats.aiPending} tone="amber" /> : null}
+        {!isPartTimeReviewer ? <ReviewMetricCard label="AI正在批改" value={stats.aiProcessing} tone="blue" /> : null}
+        <ReviewMetricCard label={isPartTimeReviewer ? "待处理" : "待老师批改"} value={stats.manualPending} tone="violet" />
         <ReviewMetricCard label="我领取的" value={stats.mine} tone="blue" />
         <ReviewMetricCard label="已批改" value={stats.published} tone="emerald" />
-        <ReviewMetricCard label="AI异常" value={stats.aiProblem} tone="amber" />
+        {!isPartTimeReviewer ? <ReviewMetricCard label="AI异常" value={stats.aiProblem} tone="amber" /> : null}
       </div>
 
       {urgentPaper ? (
@@ -125,7 +140,9 @@ export function ReviewDashboard() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">优先处理</p>
               <h2 className="mt-2 text-xl font-semibold text-slate-950">{urgentPaper.title}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                我领取 {urgentPaper.stats.mine}，待老师 {urgentPaper.stats.manualPending}，AI异常 {urgentPaper.stats.aiProblem}，已批改 {urgentPaper.stats.published}
+                {isPartTimeReviewer
+                  ? `待处理 ${urgentPaper.stats.manualPending}，我领取 ${urgentPaper.stats.mine}，已批改 ${urgentPaper.stats.published}`
+                  : `我领取 ${urgentPaper.stats.mine}，待老师 ${urgentPaper.stats.manualPending}，AI异常 ${urgentPaper.stats.aiProblem}，已批改 ${urgentPaper.stats.published}`}
               </p>
             </div>
             <Button onClick={() => window.location.assign(`/adminpg/papers/${urgentPaper.id}`)}>进入这张试卷</Button>

@@ -3,11 +3,20 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { writeAdminAuditLog } from "../lib/admin-audit.js";
 import { enqueueMockExamAiReview } from "../lib/mock-exam-ai-review-queue.js";
+import {
+  canAssignToPartTimeReviewer,
+  canManageReviewAssignments,
+  canReassignReviewRecord,
+  canReviewerAccessAssignedRecord,
+  isPartTimeReviewerRole,
+  summarizeReviewerStats,
+} from "../lib/mock-exam-review-assignment.js";
 import { fail, ok } from "../lib/response.js";
 import { formatDateTime } from "../lib/time.js";
 import { requireAdminAuth, requireAdminRoles } from "../middleware/auth.js";
 
-const REVIEW_ADMIN_ROLES = ["super_admin", "operations_admin", "review_admin"];
+const REVIEW_ADMIN_ROLES = ["super_admin", "operations_admin", "review_admin", "part_time_reviewer"];
+const REVIEW_ASSIGNMENT_MANAGER_ROLES = ["super_admin", "operations_admin", "review_admin"];
 const SUBJECTIVE_TYPE = "subjective_case";
 const LOCK_MINUTES = 120;
 const RETURNED_FOR_REDO_STATUS = "returned_for_redo";
@@ -40,6 +49,33 @@ const normalizeText = (value = "") => `${value ?? ""}`.replace(/\r\n/g, "\n").tr
 const isSubjectiveQuestion = (question) => `${question?.type ?? ""}` === SUBJECTIVE_TYPE;
 
 const getAdminName = (req) => req.auth?.admin?.name || req.auth?.admin?.account || "管理员";
+
+const getAdminRole = (req) => `${req.auth?.adminRole ?? req.auth?.admin?.role ?? ""}`.trim();
+
+const assertReviewAssignmentManager = (req) => {
+  if (canManageReviewAssignments(getAdminRole(req))) return;
+  const error = new Error("当前账号无权执行试卷分配或改派操作");
+  error.statusCode = 403;
+  throw error;
+};
+
+const buildAssignedReviewerFilter = (req) =>
+  isPartTimeReviewerRole(getAdminRole(req)) ? { assignedReviewerId: req.auth.adminId } : {};
+
+const assertRecordVisibleToReviewer = (record, req) => {
+  if (
+    canReviewerAccessAssignedRecord({
+      adminRole: getAdminRole(req),
+      adminId: req.auth.adminId,
+      assignedReviewerId: record?.assignedReviewerId ?? "",
+    })
+  ) {
+    return;
+  }
+  const error = new Error("当前账号无权查看或处理这份试卷");
+  error.statusCode = 403;
+  throw error;
+};
 
 const buildLockExpiresAt = (currentTime = new Date()) => new Date(currentTime.getTime() + LOCK_MINUTES * 60 * 1000);
 
@@ -345,6 +381,13 @@ const serializeRecordListItem = (record, req, currentTime = new Date()) => {
     updatedAt: serializeDate(record.updatedAt),
     reviewedAt: serializeDate(record.reviewedAt),
     publishedAt: serializeDate(record.publishedAt),
+    assignedReviewerId: record.assignedReviewerId ?? "",
+    assignedReviewerName: record.assignedReviewerName ?? "",
+    assignedAt: serializeDate(record.assignedAt),
+    assignedByAdminId: record.assignedByAdminId ?? "",
+    assignedByAdminName: record.assignedByAdminName ?? "",
+    publishedReviewerId: record.publishedReviewerId ?? "",
+    publishedReviewerName: record.publishedReviewerName ?? "",
     hasPublishedReview: hasPublishedReviewSnapshot(record),
     consumedSeconds: Number(record.consumedSeconds ?? 0) || 0,
     lastAiReviewError: normalizeText(record.lastAiReviewError ?? ""),
@@ -395,6 +438,13 @@ const serializeReviewDetail = (record, req, currentTime = new Date()) => {
       submittedAt: serializeDate(record.submittedAt),
       reviewedAt: serializeDate(record.reviewedAt),
       publishedAt: serializeDate(record.publishedAt),
+      assignedReviewerId: record.assignedReviewerId ?? "",
+      assignedReviewerName: record.assignedReviewerName ?? "",
+      assignedAt: serializeDate(record.assignedAt),
+      assignedByAdminId: record.assignedByAdminId ?? "",
+      assignedByAdminName: record.assignedByAdminName ?? "",
+      publishedReviewerId: record.publishedReviewerId ?? "",
+      publishedReviewerName: record.publishedReviewerName ?? "",
       hasPublishedReview: hasPublishedReviewSnapshot(record),
       updatedAt: serializeDate(record.updatedAt),
       manualReviewVersion: record.manualReviewVersion,
@@ -620,12 +670,13 @@ const saveReviewPayload = async ({ tx, record, payloadAnswers }) => {
   return normalized;
 };
 
-const countPaperStats = async ({ paperIds, currentAdminId, currentTime = new Date() }) => {
+const countPaperStats = async ({ paperIds, currentAdminId, currentAdminRole = "", currentTime = new Date() }) => {
   if (!paperIds.length) return new Map();
+  const assignedFilter = isPartTimeReviewerRole(currentAdminRole) ? { assignedReviewerId: currentAdminId } : {};
   const [statusRows, mineRows, lockedRows, aiProblemRows] = await Promise.all([
     prisma.mockExamRecord.groupBy({
       by: ["paperId", "reviewWorkflowStatus"],
-      where: { paperId: { in: paperIds }, status: "submitted", reviewWorkflowStatus: { in: REVIEW_WORKFLOW_STATUS_VALUES } },
+      where: { paperId: { in: paperIds }, status: "submitted", reviewWorkflowStatus: { in: REVIEW_WORKFLOW_STATUS_VALUES }, ...assignedFilter },
       _count: { _all: true },
     }),
     prisma.mockExamRecord.groupBy({
@@ -636,6 +687,7 @@ const countPaperStats = async ({ paperIds, currentAdminId, currentTime = new Dat
         reviewWorkflowStatus: { in: REVIEW_WORKFLOW_STATUS_VALUES },
         manualReviewerId: currentAdminId,
         manualReviewLockExpiresAt: { gt: currentTime },
+        ...assignedFilter,
       },
       _count: { _all: true },
     }),
@@ -646,6 +698,7 @@ const countPaperStats = async ({ paperIds, currentAdminId, currentTime = new Dat
         status: "submitted",
         reviewWorkflowStatus: { in: REVIEW_WORKFLOW_STATUS_VALUES },
         manualReviewLockExpiresAt: { gt: currentTime },
+        ...assignedFilter,
       },
       _count: { _all: true },
     }),
@@ -656,6 +709,7 @@ const countPaperStats = async ({ paperIds, currentAdminId, currentTime = new Dat
         status: "submitted",
         reviewWorkflowStatus: { in: REVIEW_WORKFLOW_STATUS_VALUES },
         lastAiReviewError: { not: null },
+        ...assignedFilter,
       },
       _count: { _all: true },
     }),
@@ -687,11 +741,20 @@ const countPaperStats = async ({ paperIds, currentAdminId, currentTime = new Dat
   return statsMap;
 };
 
-const buildReviewPaperWhere = (keyword = "") => {
+const buildReviewPaperWhere = (keyword = "", req = null) => {
   const trimmedKeyword = normalizeText(keyword);
   return {
     reviewEnabled: true,
     OR: [{ paperType: "subjective" }, { questions: { some: { isActive: true, type: SUBJECTIVE_TYPE } } }],
+    ...(req ? {
+      records: {
+        some: {
+          status: "submitted",
+          reviewWorkflowStatus: { in: REVIEW_WORKFLOW_STATUS_VALUES },
+          ...buildAssignedReviewerFilter(req),
+        },
+      },
+    } : {}),
     ...(trimmedKeyword
       ? {
           AND: [
@@ -709,15 +772,155 @@ const buildReviewPaperWhere = (keyword = "") => {
   };
 };
 
+const resolvePartTimeReviewer = async (reviewerId) => {
+  const normalizedReviewerId = `${reviewerId ?? ""}`.trim();
+  if (!normalizedReviewerId) {
+    const error = new Error("请选择要分配的兼职批改老师");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const reviewer = await prisma.admin.findUnique({
+    where: { id: normalizedReviewerId },
+    select: { id: true, account: true, name: true, role: true },
+  });
+
+  if (!reviewer || reviewer.role !== "part_time_reviewer") {
+    const error = new Error("目标老师不存在，或不是兼职批改老师");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return reviewer;
+};
+
+const buildAssignmentUpdateData = ({ record, reviewer, req, currentTime }) => {
+  const previousAssignedReviewerId = `${record?.assignedReviewerId ?? ""}`.trim();
+  const previousManualReviewerId = `${record?.manualReviewerId ?? ""}`.trim();
+  const changedReviewer = previousAssignedReviewerId !== reviewer.id;
+  const shouldClearLock = changedReviewer && previousManualReviewerId && previousManualReviewerId !== reviewer.id;
+
+  return {
+    assignedReviewerId: reviewer.id,
+    assignedReviewerName: reviewer.name || reviewer.account,
+    assignedAt: currentTime,
+    assignedByAdminId: req.auth.adminId,
+    assignedByAdminName: getAdminName(req),
+    ...(shouldClearLock
+      ? {
+          manualReviewerId: null,
+          manualReviewerName: null,
+          manualReviewLockToken: null,
+          manualReviewClaimedAt: null,
+          manualReviewLockExpiresAt: null,
+        }
+      : {}),
+  };
+};
+
+const assignReviewRecordToReviewer = async ({ tx, recordId, reviewer, req, currentTime = new Date() }) => {
+  const record = await getAdminReviewRecord(tx, recordId);
+  assertReviewableRecord(record);
+  if (!canAssignToPartTimeReviewer(record) && !canReassignReviewRecord(record)) {
+    const error = new Error("这份试卷当前不能分配给兼职批改老师");
+    error.statusCode = 409;
+    throw error;
+  }
+  if (!canAssignToPartTimeReviewer(record)) {
+    const error = new Error("只有 AI 批改完成后进入待老师批改的试卷，才能分配给兼职批改老师");
+    error.statusCode = 409;
+    throw error;
+  }
+  const updateData = buildAssignmentUpdateData({ record, reviewer, req, currentTime });
+  await tx.mockExamRecord.update({
+    where: { id: record.id },
+    data: updateData,
+  });
+  return getAdminReviewRecord(tx, record.id);
+};
+
+adminMockExamReviewRouter.get("/reviewers", async (req, res) => {
+  try {
+    assertReviewAssignmentManager(req);
+    const currentTime = new Date();
+    const reviewers = await prisma.admin.findMany({
+      where: { role: "part_time_reviewer" },
+      orderBy: [{ name: "asc" }, { account: "asc" }],
+      select: { id: true, account: true, name: true, role: true, createdAt: true, updatedAt: true },
+    });
+    const reviewerIds = reviewers.map((item) => item.id);
+    const records =
+      reviewerIds.length > 0
+        ? await prisma.mockExamRecord.findMany({
+            where: {
+              status: "submitted",
+              OR: [
+                { assignedReviewerId: { in: reviewerIds } },
+                { publishedReviewerId: { in: reviewerIds } },
+                { manualReviewerId: { in: reviewerIds } },
+              ],
+            },
+            select: {
+              assignedReviewerId: true,
+              publishedReviewerId: true,
+              publishedAt: true,
+              reviewWorkflowStatus: true,
+              manualReviewerId: true,
+              manualReviewLockExpiresAt: true,
+            },
+          })
+        : [];
+
+    const items = reviewers.map((reviewer) => {
+      const stats = summarizeReviewerStats({ reviewerId: reviewer.id, currentTime, records });
+      const claimedCount = records.filter((record) => {
+        const lockExpiresAt = record.manualReviewLockExpiresAt ? new Date(record.manualReviewLockExpiresAt) : null;
+        return (
+          `${record.manualReviewerId ?? ""}`.trim() === reviewer.id &&
+          lockExpiresAt &&
+          Number.isFinite(lockExpiresAt.getTime()) &&
+          lockExpiresAt.getTime() > currentTime.getTime()
+        );
+      }).length;
+      const publishedTimestamps = records
+        .filter((record) => `${record.publishedReviewerId ?? ""}`.trim() === reviewer.id && record.publishedAt)
+        .map((record) => new Date(record.publishedAt).getTime())
+        .filter((time) => Number.isFinite(time));
+      const lastPublishedAtMs = publishedTimestamps.length > 0 ? Math.max(...publishedTimestamps) : 0;
+      return {
+        id: reviewer.id,
+        account: reviewer.account,
+        name: reviewer.name,
+        role: reviewer.role,
+        assignedPendingCount: stats.assignedPendingCount,
+        lastHourCount: stats.lastHourCount,
+        todayCount: stats.todayCount,
+        totalCount: stats.totalCount,
+        claimedCount,
+        lastPublishedAt: lastPublishedAtMs > 0 ? formatDateTime(new Date(lastPublishedAtMs)) : "",
+      };
+    });
+
+    return ok(res, items);
+  } catch (error) {
+    return fail(res, error.message || "加载兼职批改老师列表失败", error.statusCode || 500);
+  }
+});
+
 adminMockExamReviewRouter.get("/summary", async (req, res) => {
   try {
     const currentTime = new Date();
     const papers = await prisma.mockExamPaper.findMany({
-      where: buildReviewPaperWhere(""),
+      where: buildReviewPaperWhere("", req),
       select: { id: true },
     });
     const paperIds = papers.map((paper) => paper.id);
-    const statsMap = await countPaperStats({ paperIds, currentAdminId: req.auth.adminId, currentTime });
+    const statsMap = await countPaperStats({
+      paperIds,
+      currentAdminId: req.auth.adminId,
+      currentAdminRole: getAdminRole(req),
+      currentTime,
+    });
     const stats = [...statsMap.values()].reduce(
       (summary, item) => ({
         paperCount: summary.paperCount,
@@ -742,7 +945,7 @@ adminMockExamReviewRouter.get("/papers", async (req, res) => {
   try {
     const page = toPositiveInt(req.query?.page, 1);
     const pageSize = Math.min(toPositiveInt(req.query?.pageSize, 20), 100);
-    const where = buildReviewPaperWhere(req.query?.keyword);
+    const where = buildReviewPaperWhere(req.query?.keyword, req);
     const [total, papers] = await Promise.all([
       prisma.mockExamPaper.count({ where }),
       prisma.mockExamPaper.findMany({
@@ -756,7 +959,11 @@ adminMockExamReviewRouter.get("/papers", async (req, res) => {
         take: pageSize,
       }),
     ]);
-    const statsMap = await countPaperStats({ paperIds: papers.map((paper) => paper.id), currentAdminId: req.auth.adminId });
+    const statsMap = await countPaperStats({
+      paperIds: papers.map((paper) => paper.id),
+      currentAdminId: req.auth.adminId,
+      currentAdminRole: getAdminRole(req),
+    });
 
     return ok(res, {
       items: papers.map((paper) => {
@@ -800,7 +1007,8 @@ adminMockExamReviewRouter.get("/records", async (req, res) => {
     const baseWhere = {
       status: "submitted",
       reviewWorkflowStatus: { in: REVIEW_WORKFLOW_STATUS_VALUES },
-      paper: buildReviewPaperWhere(""),
+      paper: buildReviewPaperWhere("", req),
+      ...buildAssignedReviewerFilter(req),
     };
     const statusWhere =
       WORKFLOW_STATUSES.has(statusGroup)
@@ -811,9 +1019,11 @@ adminMockExamReviewRouter.get("/records", async (req, res) => {
           ? { reviewWorkflowStatus: "manual_pending" }
           : statusGroup === "published"
             ? { reviewWorkflowStatus: "published" }
-            : statusGroup === "mine"
-              ? { manualReviewerId: req.auth.adminId, manualReviewLockExpiresAt: { gt: currentTime } }
-              : statusGroup === "locked"
+              : statusGroup === "mine"
+                ? { manualReviewerId: req.auth.adminId, manualReviewLockExpiresAt: { gt: currentTime } }
+                : statusGroup === "assigned"
+                  ? { assignedReviewerId: req.auth.adminId }
+                : statusGroup === "locked"
                 ? { manualReviewLockExpiresAt: { gt: currentTime } }
                 : statusGroup === "ai_problem"
                   ? { lastAiReviewError: { not: null } }
@@ -928,9 +1138,11 @@ adminMockExamReviewRouter.get("/papers/:paperId/records", async (req, res) => {
       status: "submitted",
       reviewWorkflowStatus: { in: REVIEW_WORKFLOW_STATUS_VALUES },
       ...(WORKFLOW_STATUSES.has(status) ? { reviewWorkflowStatus: status } : {}),
+      ...(status === "assigned" ? { assignedReviewerId: req.auth.adminId } : {}),
       ...(status === "mine" ? { manualReviewerId: req.auth.adminId, manualReviewLockExpiresAt: { gt: currentTime } } : {}),
       ...(status === "locked" ? { manualReviewLockExpiresAt: { gt: currentTime } } : {}),
       ...(status === "ai_problem" ? { lastAiReviewError: { not: null } } : {}),
+      ...buildAssignedReviewerFilter(req),
       ...(keyword
         ? {
             user: {
@@ -962,7 +1174,7 @@ adminMockExamReviewRouter.get("/papers/:paperId/records", async (req, res) => {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      countPaperStats({ paperIds: [paperId], currentAdminId: req.auth.adminId, currentTime }),
+      countPaperStats({ paperIds: [paperId], currentAdminId: req.auth.adminId, currentAdminRole: getAdminRole(req), currentTime }),
     ]);
 
     return ok(res, {
@@ -994,9 +1206,103 @@ adminMockExamReviewRouter.get("/records/:recordId", async (req, res) => {
   try {
     const record = await getAdminReviewRecord(prisma, `${req.params.recordId ?? ""}`.trim());
     assertReviewableRecord(record);
+    assertRecordVisibleToReviewer(record, req);
     return ok(res, serializeReviewDetail(record, req));
   } catch (error) {
     return fail(res, error.message || "加载批改详情失败", error.statusCode || 500);
+  }
+});
+
+adminMockExamReviewRouter.post("/records/:recordId/assign-reviewer", async (req, res) => {
+  try {
+    assertReviewAssignmentManager(req);
+    const recordId = `${req.params.recordId ?? ""}`.trim();
+    const currentTime = new Date();
+    const reviewer = await resolvePartTimeReviewer(req.body?.reviewerId);
+    const updatedRecord = await prisma.$transaction((tx) =>
+      assignReviewRecordToReviewer({
+        tx,
+        recordId,
+        reviewer,
+        req,
+        currentTime,
+      }),
+    );
+
+    await writeAdminAuditLog(req, {
+      action: "assign_mock_exam_review_reviewer",
+      entityType: "mock_exam_record",
+      entityId: recordId,
+      entityName: updatedRecord?.paper?.title ?? "",
+      detail: {
+        recordId,
+        paperId: updatedRecord?.paperId,
+        reviewerId: reviewer.id,
+        reviewerName: reviewer.name || reviewer.account,
+      },
+    });
+
+    return ok(res, serializeReviewDetail(updatedRecord, req, currentTime), "已完成试卷分配");
+  } catch (error) {
+    return fail(res, error.message || "分配试卷失败", error.statusCode || 500);
+  }
+});
+
+adminMockExamReviewRouter.post("/records/batch-assign-reviewer", async (req, res) => {
+  try {
+    assertReviewAssignmentManager(req);
+    const recordIds = [
+      ...new Set((Array.isArray(req.body?.recordIds) ? req.body.recordIds : []).map((item) => `${item ?? ""}`.trim()).filter(Boolean)),
+    ];
+    if (recordIds.length === 0) {
+      return fail(res, "请选择需要分配的试卷", 400);
+    }
+    const currentTime = new Date();
+    const reviewer = await resolvePartTimeReviewer(req.body?.reviewerId);
+    const results = [];
+
+    for (const recordId of recordIds) {
+      try {
+        await prisma.$transaction((tx) =>
+          assignReviewRecordToReviewer({
+            tx,
+            recordId,
+            reviewer,
+            req,
+            currentTime,
+          }),
+        );
+        results.push({ recordId, success: true, message: "已分配" });
+      } catch (error) {
+        results.push({ recordId, success: false, message: error.message || "分配失败" });
+      }
+    }
+
+    const successCount = results.filter((item) => item.success).length;
+    const failedCount = results.length - successCount;
+
+    if (successCount > 0) {
+      await writeAdminAuditLog(req, {
+        action: "batch_assign_mock_exam_review_reviewer",
+        entityType: "mock_exam_record",
+        detail: {
+          reviewerId: reviewer.id,
+          reviewerName: reviewer.name || reviewer.account,
+          successCount,
+          failedCount,
+          recordIds,
+          results,
+        },
+      });
+    }
+
+    return ok(
+      res,
+      { successCount, failedCount, results },
+      successCount > 0 ? "已完成批量分配" : "没有试卷分配成功",
+    );
+  } catch (error) {
+    return fail(res, error.message || "批量分配失败", error.statusCode || 500);
   }
 });
 
@@ -1009,8 +1315,22 @@ adminMockExamReviewRouter.post("/records/:recordId/claim", async (req, res) => {
     const updatedRecord = await prisma.$transaction(async (tx) => {
       const record = await getAdminReviewRecord(tx, recordId);
       assertReviewableRecord(record);
+      assertRecordVisibleToReviewer(record, req);
       const wasPublished = record.reviewWorkflowStatus === "published";
       await ensurePublishedReviewSnapshot({ tx, record });
+
+      if (
+        isPartTimeReviewerRole(getAdminRole(req)) &&
+        !canReviewerAccessAssignedRecord({
+          adminRole: getAdminRole(req),
+          adminId: req.auth.adminId,
+          assignedReviewerId: record.assignedReviewerId ?? "",
+        })
+      ) {
+        const error = new Error("这份试卷没有分配给你，不能领取");
+        error.statusCode = 403;
+        throw error;
+      }
 
       const lock = getLockInfo(record, req, currentTime);
       if (lock.active && !lock.ownedByMe) {
@@ -1064,9 +1384,11 @@ adminMockExamReviewRouter.post("/records/:recordId/ai-review", async (req, res) 
   const currentTime = new Date();
 
   try {
+    assertReviewAssignmentManager(req);
     await prisma.$transaction(async (tx) => {
       const record = await getAdminReviewRecord(tx, recordId);
       assertReviewableRecord(record);
+      assertRecordVisibleToReviewer(record, req);
 
       const lock = getLockInfo(record, req, currentTime);
       if (lock.active && !lock.ownedByMe) {
@@ -1127,6 +1449,7 @@ adminMockExamReviewRouter.post("/records/:recordId/ai-review", async (req, res) 
 });
 
 adminMockExamReviewRouter.post("/records/batch-ai-review", async (req, res) => {
+  assertReviewAssignmentManager(req);
   const recordIds = [
     ...new Set((Array.isArray(req.body?.recordIds) ? req.body.recordIds : []).map((item) => `${item ?? ""}`.trim()).filter(Boolean)),
   ];
@@ -1142,6 +1465,7 @@ adminMockExamReviewRouter.post("/records/batch-ai-review", async (req, res) => {
       await prisma.$transaction(async (tx) => {
         const record = await getAdminReviewRecord(tx, recordId);
         assertReviewableRecord(record);
+        assertRecordVisibleToReviewer(record, req);
 
         const lock = getLockInfo(record, req, currentTime);
         if (lock.active && !lock.ownedByMe) {
@@ -1212,6 +1536,7 @@ adminMockExamReviewRouter.post("/records/:recordId/release", async (req, res) =>
     const updatedRecord = await prisma.$transaction(async (tx) => {
       const record = await getAdminReviewRecord(tx, recordId);
       assertReviewableRecord(record);
+      assertRecordVisibleToReviewer(record, req);
       const lock = getLockInfo(record, req, currentTime);
       if (lock.active && !lock.ownedByMe) {
         const error = new Error("只能释放自己领取的批改记录");
@@ -1244,11 +1569,13 @@ adminMockExamReviewRouter.post("/records/:recordId/release", async (req, res) =>
 
 adminMockExamReviewRouter.post("/records/:recordId/recall-published-review", async (req, res) => {
   try {
+    assertReviewAssignmentManager(req);
     const recordId = `${req.params.recordId ?? ""}`.trim();
     const currentTime = new Date();
     const updatedRecord = await prisma.$transaction(async (tx) => {
       const record = await getAdminReviewRecord(tx, recordId);
       assertReviewableRecord(record);
+      assertRecordVisibleToReviewer(record, req);
 
       if (!isRepublishingReviewRecord(record)) {
         const error = new Error("这份试卷还没有发送给学生，无需收回");
@@ -1284,6 +1611,8 @@ adminMockExamReviewRouter.post("/records/:recordId/recall-published-review", asy
         data: {
           reviewWorkflowStatus: "manual_pending",
           publishedAt: null,
+          publishedReviewerId: null,
+          publishedReviewerName: null,
           manualReviewVersion: { increment: 1 },
         },
       });
@@ -1307,12 +1636,14 @@ adminMockExamReviewRouter.post("/records/:recordId/recall-published-review", asy
 
 adminMockExamReviewRouter.post("/records/:recordId/return-for-redo", async (req, res) => {
   try {
+    assertReviewAssignmentManager(req);
     const recordId = `${req.params.recordId ?? ""}`.trim();
     const reason = normalizeText(req.body?.reason ?? "");
     const currentTime = new Date();
     const result = await prisma.$transaction(async (tx) => {
       const record = await getAdminReviewRecord(tx, recordId);
       assertReviewableRecord(record);
+      assertRecordVisibleToReviewer(record, req);
 
       if (!isRepublishingReviewRecord(record)) {
         const error = new Error("这份试卷还没有发送给学生，不能返还重做");
@@ -1351,6 +1682,8 @@ adminMockExamReviewRouter.post("/records/:recordId/return-for-redo", async (req,
           activeKey: null,
           reviewWorkflowStatus: RETURNED_FOR_REDO_STATUS,
           publishedAt: null,
+          publishedReviewerId: null,
+          publishedReviewerName: null,
           manualReviewerId: null,
           manualReviewerName: null,
           manualReviewLockToken: null,
@@ -1388,6 +1721,7 @@ adminMockExamReviewRouter.patch("/records/:recordId/review-draft", async (req, r
     const updatedRecord = await prisma.$transaction(async (tx) => {
       const record = await getAdminReviewRecord(tx, recordId);
       assertReviewableRecord(record);
+      assertRecordVisibleToReviewer(record, req);
       assertEditableLock(record, req, {
         lockToken: req.body?.lockToken,
         version: req.body?.manualReviewVersion,
@@ -1432,6 +1766,7 @@ adminMockExamReviewRouter.post("/records/:recordId/publish", async (req, res) =>
     const updatedRecord = await prisma.$transaction(async (tx) => {
       const record = await getAdminReviewRecord(tx, recordId);
       assertReviewableRecord(record);
+      assertRecordVisibleToReviewer(record, req);
       assertEditableLock(record, req, {
         lockToken: req.body?.lockToken,
         version: req.body?.manualReviewVersion,
@@ -1474,6 +1809,8 @@ adminMockExamReviewRouter.post("/records/:recordId/publish", async (req, res) =>
           reviewWorkflowStatus: "published",
           reviewedAt: currentTime,
           publishedAt: currentTime,
+          publishedReviewerId: req.auth.adminId,
+          publishedReviewerName: getAdminName(req),
           manualReviewVersion: { increment: 1 },
           manualReviewLockToken: null,
           manualReviewLockExpiresAt: null,

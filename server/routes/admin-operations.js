@@ -16,9 +16,9 @@ import { getMockExamAiReviewConfigForAdmin, saveMockExamAiReviewConfig } from ".
 import { readSmsConfigForAdmin, normalizeSmsConfig } from "../lib/sms-config.js";
 import { normalizeCourseMockExamSeriesLinks, normalizeCourseQuestionBankLinks, normalizePortalConfig } from "../../src/shared/portal-config.js";
 
-const ALL_ADMIN_ROLES = ["super_admin", "operations_admin", "user_admin", "review_admin"];
+const ALL_ADMIN_ROLES = ["super_admin", "operations_admin", "user_admin", "review_admin", "part_time_reviewer"];
 const SYSTEM_MANAGER_ROLES = ["super_admin", "operations_admin"];
-const EXAM_RECORD_VIEW_ROLES = ["super_admin", "operations_admin", "review_admin", "user_admin"];
+const EXAM_RECORD_VIEW_ROLES = ["super_admin", "operations_admin", "review_admin", "part_time_reviewer", "user_admin"];
 const EXAM_RANK_MANAGER_ROLES = ["super_admin", "operations_admin"];
 const REVIEW_PENDING_STATUSES = ["ai_pending", "ai_processing", "manual_pending"];
 const REVIEW_WORKFLOW_STATUSES = ["not_required", "ai_pending", "ai_processing", "manual_pending", "published"];

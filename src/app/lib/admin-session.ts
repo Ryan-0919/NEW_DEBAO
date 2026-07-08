@@ -1,4 +1,4 @@
-export type AdminRole = "super_admin" | "operations_admin" | "user_admin" | "review_admin";
+export type AdminRole = "super_admin" | "operations_admin" | "user_admin" | "review_admin" | "part_time_reviewer";
 
 const ADMIN_TOKEN_KEY = "adminToken";
 const ADMIN_ID_KEY = "adminId";
@@ -47,7 +47,8 @@ export const clearAdminSession = () => {
 
 export const isUserManagementRole = (role = getAdminRole()) => role === "super_admin" || role === "user_admin";
 export const isContentManagementRole = (role = getAdminRole()) => role === "super_admin" || role === "operations_admin";
-export const isReviewManagementRole = (role = getAdminRole()) => role === "super_admin" || role === "operations_admin" || role === "review_admin";
+export const isReviewManagementRole = (role = getAdminRole()) =>
+  role === "super_admin" || role === "operations_admin" || role === "review_admin" || role === "part_time_reviewer";
 export const isSystemManagementRole = (role = getAdminRole()) => role === "super_admin" || role === "operations_admin";
 export const isAnyAdminRole = (role = getAdminRole()) =>
-  role === "super_admin" || role === "operations_admin" || role === "user_admin" || role === "review_admin";
+  role === "super_admin" || role === "operations_admin" || role === "user_admin" || role === "review_admin" || role === "part_time_reviewer";

@@ -1,6 +1,6 @@
 import { adminDelete, adminPatchJson, adminPostForm, adminPostJson, adminRequest, adminRequestBlob, buildAdminQueryString } from "./adminApiClient";
 
-export type AdminRoleValue = "super_admin" | "operations_admin" | "user_admin" | "review_admin";
+export type AdminRoleValue = "super_admin" | "operations_admin" | "user_admin" | "review_admin" | "part_time_reviewer";
 
 export type AdminPagedResult<T> = {
   items: T[];

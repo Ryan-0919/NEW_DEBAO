@@ -1,4 +1,4 @@
-export const ADMIN_ROLE_VALUES = ["super_admin", "operations_admin", "user_admin", "review_admin"];
+export const ADMIN_ROLE_VALUES = ["super_admin", "operations_admin", "user_admin", "review_admin", "part_time_reviewer"];
 
 export const hasAdminRoleAccess = (role, allowedRoles = []) => allowedRoles.includes(role);
 

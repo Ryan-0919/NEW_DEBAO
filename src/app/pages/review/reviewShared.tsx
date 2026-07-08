@@ -224,3 +224,9 @@ export const reviewGlobalTabs = [
   { key: "locked", label: "已锁定", icon: Lock },
   { key: "published", label: "已批改", icon: ShieldCheck },
 ] as const;
+
+export const reviewPartTimeTabs = [
+  { key: "teacher", label: "我分配的试卷", icon: UserCheck },
+  { key: "mine", label: "我领取的试卷", icon: Lock },
+  { key: "published", label: "已批改", icon: ShieldCheck },
+] as const;

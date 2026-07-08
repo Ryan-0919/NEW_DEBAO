@@ -10,7 +10,7 @@ type ReviewLayoutProps = {
   pageDescription?: string;
 };
 
-const navItems = [
+const managerNavItems = [
   { href: "/adminpg/dashboard", label: "工作台", icon: BarChart3 },
   { href: "/adminpg/mine", label: "我领取的试卷", icon: UserCheck },
   { href: "/adminpg/reviews?status=teacher", label: "待老师批改", icon: ListChecks },
@@ -19,12 +19,21 @@ const navItems = [
   { href: "/adminpg/papers", label: "单卷队列", icon: FileText },
 ] as const;
 
+const partTimeNavItems = [
+  { href: "/adminpg/dashboard", label: "工作台", icon: BarChart3 },
+  { href: "/adminpg/reviews?status=teacher", label: "我分配的试卷", icon: ListChecks },
+  { href: "/adminpg/mine", label: "我领取的试卷", icon: UserCheck },
+  { href: "/adminpg/reviews?status=published", label: "已批改", icon: ShieldCheck },
+] as const;
+
 export function ReviewLayout({ children, pageTitle = "批改后台", pageDescription = "得恩法考独立阅卷中心" }: ReviewLayoutProps) {
   const token = getAdminToken();
   const role = getAdminRole();
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/adminpg/dashboard";
   const search = typeof window !== "undefined" ? window.location.search : "";
   const currentStatus = new URLSearchParams(search).get("status") ?? "";
+  const isPartTimeReviewer = role === "part_time_reviewer";
+  const navItems = isPartTimeReviewer ? partTimeNavItems : managerNavItems;
 
   if (!token) {
     window.location.replace("/adminpg/login");
@@ -61,7 +70,7 @@ export function ReviewLayout({ children, pageTitle = "批改后台", pageDescrip
             </div>
             <div>
               <h1 className="text-lg font-semibold text-slate-950">批改后台</h1>
-              <p className="mt-1 text-xs leading-5 text-slate-500">独立阅卷中心</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{isPartTimeReviewer ? "兼职批改工作台" : "独立阅卷中心"}</p>
             </div>
           </div>
         </div>

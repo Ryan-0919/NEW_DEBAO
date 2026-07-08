@@ -15,6 +15,7 @@ const roleOptions: { value: AdminRoleValue; label: string; description: string }
   { value: "operations_admin", label: "运营管理员", description: "管理内容、配置和日志" },
   { value: "user_admin", label: "用户管理员", description: "管理学员与授权" },
   { value: "review_admin", label: "批改管理员", description: "处理主观题批改" },
+  { value: "part_time_reviewer", label: "兼职批改老师", description: "只处理分配给自己的试卷" },
 ];
 
 const roleMeta: Record<AdminRoleValue, { label: string; className: string }> = {
@@ -22,6 +23,7 @@ const roleMeta: Record<AdminRoleValue, { label: string; className: string }> = {
   operations_admin: { label: "运营管理员", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
   user_admin: { label: "用户管理员", className: "border-amber-200 bg-amber-50 text-amber-800" },
   review_admin: { label: "批改管理员", className: "border-violet-200 bg-violet-50 text-violet-700" },
+  part_time_reviewer: { label: "兼职批改老师", className: "border-sky-200 bg-sky-50 text-sky-700" },
 };
 
 const emptyForm = { account: "", name: "", role: "operations_admin" as AdminRoleValue, password: "" };
@@ -42,6 +44,7 @@ export function AdminAccountManagement() {
       superAdmin: admins.filter((admin) => admin.role === "super_admin").length,
       operations: admins.filter((admin) => admin.role === "operations_admin").length,
       reviewers: admins.filter((admin) => admin.role === "review_admin").length,
+      partTimeReviewers: admins.filter((admin) => admin.role === "part_time_reviewer").length,
     }),
     [admins],
   );
@@ -140,6 +143,7 @@ export function AdminAccountManagement() {
           ["超级管理员", summary.superAdmin],
           ["运营管理员", summary.operations],
           ["批改管理员", summary.reviewers],
+          ["兼职批改老师", summary.partTimeReviewers],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg border border-slate-200 bg-white px-5 py-4">
             <p className="text-sm text-slate-500">{label}</p>

@@ -3,8 +3,9 @@ import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { getAdminRole } from "../../lib/admin-session";
 import { AdminMockExamReviewGlobalRecord, adminMockExamReviewService } from "../../services/adminMockExamReviewService";
-import { emptyReviewStats, ReviewMetricCard, ReviewRecordTable, reviewGlobalTabs } from "./reviewShared";
+import { emptyReviewStats, ReviewMetricCard, ReviewRecordTable, reviewGlobalTabs, reviewPartTimeTabs } from "./reviewShared";
 
 export type RecordStatusGroup = "ai_pending" | "ai_processing" | "teacher" | "mine" | "ai_problem" | "locked" | "published";
 
@@ -14,6 +15,7 @@ type ReviewRecordsPageProps = {
 };
 
 export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }: ReviewRecordsPageProps = {}) {
+  const isPartTimeReviewer = getAdminRole() === "part_time_reviewer";
   const [records, setRecords] = useState<AdminMockExamReviewGlobalRecord[]>([]);
   const [stats, setStats] = useState(emptyReviewStats);
   const [status, setStatus] = useState<RecordStatusGroup>(initialStatus);
@@ -21,7 +23,8 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
   const [page, setPage] = useState({ page: initialPage, totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const currentTab = reviewGlobalTabs.find((tab) => tab.key === status);
+  const tabs = isPartTimeReviewer ? reviewPartTimeTabs : reviewGlobalTabs;
+  const currentTab = tabs.find((tab) => tab.key === status);
 
   const loadRecords = async (nextStatus = status, nextPage = page.page) => {
     setLoading(true);
@@ -93,7 +96,9 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">全局批改队列</p>
             <h1 className="mt-2 text-[26px] font-semibold leading-tight text-slate-950">{currentTab?.label ?? "试卷列表"}</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">按当前处理阶段汇总所有试卷记录，老师可以先领取，再进入单卷工作台批改。</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+              {isPartTimeReviewer ? "这里只显示分配给当前兼职老师的试卷，领取后进入单卷工作台完成修改并发送。" : "按当前处理阶段汇总所有试卷记录，老师可以先领取，再进入单卷工作台批改。"}
+            </p>
           </div>
           <Button className="h-11 justify-self-start rounded-full border-slate-200 bg-white px-5 text-slate-700 hover:bg-slate-50 xl:justify-self-end" variant="outline" disabled={loading} onClick={() => void loadRecords(status, page.page)}>
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
@@ -115,7 +120,7 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
       <section className="sticky top-0 z-10 rounded-[16px] border border-slate-200 bg-white/95 p-3 shadow-[0_12px_32px_rgba(15,23,42,0.06)] backdrop-blur">
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,460px)] xl:items-center">
           <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
-            {reviewGlobalTabs.map((tab) => {
+            {tabs.map((tab) => {
               const Icon = tab.icon;
               const active = status === tab.key;
               const count =
