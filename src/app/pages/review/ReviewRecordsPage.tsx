@@ -243,7 +243,7 @@ export function ReviewRecordsPage({ initialStatus = "teacher", initialPage = 1 }
         </div>
       </section>
 
-      <section className="sticky top-0 z-10 rounded-[16px] border border-slate-200 bg-white/95 p-3 shadow-[0_12px_32px_rgba(15,23,42,0.06)] backdrop-blur">
+      <section className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.06)]">
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,520px)] xl:items-center">
           <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
             {tabs.map((tab) => {

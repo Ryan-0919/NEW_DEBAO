@@ -19,3 +19,7 @@ test("批改后台路由单独挂载批改老师页面", () => {
 test("全局待老师批改页不再内嵌兼职批改老师卡片区", () => {
   assert.doesNotMatch(reviewRecordsPageSource, /兼职批改老师/);
 });
+
+test("全局待老师批改页的筛选工具条不再使用 sticky 遮挡上方统计卡片", () => {
+  assert.doesNotMatch(reviewRecordsPageSource, /className="sticky top-0 z-10/);
+});
