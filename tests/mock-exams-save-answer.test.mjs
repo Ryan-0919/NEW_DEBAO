@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { saveMockExamAnswer } from "../server/lib/mock-exams.js";
+import { finalizeMockExamRecord, saveMockExamAnswer, startMockExamRecord } from "../server/lib/mock-exams.js";
 
 const buildSubjectiveQuestion = () => ({
   id: "question_1",
@@ -22,6 +22,145 @@ const buildSubjectiveQuestion = () => ({
   }),
   options: [],
   correctAnswerJson: "[]",
+});
+
+test("finalizeMockExamRecord restores subjective review quota after return-for-redo", async () => {
+  const baseRecord = buildRecord("in_progress");
+  const currentRecord = {
+    ...baseRecord,
+    id: "redo_record_2",
+    attemptNo: 2,
+    createdAt: new Date("2026-07-18T11:28:08.000Z"),
+    updatedAt: new Date("2026-07-18T11:58:08.000Z"),
+    answers: [
+      {
+        id: "answer_1",
+        questionId: "question_1",
+        answerJson: JSON.stringify({ sub_1: "redo answer" }),
+        score: 0,
+      },
+    ],
+    paper: {
+      ...baseRecord.paper,
+      reviewAttemptLimit: 1,
+    },
+  };
+  const returnedRecord = {
+    id: "returned_record_1",
+    userId: "user_1",
+    paperId: "paper_1",
+    reviewWorkflowStatus: "returned_for_redo",
+    createdAt: new Date("2026-07-17T06:48:47.000Z"),
+    updatedAt: new Date("2026-07-18T11:04:10.000Z"),
+  };
+  const recordUpdates = [];
+
+  const tx = {
+    mockExamRecord: {
+      findUnique: async () => currentRecord,
+      findMany: async () => [returnedRecord],
+      update: async ({ data }) => {
+        recordUpdates.push(data);
+        return { ...currentRecord, ...data };
+      },
+    },
+    mockExamAnswer: {
+      update: async () => ({}),
+    },
+    userMockExamPermission: {
+      updateMany: async () => ({}),
+    },
+  };
+  const db = {
+    $transaction: async (callback) => callback(tx),
+  };
+
+  await finalizeMockExamRecord({
+    db,
+    recordId: "redo_record_2",
+    userId: "user_1",
+    currentTime: new Date("2026-07-18T12:00:00.000Z"),
+  });
+
+  const submitUpdate = recordUpdates.find((item) => item.status === "submitted");
+  assert.equal(submitUpdate?.reviewWorkflowStatus, "ai_pending");
+  assert.equal(submitUpdate?.publishedAt, null);
+});
+
+test("startMockExamRecord resets displayed attempt number after return-for-redo", async () => {
+  const paper = {
+    ...buildRecord("in_progress").paper,
+    id: "paper_1",
+    questions: [buildSubjectiveQuestion()],
+  };
+  const returnedRecord = {
+    id: "returned_record_1",
+    userId: "user_1",
+    paperId: "paper_1",
+    reviewWorkflowStatus: "returned_for_redo",
+    createdAt: new Date("2026-07-17T06:48:47.000Z"),
+    updatedAt: new Date("2026-07-18T11:04:10.000Z"),
+  };
+  const staleRecordBeforeReturn = {
+    id: "stale_record_2",
+    userId: "user_1",
+    paperId: "paper_1",
+    reviewWorkflowStatus: "not_required",
+    createdAt: new Date("2026-07-17T06:49:33.000Z"),
+    updatedAt: new Date("2026-07-17T08:14:22.000Z"),
+  };
+  let createdRecord = null;
+
+  const db = {
+    course: {
+      findMany: async () => [],
+    },
+    systemConfig: {
+      findUnique: async () => null,
+    },
+    mockExamPaper: {
+      findUnique: async () => ({ id: "paper_1", status: "published", permissionRequired: false }),
+      findFirst: async () => paper,
+    },
+    mockExamRecord: {
+      findMany: async ({ where }) => {
+        if (where?.status === "in_progress") return [];
+        return [returnedRecord, staleRecordBeforeReturn];
+      },
+      findFirst: async () => null,
+      findUnique: async () => ({
+        ...createdRecord,
+        answers: [],
+        paper,
+      }),
+    },
+    $transaction: async (callback) =>
+      callback({
+        mockExamRecord: {
+          create: async ({ data }) => {
+            createdRecord = {
+              id: "created_record",
+              status: "in_progress",
+              reviewWorkflowStatus: "not_required",
+              answers: [],
+              createdAt: data.startedAt,
+              updatedAt: data.startedAt,
+              ...data,
+            };
+            return createdRecord;
+          },
+        },
+      }),
+  };
+
+  const record = await startMockExamRecord({
+    db,
+    paperId: "paper_1",
+    userId: "user_1",
+    currentTime: new Date("2026-07-18T12:00:00.000Z"),
+  });
+
+  assert.equal(record.attemptNo, 1);
 });
 
 const buildRecord = (status) => ({

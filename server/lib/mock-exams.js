@@ -11,6 +11,8 @@ import { normalizeCourseMockExamSeriesLinks } from "../../src/shared/portal-conf
 const SUBJECTIVE_TYPE = "subjective_case";
 const DEFAULT_OBJECTIVE_COVER = "/mock-exam/default-objective-cover.svg";
 const DEFAULT_SUBJECTIVE_COVER = "/mock-exam/default-subjective-cover.svg";
+const RETURNED_FOR_REDO_WORKFLOW_STATUS = "returned_for_redo";
+const SUBJECTIVE_REVIEW_ATTEMPT_STATUSES = new Set(["ai_pending", "ai_processing", "manual_pending", "published"]);
 
 const questionTypeMeta = {
   single_choice: {
@@ -46,6 +48,43 @@ const assertMockExamRecordInProgress = (record) => {
     throw createHttpError("本次考试已交卷，不能继续作答", 409);
   }
 };
+
+const toTimestampMs = (...values) => {
+  for (const value of values) {
+    if (!value) continue;
+    const date = value instanceof Date ? value : new Date(value);
+    const timestamp = date.getTime();
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  return 0;
+};
+
+const getRecordCreatedTimestampMs = (record) => toTimestampMs(record?.createdAt, record?.startedAt, record?.submittedAt, record?.updatedAt);
+const getRecordUpdatedTimestampMs = (record) => toTimestampMs(record?.updatedAt, record?.submittedAt, record?.createdAt, record?.startedAt);
+const getRawReviewWorkflowStatus = (record) => `${record?.reviewWorkflowStatus ?? ""}`.trim();
+
+const getLatestReturnedForRedoTimestampMs = (records = []) =>
+  records.reduce((latest, record) => {
+    if (getRawReviewWorkflowStatus(record) !== RETURNED_FOR_REDO_WORKFLOW_STATUS) return latest;
+    return Math.max(latest, getRecordUpdatedTimestampMs(record));
+  }, 0);
+
+const isAfterLatestRedoReset = (record, latestRedoResetAtMs) => {
+  if (!latestRedoResetAtMs) return true;
+  return getRecordCreatedTimestampMs(record) > latestRedoResetAtMs;
+};
+
+const isReturnedForRedoStatus = (record) => getRawReviewWorkflowStatus(record) === RETURNED_FOR_REDO_WORKFLOW_STATUS;
+
+const getEffectiveMockExamAttemptRecords = (records = []) => {
+  const latestRedoResetAtMs = getLatestReturnedForRedoTimestampMs(records);
+  return records.filter((record) => !isReturnedForRedoStatus(record) && isAfterLatestRedoReset(record, latestRedoResetAtMs));
+};
+
+const getEffectiveMockExamAttemptCount = (records = []) => getEffectiveMockExamAttemptRecords(records).length;
+
+const getSubjectiveReviewAttemptCount = (records = []) =>
+  getEffectiveMockExamAttemptRecords(records).filter((record) => SUBJECTIVE_REVIEW_ATTEMPT_STATUSES.has(getRawReviewWorkflowStatus(record))).length;
 
 export const getCourseLinkedMockExamSeriesIds = async ({ db, userId }) => {
   const courses = await db.course.findMany({
@@ -473,7 +512,7 @@ const getReviewWorkflowStatus = (record) => {
   return explicit || "ai_pending";
 };
 
-const isReturnedForRedoRecord = (record) => getReviewWorkflowStatus(record) === "returned_for_redo";
+const isReturnedForRedoRecord = (record) => getReviewWorkflowStatus(record) === RETURNED_FOR_REDO_WORKFLOW_STATUS;
 
 const isRecordPublishedToUser = (record) => ["not_required", "published"].includes(getReviewWorkflowStatus(record));
 
@@ -2107,13 +2146,21 @@ export const startMockExamRecord = async ({ db, paperId, userId, currentTime = n
     return getMockExamRecordForUser({ db, recordId: activeRecord.id, userId, currentTime });
   }
 
-  const attemptCount = await db.mockExamRecord.count({
+  const attemptRecords = await db.mockExamRecord.findMany({
     where: {
       paperId,
       userId,
-      NOT: { reviewWorkflowStatus: "returned_for_redo" },
+    },
+    select: {
+      id: true,
+      reviewWorkflowStatus: true,
+      createdAt: true,
+      startedAt: true,
+      submittedAt: true,
+      updatedAt: true,
     },
   });
+  const attemptCount = getEffectiveMockExamAttemptCount(attemptRecords);
   const permissionAttemptLimit = Number(permission?.manualAttemptLimit ?? 0);
   const permissionAttemptUsed = Number(permission?.manualAttemptUsed ?? 0);
   const maxAttempts = permissionAttemptLimit > 0 ? permissionAttemptLimit : Number(paper.maxAttempts ?? 0);
@@ -2328,10 +2375,30 @@ export const finalizeMockExamRecord = async ({ db, recordId, userId, currentTime
     }
 
     const reviewAttemptLimit = Number(paper.reviewAttemptLimit ?? 0);
+    const subjectiveReviewAttemptCount =
+      reviewAttemptLimit > 0 && Boolean(paper.reviewEnabled) && (paper.questions ?? []).some((question) => isSubjectiveQuestion(question))
+        ? getSubjectiveReviewAttemptCount(
+            await tx.mockExamRecord.findMany({
+              where: {
+                paperId: record.paperId,
+                userId: record.userId,
+                id: { not: record.id },
+              },
+              select: {
+                id: true,
+                reviewWorkflowStatus: true,
+                createdAt: true,
+                startedAt: true,
+                submittedAt: true,
+                updatedAt: true,
+              },
+            }),
+          )
+        : 0;
     const requiresReview =
       Boolean(paper.reviewEnabled) &&
       (paper.questions ?? []).some((question) => isSubjectiveQuestion(question)) &&
-      (reviewAttemptLimit <= 0 || Number(record.attemptNo ?? 0) <= reviewAttemptLimit);
+      (reviewAttemptLimit <= 0 || subjectiveReviewAttemptCount < reviewAttemptLimit);
     const nextReviewWorkflowStatus = requiresReview ? "ai_pending" : "not_required";
 
     await tx.mockExamRecord.update({
