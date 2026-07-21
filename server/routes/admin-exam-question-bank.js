@@ -7,6 +7,7 @@ import { formatDateTime } from "../lib/time.js";
 import { normalizeDisplayText } from "../lib/text.js";
 import { parseQuestionImportRoot } from "../lib/question-import.js";
 import { uploadBuffer } from "../lib/upload.js";
+import { syncReferencedMockExamQuestionAudio } from "../lib/question-bank-audio-sync.js";
 import { requireAdminAuth, requireAdminRoles } from "../middleware/auth.js";
 
 const CONTENT_MANAGER_ROLES = ["super_admin", "operations_admin"];
@@ -748,7 +749,7 @@ adminExamQuestionBankRouter.patch("/items/:itemId", async (req, res) => {
     const validationError = await validateItemPayload(payload, paperType);
     if (validationError) return fail(res, validationError, 400);
 
-    const item = await prisma.$transaction(async (tx) => {
+    const { item, syncedMockExamQuestionCount } = await prisma.$transaction(async (tx) => {
       await tx.questionBankItem.update({
         where: { id: existing.id },
         data: {
@@ -777,7 +778,7 @@ adminExamQuestionBankRouter.patch("/items/:itemId", async (req, res) => {
           })),
         });
       }
-      return tx.questionBankItem.findUnique({
+      const updatedItem = await tx.questionBankItem.findUnique({
         where: { id: existing.id },
         include: {
           folder: true,
@@ -785,6 +786,12 @@ adminExamQuestionBankRouter.patch("/items/:itemId", async (req, res) => {
           _count: { select: { sourceQuestions: true } },
         },
       });
+      const syncResult = await syncReferencedMockExamQuestionAudio(tx, {
+        beforeItem: existing,
+        sourceItem: updatedItem,
+        paperType,
+      });
+      return { item: updatedItem, syncedMockExamQuestionCount: syncResult.count };
     });
 
     await writeAdminAuditLog(req, {
@@ -792,7 +799,7 @@ adminExamQuestionBankRouter.patch("/items/:itemId", async (req, res) => {
       entityType: "exam_question_bank_item",
       entityId: item.id,
       entityName: parseJsonSafely(item.questionMetaJson, {})?.title || item.id,
-      detail: { paperType, folderId: item.folderId, type: item.type },
+      detail: { paperType, folderId: item.folderId, type: item.type, syncedMockExamQuestionCount },
     });
     return ok(res, serializeItem(item));
   } catch (error) {
