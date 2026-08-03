@@ -41,6 +41,8 @@ import { getMockExamHomePath } from "./mockExamLaunchShared";
 import { DebaoLawSearchPage } from "./DebaoLawSearchPage";
 
 const SAVE_DELAY = 600;
+const SAVE_TASK_WAIT_TIMEOUT_MS = 3500;
+const UNDO_HISTORY_LIMIT = 120;
 const VIEW_KEY = "mock-exam-official-view";
 const MARK_KEY_PREFIX = "mock-exam-official-marks:";
 const SECTION_ORDERS = ["一、", "二、", "三、", "四、", "五、", "六、"];
@@ -75,6 +77,25 @@ type LawDialogAction =
   | { type: "resize"; direction: ResizeDirection; startX: number; startY: number; startRect: LawDialogRect };
 type HighlightBlock = "prompt" | "subjective-title";
 type HighlightSelection = { block: HighlightBlock; key: string; start: number; end: number };
+
+const pushBoundedHistory = (historyMap: Record<string, string[]>, key: string, value: string) => {
+  if (!historyMap[key]) historyMap[key] = [];
+  historyMap[key].push(value);
+  if (historyMap[key].length > UNDO_HISTORY_LIMIT) {
+    historyMap[key].splice(0, historyMap[key].length - UNDO_HISTORY_LIMIT);
+  }
+};
+
+const buildSubjectiveSubmitAnswers = (active: MockExamRecordDetail, drafts: Record<string, string>) =>
+  active.questions.flatMap((question) => {
+    if (!isSubjectiveQuestion(question)) return [];
+
+    return question.subjectiveSubQuestions.map((subQuestion) => ({
+      questionId: question.id,
+      subQuestionId: subQuestion.id,
+      answerText: drafts[buildDraftKey(question.id, subQuestion.id)] ?? subQuestion.answer ?? "",
+    }));
+  });
 
 const LAW_DIALOG_MIN_WIDTH = 640;
 const LAW_DIALOG_MIN_HEIGHT = 420;
@@ -604,14 +625,16 @@ export function MockExamRoom() {
           }
           if (pendingRef.current[key]?.text === entry.text) delete pendingRef.current[key];
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : "主观题答案保存失败");
+          if (!submittingRef.current && !skipPauseRef.current) {
+            toast.error(error instanceof Error ? error.message : "主观题答案保存失败");
+          }
           throw error;
         }
       },
     });
   };
 
-  const flushPending = async () => {
+  const flushPending = async (options?: { persistPending?: boolean; timeoutMs?: number }) => {
     commitAnswerTextarea({ force: true });
     for (const key of Object.keys(timersRef.current)) {
       if (timersRef.current[key]) {
@@ -619,11 +642,19 @@ export function MockExamRoom() {
         delete timersRef.current[key];
       }
     }
-    await waitForMockExamSaveTasks(inFlightSaveTasksRef.current);
+    const firstWaitCompleted = await waitForMockExamSaveTasks(inFlightSaveTasksRef.current, {
+      timeoutMs: options?.timeoutMs,
+      clearOnTimeout: Boolean(options?.timeoutMs),
+    });
+    if (options?.persistPending === false) return firstWaitCompleted;
     for (const [key, entry] of Object.entries(pendingRef.current)) {
       await persistSubjective(entry);
     }
-    await waitForMockExamSaveTasks(inFlightSaveTasksRef.current);
+    const finalWaitCompleted = await waitForMockExamSaveTasks(inFlightSaveTasksRef.current, {
+      timeoutMs: options?.timeoutMs,
+      clearOnTimeout: Boolean(options?.timeoutMs),
+    });
+    return firstWaitCompleted && finalWaitCompleted;
   };
 
   const handleSubmit = async (isAuto = false) => {
@@ -632,8 +663,13 @@ export function MockExamRoom() {
     submittingRef.current = true;
     setSubmitting(true);
     try {
-      await flushPending();
-      const detail = await mockApi.submitMockExam(active.id);
+      const saveCompleted = await flushPending({ persistPending: false, timeoutMs: SAVE_TASK_WAIT_TIMEOUT_MS });
+      if (!saveCompleted) {
+        toast.warning("自动保存响应较慢，正在直接提交当前答案");
+      }
+      const detail = await mockApi.submitMockExam(active.id, {
+        subjectiveAnswers: buildSubjectiveSubmitAnswers(active, draftRef.current),
+      });
       toast.success(isAuto ? "考试时间已到，系统已自动交卷" : "交卷成功");
       navigateAfterSubmit(detail.id, detail.reviewWorkflowStatus, detail.reviewEnabled);
     } catch (error) {
@@ -655,8 +691,7 @@ export function MockExamRoom() {
     const previous = draftRef.current[key] ?? subQuestion.answer ?? "";
     if (previous === value) return;
     if (!options?.skipHistory && previous !== value) {
-      if (!undoHistoryRef.current[key]) undoHistoryRef.current[key] = [];
-      undoHistoryRef.current[key].push(previous);
+      pushBoundedHistory(undoHistoryRef.current, key, previous);
       redoHistoryRef.current[key] = [];
     }
     const nextDrafts = { ...draftRef.current, [key]: value };
@@ -913,16 +948,14 @@ export function MockExamRoom() {
 
     if (history.length === 0) {
       if (!currentValue) return;
-      if (!redoHistoryRef.current[key]) redoHistoryRef.current[key] = [];
-      redoHistoryRef.current[key].push(currentValue);
+      pushBoundedHistory(redoHistoryRef.current, key, currentValue);
       if (answerTextareaRef.current) answerTextareaRef.current.value = "";
       syncDraft(currentQuestion.id, currentSubQuestion, "", { skipHistory: true });
       return;
     }
 
     const previous = history.pop() ?? "";
-    if (!redoHistoryRef.current[key]) redoHistoryRef.current[key] = [];
-    redoHistoryRef.current[key].push(currentValue);
+    pushBoundedHistory(redoHistoryRef.current, key, currentValue);
     if (answerTextareaRef.current) answerTextareaRef.current.value = previous;
     syncDraft(currentQuestion.id, currentSubQuestion, previous, { skipHistory: true });
   };
@@ -936,8 +969,7 @@ export function MockExamRoom() {
 
     const currentValue = draftRef.current[key] ?? currentSubQuestion.answer ?? "";
     const nextValue = history.pop() ?? "";
-    if (!undoHistoryRef.current[key]) undoHistoryRef.current[key] = [];
-    undoHistoryRef.current[key].push(currentValue);
+    pushBoundedHistory(undoHistoryRef.current, key, currentValue);
     if (answerTextareaRef.current) answerTextareaRef.current.value = nextValue;
     syncDraft(currentQuestion.id, currentSubQuestion, nextValue, { skipHistory: true });
   };

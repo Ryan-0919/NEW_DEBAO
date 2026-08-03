@@ -212,6 +212,7 @@ mockExamRouter.post("/records/:recordId/submit", async (req, res) => {
       db: prisma,
       recordId: `${req.params.recordId ?? ""}`.trim(),
       userId: req.auth.userId,
+      subjectiveAnswers: req.body?.subjectiveAnswers,
     });
 
     enqueueAutoReviewIfNeeded(record);

@@ -594,7 +594,10 @@ export const mockApi = {
       | { questionId: string; answerKeys: string[] }
       | { questionId: string; subQuestionId: string; answerText: string },
   ) => patchJson<MockExamRecordDetail>(`/api/user/mock-exams/records/${encodeId(recordId)}/answers`, payload),
-  submitMockExam: (recordId: string) => postJson<MockExamRecordDetail>(`/api/user/mock-exams/records/${encodeId(recordId)}/submit`, {}),
+  submitMockExam: (
+    recordId: string,
+    payload?: { subjectiveAnswers?: Array<{ questionId: string; subQuestionId: string; answerText: string }> },
+  ) => postJson<MockExamRecordDetail>(`/api/user/mock-exams/records/${encodeId(recordId)}/submit`, payload ?? {}),
   submitMockExamReviewFeedback: (recordId: string, questionId: string, payload: { stars: number }) =>
     postJson<MockExamRecordDetail>(
       `/api/user/mock-exams/records/${encodeId(recordId)}/questions/${encodeId(questionId)}/review-feedback`,

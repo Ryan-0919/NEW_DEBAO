@@ -331,6 +331,77 @@ const getAnsweredQuestionCount = (questions = [], answers = []) => {
   return questions.filter((question) => getQuestionAnswerState(question, answerMap.get(question.id)) === "answered").length;
 };
 
+const normalizeSubjectiveSubmitAnswers = (answers = []) =>
+  (Array.isArray(answers) ? answers : [])
+    .slice(0, 300)
+    .map((item) => ({
+      questionId: `${item?.questionId ?? ""}`.trim(),
+      subQuestionId: `${item?.subQuestionId ?? ""}`.trim(),
+      answerText: normalizePlainText(item?.answerText),
+    }))
+    .filter((item) => item.questionId && item.subQuestionId);
+
+const saveSubjectiveSubmitAnswers = async ({ tx, record, paper, subjectiveAnswers = [] }) => {
+  const normalizedAnswers = normalizeSubjectiveSubmitAnswers(subjectiveAnswers);
+  if (normalizedAnswers.length === 0) return false;
+
+  const subjectiveQuestions = new Map((paper.questions ?? []).filter((question) => isSubjectiveQuestion(question)).map((question) => [question.id, question]));
+  const existingAnswers = new Map((record.answers ?? []).map((answer) => [answer.questionId, answer]));
+  const nextByQuestion = new Map();
+
+  for (const item of normalizedAnswers) {
+    const question = subjectiveQuestions.get(item.questionId);
+    if (!question) continue;
+
+    const questionMeta = getQuestionMeta(question);
+    if (!questionMeta.subQuestions.some((subQuestion) => subQuestion.id === item.subQuestionId)) continue;
+
+    if (!nextByQuestion.has(question.id)) {
+      const existingAnswer = existingAnswers.get(question.id);
+      nextByQuestion.set(question.id, {
+        question,
+        existingAnswer,
+        answerMap: parseSubjectiveAnswerMap(existingAnswer?.answerJson, question),
+      });
+    }
+
+    const target = nextByQuestion.get(question.id);
+    if (item.answerText) {
+      target.answerMap[item.subQuestionId] = item.answerText;
+    } else {
+      delete target.answerMap[item.subQuestionId];
+    }
+  }
+
+  for (const { question, existingAnswer, answerMap } of nextByQuestion.values()) {
+    const hasAnyAnswer = Object.values(answerMap).some((value) => `${value ?? ""}`.trim());
+    if (hasAnyAnswer) {
+      const data = {
+        answerJson: JSON.stringify(answerMap),
+        isCorrect: null,
+      };
+      if (existingAnswer) {
+        await tx.mockExamAnswer.update({
+          where: { id: existingAnswer.id },
+          data,
+        });
+      } else {
+        await tx.mockExamAnswer.create({
+          data: {
+            recordId: record.id,
+            questionId: question.id,
+            ...data,
+          },
+        });
+      }
+    } else if (existingAnswer) {
+      await tx.mockExamAnswer.delete({ where: { id: existingAnswer.id } });
+    }
+  }
+
+  return nextByQuestion.size > 0;
+};
+
 const getElapsedSeconds = (record, currentTime = new Date()) => {
   if (record.status === "submitted") {
     return Math.max(0, Math.floor(record.consumedSeconds ?? 0));
@@ -2309,18 +2380,21 @@ export const saveMockExamAnswer = async ({ db, recordId, userId, questionId, ans
 
     const refreshedRecord = await getRecordWithPaper(tx, record.id);
     const answeredCount = getAnsweredQuestionCount(getRecordPaper(refreshedRecord)?.questions ?? [], refreshedRecord.answers ?? []);
-    await tx.mockExamRecord.update({
-      where: { id: record.id },
+    const recordUpdate = await tx.mockExamRecord.updateMany({
+      where: { id: record.id, status: "in_progress" },
       data: { answeredCount },
     });
+    if (Number(recordUpdate?.count ?? 0) !== 1) {
+      throw createHttpError("本次考试已交卷，不能继续作答", 409);
+    }
 
     return getRecordWithPaper(tx, record.id);
   });
 };
 
-export const finalizeMockExamRecord = async ({ db, recordId, userId, currentTime = new Date() }) =>
+export const finalizeMockExamRecord = async ({ db, recordId, userId, currentTime = new Date(), subjectiveAnswers = [] }) =>
   db.$transaction(async (tx) => {
-    const record = await getRecordWithPaper(tx, recordId);
+    let record = await getRecordWithPaper(tx, recordId);
     if (!record || record.userId !== userId) {
       throw createHttpError("考试记录不存在", 404);
     }
@@ -2329,7 +2403,17 @@ export const finalizeMockExamRecord = async ({ db, recordId, userId, currentTime
       return record;
     }
 
-    const paper = getRecordPaper(record);
+    let paper = getRecordPaper(record);
+    const savedFinalSubjectiveAnswers = await saveSubjectiveSubmitAnswers({
+      tx,
+      record,
+      paper,
+      subjectiveAnswers,
+    });
+    if (savedFinalSubjectiveAnswers) {
+      record = await getRecordWithPaper(tx, record.id);
+      paper = getRecordPaper(record);
+    }
     const answerMap = new Map((record.answers ?? []).map((item) => [item.questionId, item]));
     let answeredCount = 0;
     let correctCount = 0;

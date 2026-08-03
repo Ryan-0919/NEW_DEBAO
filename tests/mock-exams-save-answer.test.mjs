@@ -163,6 +163,69 @@ test("startMockExamRecord resets displayed attempt number after return-for-redo"
   assert.equal(record.attemptNo, 1);
 });
 
+test("finalizeMockExamRecord saves final subjective draft payload before submitting", async () => {
+  const baseRecord = buildRecord("in_progress");
+  const savedAnswers = [];
+  const recordUpdates = [];
+
+  const tx = {
+    mockExamRecord: {
+      findUnique: async () => ({
+        ...baseRecord,
+        answers: savedAnswers,
+      }),
+      update: async ({ data }) => {
+        recordUpdates.push(data);
+        return { ...baseRecord, ...data, answers: savedAnswers };
+      },
+    },
+    mockExamAnswer: {
+      create: async ({ data }) => {
+        const answer = { id: "created_answer", score: 0, isCorrect: null, ...data };
+        savedAnswers.push(answer);
+        return answer;
+      },
+      update: async ({ where, data }) => {
+        const index = savedAnswers.findIndex((item) => item.id === where.id);
+        if (index >= 0) savedAnswers[index] = { ...savedAnswers[index], ...data };
+        return savedAnswers[index] ?? { id: where.id, ...data };
+      },
+      delete: async ({ where }) => {
+        const index = savedAnswers.findIndex((item) => item.id === where.id);
+        if (index >= 0) savedAnswers.splice(index, 1);
+        return {};
+      },
+    },
+    userMockExamPermission: {
+      updateMany: async () => ({}),
+    },
+  };
+  const db = {
+    $transaction: async (callback) => callback(tx),
+  };
+
+  await finalizeMockExamRecord({
+    db,
+    recordId: "record_1",
+    userId: "user_1",
+    currentTime: new Date("2026-07-05T10:20:00.000Z"),
+    subjectiveAnswers: [
+      {
+        questionId: "question_1",
+        subQuestionId: "sub_1",
+        answerText: "这是交卷按钮携带的最终答案",
+      },
+    ],
+  });
+
+  assert.equal(savedAnswers.length, 1);
+  assert.deepEqual(JSON.parse(savedAnswers[0].answerJson), {
+    sub_1: "这是交卷按钮携带的最终答案",
+  });
+  const submitUpdate = recordUpdates.find((item) => item.status === "submitted");
+  assert.equal(submitUpdate?.answeredCount, 1);
+});
+
 const buildRecord = (status) => ({
   id: "record_1",
   userId: "user_1",
@@ -239,6 +302,52 @@ test("saveMockExamAnswer 在交卷事务开始后发现记录已提交时应阻�
       userId: "user_1",
       questionId: "question_1",
       answerText: "新的主观题答案",
+      subQuestionId: "sub_1",
+    }),
+    (error) => {
+      assert.equal(error?.statusCode, 409);
+      assert.match(error?.message ?? "", /已交卷/);
+      return true;
+    },
+  );
+});
+
+test("saveMockExamAnswer should reject stale autosave when record becomes submitted before record update", async () => {
+  const currentRecord = buildRecord("in_progress");
+
+  const tx = {
+    mockExamRecord: {
+      findUnique: async () => currentRecord,
+      update: async () => {
+        throw new Error("不应该无条件更新已可能交卷的 record");
+      },
+      updateMany: async () => ({ count: 0 }),
+    },
+    mockExamAnswer: {
+      create: async () => ({ id: "answer_1" }),
+      update: async () => ({}),
+      delete: async () => ({}),
+    },
+  };
+
+  const db = {
+    mockExamRecord: {
+      findUnique: async () => currentRecord,
+    },
+    mockExamPaper: {
+      findUnique: async () => ({ id: "paper_1", status: "published", permissionRequired: false }),
+    },
+    $transaction: async (callback) => callback(tx),
+  };
+
+  await assert.rejects(
+    saveMockExamAnswer({
+      db,
+      recordId: "record_1",
+      userId: "user_1",
+      currentTime: new Date("2026-07-05T10:20:00.000Z"),
+      questionId: "question_1",
+      answerText: "旧自动保存答案",
       subQuestionId: "sub_1",
     }),
     (error) => {

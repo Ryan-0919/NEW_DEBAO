@@ -70,3 +70,20 @@ test("waitForMockExamSaveTasks 会等待当前进行中的保存任务完成", a
   assert.equal(finished, true);
   assert.deepEqual(taskMap, {});
 });
+
+test("waitForMockExamSaveTasks 可以超时跳过卡住的保存任务", async () => {
+  const taskMap = {
+    "q1:sub1": {
+      text: "长时间未返回的自动保存",
+      promise: new Promise(() => {}),
+    },
+  };
+
+  const completed = await waitForMockExamSaveTasks(taskMap, {
+    timeoutMs: 10,
+    clearOnTimeout: true,
+  });
+
+  assert.equal(completed, false);
+  assert.deepEqual(taskMap, {});
+});
