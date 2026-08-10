@@ -708,6 +708,83 @@ const OFFICIAL_EXAM_EXTRA_CSS = `
 [data-v-6e05b77a] .debao-resize-grip-ne{position:absolute;right:0;top:0;width:14px;height:14px;cursor:nesw-resize;z-index:230}
 [data-v-6e05b77a] .debao-resize-grip-sw{position:absolute;left:0;bottom:0;width:14px;height:14px;cursor:nesw-resize;z-index:230}
 [data-v-6e05b77a] .mock-stem-highlight{background:#fff59d;color:inherit}
+@media (max-width:767px){
+  :host{display:block;min-height:100dvh;overflow-x:hidden;background:#ddebf6}
+  :host,:host *,:host *::before,:host *::after{box-sizing:border-box}
+  #layout[data-v-6e05b77a]{position:relative!important;width:100%!important;height:auto!important;min-height:100dvh!important;overflow-x:hidden}
+  #header[data-v-6e05b77a]{position:sticky;top:0;z-index:800;width:100%!important;height:auto!important;min-height:82px;padding:8px 10px 9px;background-color:#075f9a;background-size:auto 100%;overflow:visible;text-align:left}
+  .infoNav[data-v-6e05b77a]{display:none!important}
+  .clockNav[data-v-6e05b77a]{float:none!important;position:relative;width:100%!important;text-align:left;z-index:2}
+  .clockNav ul[data-v-6e05b77a]{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;margin:0!important}
+  .clockNav li[data-v-6e05b77a]{display:block}
+  .clockNav_m[data-v-6e05b77a]{flex:1;width:auto!important;height:38px!important;line-height:38px!important;font-size:12px!important;text-align:left!important;white-space:nowrap}
+  .submitbutton.debao-analysis-button[data-v-6e05b77a]{flex:0 0 94px;width:94px!important;height:38px!important;line-height:36px!important;font-size:12px!important}
+  .subjectNav[data-v-6e05b77a]{position:static!important;width:100%!important;margin:2px 0 0!important;font-size:12px!important;line-height:22px!important;text-align:left!important}
+  .subjectNav .prname[data-v-6e05b77a]{display:none!important}
+  #subjectName[data-v-6e05b77a]{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+  #main[data-v-6e05b77a]{display:flex;flex-direction:column;width:100%!important;height:auto!important;min-height:calc(100dvh - 82px)!important;left:0!important}
+  #leftnav[data-v-6e05b77a]{float:none!important;width:100%!important;height:auto!important;max-height:none!important;padding:0!important;border:0!important;overflow:visible!important;background:#edf5fb}
+  #itembar[data-v-6e05b77a]{height:auto!important}
+  #papernav[data-v-6e05b77a]{width:100%!important;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  #papernav[data-v-6e05b77a]::-webkit-scrollbar{display:none}
+  #papernav ul[data-v-6e05b77a],#papernav ul li[data-v-6e05b77a]{width:max-content;min-width:100%}
+  #papernav ul li p[data-v-6e05b77a]{float:none!important;width:100%;height:34px!important;background:#d7e9f7!important}
+  #papernav ul li p a[data-v-6e05b77a]{width:auto!important;height:34px!important;padding:0 10px!important;line-height:34px!important;white-space:nowrap}
+  .subitem[data-v-6e05b77a]{display:flex!important;gap:6px;width:max-content;min-width:100%;padding:7px 10px;background:#edf5fb}
+  .subitem[data-v-6e05b77a] > span{display:block}
+  .subitem[data-v-6e05b77a] a{display:flex;align-items:center;justify-content:center;min-width:40px;height:40px;padding:0 8px;border:1px solid #a9c7df;background:#fff;text-decoration:none;font-size:14px!important}
+  .submark[data-v-6e05b77a]{margin:0!important;padding:0 10px 8px!important;font-size:0!important;line-height:0!important;color:transparent!important;background:#edf5fb}
+  .submark[data-v-6e05b77a] > div{margin-top:0!important;text-align:left!important}
+  .submark[data-v-6e05b77a] button{width:100%;min-height:42px;padding:8px 12px!important;font-size:13px!important;line-height:20px!important}
+  .middlebar[data-v-6e05b77a]{display:none!important}
+  #container[data-v-6e05b77a]{width:100%!important;height:auto!important;overflow:visible!important;padding-bottom:0}
+  #question_frame2[data-v-6e05b77a]{height:auto!important;overflow:visible!important}
+  #sjHtml[data-v-6e05b77a]{width:100%;padding:8px!important}
+  #sjHtml2[data-v-6e05b77a]{width:100%;min-width:0}
+  .paperTitle[data-v-6e05b77a]{position:relative;width:100%!important;height:40px!important;background:#f5f5f5!important;border:1px solid #b8cde0}
+  .paperTitle li[data-v-6e05b77a]{float:none!important;display:flex;align-items:flex-start;position:relative}
+  .paperTitle li a[data-v-6e05b77a]{width:auto!important;min-width:92px;height:38px!important;margin:0!important;padding:0 12px;background:none!important;line-height:38px!important;font-weight:700;cursor:pointer}
+  .theme[data-v-6e05b77a]{position:relative;z-index:20;float:none!important;min-width:68px;margin:40px 0 0 -92px!important;padding:10px 8px!important;border:1px solid #9fb7d0;background:#fff;font-size:12px!important;line-height:18px!important;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+  .itemGroupTitle[data-v-6e05b77a]{padding:12px!important;font-size:16px!important;line-height:1.55!important;background:#f6f8fa}
+  .zhuguanTitle .rightFloat[data-v-6e05b77a]{float:none!important;display:flex;gap:6px;width:100%;margin-top:8px;overflow-x:auto}
+  .zhuguanTitle .rightFloat a[data-v-6e05b77a]{float:none!important;flex:0 0 auto;width:auto!important;min-width:76px;height:40px!important;margin:0!important;padding:0 10px;background:linear-gradient(#fff,#d8edf9)!important;border:1px solid #7aa7ca;line-height:38px!important}
+  .zhuguanTitle .rightFloat a:last-child{display:none!important}
+  .zhuGuan[data-v-6e05b77a]{width:100%!important;height:auto!important;min-height:220px;max-height:46dvh;padding:0!important;overflow:auto!important;border:1px solid #9fb7f7;background:#fff}
+  .itemContext[data-v-6e05b77a]{min-height:210px;margin:0!important;padding:14px!important;font-size:16px!important;line-height:1.7!important}
+  .itemContext[data-v-6e05b77a] span{font-size:16px!important;line-height:1.7!important}
+  #answerArea[data-v-6e05b77a]{width:100%;margin-top:8px;background:#fff}
+  .partingTitle[data-v-6e05b77a]{display:flex;align-items:center;flex-wrap:wrap;gap:6px;width:100%!important;height:auto!important;min-height:48px;padding:6px;border-top:4px solid #a1b5fa;background:#f5f5f5}
+  .partingTitle li[data-v-6e05b77a]{float:none!important}
+  .partingTitle .bewrite[data-v-6e05b77a],.partingTitle .onwrite[data-v-6e05b77a]{display:flex;align-items:center;justify-content:center;min-width:58px;height:40px!important;margin:0!important;line-height:40px!important}
+  .partingTitle .tip[data-v-6e05b77a]{display:none!important}
+  .partingTitle .rightFloat[data-v-6e05b77a]{display:flex;flex:1 0 100%;gap:6px;width:100%!important;overflow-x:auto;padding-top:2px}
+  .partingTitle .rightFloat a[data-v-6e05b77a]{float:none!important;flex:0 0 auto;width:auto!important;min-width:58px;height:38px!important;margin:0!important;padding:0 8px;background:linear-gradient(#fff,#d8edf9)!important;border:1px solid #7aa7ca;line-height:36px!important}
+  .partingTitle .rightFloat a:last-child{display:none!important}
+  .windowOverflow[data-v-6e05b77a]{width:100%!important;height:auto!important}
+  .windowOverflow .itemArea[data-v-6e05b77a]{width:100%;margin:0!important;padding:12px!important;font-size:16px!important}
+  .zhuguanProblem[data-v-6e05b77a]{font-size:16px!important;line-height:1.65!important}
+  .spanBold[data-v-6e05b77a]{font-size:13px!important;line-height:1.6!important}
+  .textAreaWh[data-v-6e05b77a]{display:block;width:100%!important;height:42dvh!important;min-height:280px;padding:12px;border:1px solid #9fb7f7;font-family:"宋体","微软雅黑"!important;font-size:16px!important;line-height:1.65!important;resize:vertical!important}
+  #footer[data-v-6e05b77a]{position:sticky!important;left:0!important;bottom:0!important;z-index:700;display:flex!important;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;width:100%!important;height:auto!important;min-height:58px;margin:8px 0 0!important;padding:8px 8px max(8px,env(safe-area-inset-bottom));background:rgba(236,245,252,.97);border-top:1px solid #9fb7d0;line-height:normal!important;box-shadow:0 -4px 12px rgba(12,65,101,.12)}
+  #footer button[data-v-6e05b77a]{flex:1 1 72px;width:auto!important;min-width:66px;min-height:40px;height:40px!important;padding:0 8px!important;background:linear-gradient(#fff,#c6e2f5)!important;border:1px solid #0d5f9c!important;line-height:38px!important}
+  #footer button[data-v-6e05b77a]:disabled{opacity:.45}
+  #footer .debao-extra-footer-actions[data-v-6e05b77a]{display:flex!important;flex:1 0 100%;gap:6px;width:100%;margin:0!important}
+  #footer .debao-extra-footer-actions button[data-v-6e05b77a]{flex:1}
+  #footer[data-v-6e05b77a] > span:not(.debao-extra-footer-actions){display:flex;flex:1 1 152px;gap:6px}
+  #footer[data-v-6e05b77a] > span:not(.debao-extra-footer-actions) button{margin:0!important}
+  #footer[data-v-6e05b77a] > label{display:flex;align-items:center;justify-content:center;min-height:40px;padding:0 8px;white-space:nowrap}
+  .dialogOut.debao-resizable-dialog[data-v-6e05b77a]{position:fixed!important;inset:8px!important;width:auto!important;height:auto!important;min-width:0!important;min-height:0!important;border-radius:4px!important;box-shadow:0 8px 32px rgba(0,0,0,.32)!important}
+  .wind-head[data-v-6e05b77a]{height:44px!important;padding:0 10px!important;align-items:center;cursor:default!important}
+  .debao-analysis-dialog-body[data-v-6e05b77a]{top:44px!important;padding:12px!important;font-size:15px!important;-webkit-overflow-scrolling:touch}
+  .debao-analysis-tabs[data-v-6e05b77a]{position:sticky;top:-12px;z-index:2;padding:10px 0;background:#fff;overflow-x:auto;flex-wrap:nowrap!important}
+  .debao-analysis-tabs button[data-v-6e05b77a]{flex:0 0 auto;min-width:64px;height:40px!important}
+  .debao-resize-edge-right[data-v-6e05b77a],.debao-resize-edge-bottom[data-v-6e05b77a],.debao-resize-edge-left[data-v-6e05b77a],.debao-resize-edge-top[data-v-6e05b77a],.debao-resize-grip[data-v-6e05b77a],.debao-resize-grip-nw[data-v-6e05b77a],.debao-resize-grip-ne[data-v-6e05b77a],.debao-resize-grip-sw[data-v-6e05b77a],.border-row[data-v-6e05b77a],.border-col[data-v-6e05b77a],.horn[data-v-6e05b77a]{display:none!important}
+  .ui-popup[data-v-6e05b77a]{width:calc(100% - 24px)!important;max-width:420px!important;height:auto!important;max-height:calc(100dvh - 24px)!important}
+  .dialog_main[data-v-6e05b77a]{width:100%!important;height:auto!important;max-height:calc(100dvh - 24px)!important;overflow:auto}
+  .dialog_content[data-v-6e05b77a]{width:100%!important;padding:14px!important}
+  .dialog_button[data-v-6e05b77a]{display:flex;gap:8px;justify-content:center}
+  .dialog_button[data-v-6e05b77a] button{min-width:108px;min-height:42px}
+}
 `;
 type OfficialThemeId = 1 | 2 | 3 | 4 | 5;
 type OfficialSubjectivePanelHeight = "300px" | "100%";
@@ -1078,16 +1155,14 @@ const getRouteMockExamMode = (): MockExamMode => {
 const getDesktopOnlyFeatureForPage = (
   page: string,
   pathname: string,
-  questionTarget?: QuestionPracticeTarget,
+  _questionTarget?: QuestionPracticeTarget,
   mockMode?: MockExamMode,
 ): DesktopOnlyFeature | null => {
   if (page === "typingPractice" || pathname.startsWith("/user/typing-practice")) return "typingPractice";
   if (page === "lawPractice" || pathname.startsWith("/user/law-practice")) return "lawPractice";
-  if (page === "myQuestionBank" || pathname.startsWith("/question-bank/my")) return "myQuestionBank";
-  if (page === "questionBank" || pathname.startsWith("/question-bank/practice")) {
-    if (questionTarget?.source === "my" || questionTarget?.layout === "officialSubjective") return "myQuestionBank";
-    return null;
-  }
+  // The authorized question bank is available on phones. Its practice layouts
+  // have their own responsive rules below, so it should not fall back to the
+  // desktop-only notice used by the real mock-exam and typing flows.
   if (page === "subjectiveGrading" || pathname.startsWith("/user/mock-exams")) return "subjectiveReview";
   if (page === "mockExamHome" || pathname.startsWith("/user/objective-mock-exams")) return "objectiveMock";
   if (page === "mockExamRoom") return mockMode === "subjective" ? "subjectiveReview" : "objectiveMock";
@@ -5925,9 +6000,23 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                   <div {...OFFICIAL_EXAM_SCOPE} id="sjHtml2">
                     <div {...OFFICIAL_EXAM_SCOPE} className="paperTitle">
                       <li {...OFFICIAL_EXAM_SCOPE} id="themeLi" onMouseEnter={() => setOfficialThemeMenuOpen(true)} onMouseLeave={() => setOfficialThemeMenuOpen(false)}>
-                        <a {...OFFICIAL_EXAM_SCOPE} id="themeP">切换风格</a>
+                        <a
+                          {...OFFICIAL_EXAM_SCOPE}
+                          id="themeP"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setOfficialThemeMenuOpen((current) => !current)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setOfficialThemeMenuOpen((current) => !current);
+                            }
+                          }}
+                        >
+                          切换风格
+                        </a>
                         {([1, 2, 3, 4, 5] as OfficialThemeId[]).map((id) => (
-                          <div {...OFFICIAL_EXAM_SCOPE} className="theme" id={`theme${id}`} key={id} style={{ display: officialThemeMenuOpen ? "block" : "none" }} onClick={() => setOfficialThemeId(id)}>
+                          <div {...OFFICIAL_EXAM_SCOPE} className="theme" id={`theme${id}`} key={id} style={{ display: officialThemeMenuOpen ? "block" : "none" }} onClick={() => { setOfficialThemeId(id); setOfficialThemeMenuOpen(false); }}>
                             风格{["一", "二", "三", "四", "五"][id - 1]}
                           </div>
                         ))}
@@ -6201,8 +6290,8 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   return (
     <div className="debao-question-practice-page debao-themed-page" style={{ minHeight: "100vh", background: "#090e1a", display: "flex", flexDirection: "column" }}>
       {/* Breadcrumb */}
-      <div style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        <div style={{ maxWidth: 1340, margin: "0 auto", padding: "10px 36px", display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#3a5570" }}>
+      <div className="debao-question-practice-breadcrumb" style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+        <div className="debao-question-practice-breadcrumb-inner" style={{ maxWidth: 1340, margin: "0 auto", padding: "10px 36px", display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#3a5570" }}>
           <span style={{ cursor: "pointer", color: "#4e8ef7" }} onClick={() => { setPage("home"); setActiveNav(0); }}>首页</span>
           <ChevronRight size={12} />
           <span>题库练习</span>
@@ -6212,8 +6301,8 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
       </div>
 
       {practiceModal === "confirmReveal" && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(3,7,13,0.72)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 28 }} onClick={() => setPracticeModal(null)}>
-          <div style={{ width: 430, maxWidth: "calc(100vw - 56px)", background: "#0f1826", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, boxShadow: "0 24px 70px rgba(0,0,0,0.45)", padding: 24, textAlign: "center" }} onClick={event => event.stopPropagation()}>
+        <div className="debao-question-practice-modal-backdrop" style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(3,7,13,0.72)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 28 }} onClick={() => setPracticeModal(null)}>
+          <div className="debao-question-practice-modal" style={{ width: 430, maxWidth: "calc(100vw - 56px)", background: "#0f1826", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, boxShadow: "0 24px 70px rgba(0,0,0,0.45)", padding: 24, textAlign: "center" }} onClick={event => event.stopPropagation()}>
             <div style={{ width: 52, height: 52, borderRadius: 14, background: "rgba(201,151,62,0.12)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
               <Search size={24} color="#c9973e" />
             </div>
@@ -6227,12 +6316,12 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
         </div>
       )}
 
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "260px 1fr 280px", maxWidth: 1340, margin: "0 auto", width: "100%", padding: "0 36px", gap: 0 }}>
+      <div className="debao-question-practice-layout" style={{ flex: 1, display: "grid", gridTemplateColumns: "260px 1fr 280px", maxWidth: 1340, margin: "0 auto", width: "100%", padding: "0 36px", gap: 0 }}>
 
         {/* ── LEFT: Subject tree ── */}
-        <div style={{ borderRight: "1px solid rgba(255,255,255,0.05)", padding: "20px 0 40px", overflowY: "auto", height: "calc(100vh - 100px)", position: "sticky", top: 58 }}>
+        <div className="debao-question-practice-sidebar" style={{ borderRight: "1px solid rgba(255,255,255,0.05)", padding: "20px 0 40px", overflowY: "auto", height: "calc(100vh - 100px)", position: "sticky", top: 58 }}>
           {/* Mode selector */}
-          <div style={{ padding: "0 16px 16px" }}>
+          <div className="debao-question-practice-mode" style={{ padding: "0 16px 16px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
               {(["顺序练习", "随机练习", "只看错题", "收藏题目"] as const).map(m => (
                 <button key={m} onClick={() => changePracticeMode(m)} style={{ padding: "7px 4px", borderRadius: 9, fontSize: 11, border: `1px solid ${mode === m ? "rgba(201,151,62,0.4)" : "rgba(255,255,255,0.06)"}`, cursor: "pointer", background: mode === m ? "rgba(201,151,62,0.1)" : "transparent", color: mode === m ? "#c9973e" : "#3a5570", fontWeight: mode === m ? 600 : 400, transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
@@ -6249,13 +6338,14 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
           <div style={{ width: "100%", height: 1, background: "rgba(255,255,255,0.05)", marginBottom: 12 }} />
 
           {/* Subject tree */}
+          <div className="debao-question-practice-subject-list" style={{ display: "contents" }}>
           {activeBook?.subjects.map(sub => {
             const isOpen = expandedSubjects.includes(sub.id);
             const pct = sub.progress.progressPercent;
             return (
-              <div key={sub.id}>
+              <div className="debao-question-practice-subject" key={sub.id}>
                 {/* Subject row */}
-                <button onClick={() => toggleSubject(sub.id)}
+                <button className="debao-question-practice-subject-toggle" onClick={() => toggleSubject(sub.id)}
                   style={{ width: "100%", padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.025)"}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "none"}>
@@ -6274,7 +6364,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
 
                 {/* Chapters */}
                 {isOpen && (
-                    <button key={sub.id} onClick={() => selectSubject(sub)}
+                    <button className="debao-question-practice-subject-select" key={sub.id} onClick={() => selectSubject(sub)}
                       style={{ width: "100%", padding: "8px 16px 8px 34px", display: "flex", alignItems: "center", gap: 8, background: activeChapter?.subjectId === sub.id ? `${sub.color}10` : "none", border: "none", borderLeft: activeChapter?.subjectId === sub.id ? `2px solid ${sub.color}` : "2px solid transparent", cursor: "pointer", textAlign: "left", transition: "all 0.12s" }}
                       onMouseEnter={e => { if (activeChapter?.subjectId !== sub.id) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)"; }}
                       onMouseLeave={e => { if (activeChapter?.subjectId !== sub.id) (e.currentTarget as HTMLElement).style.background = "none"; }}>
@@ -6288,12 +6378,13 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
               </div>
             );
           })}
+          </div>
         </div>
 
         {/* ── CENTER: Question ── */}
-        <div style={{ padding: isSubjectiveQuestion ? "18px 20px 24px" : "24px 28px 48px", overflowY: isSubjectiveQuestion ? "hidden" : "auto", minHeight: "calc(100vh - 100px)", height: isSubjectiveQuestion ? "calc(100vh - 100px)" : "auto", display: "flex", flexDirection: "column" }}>
+        <div className="debao-question-practice-main" style={{ padding: isSubjectiveQuestion ? "18px 20px 24px" : "24px 28px 48px", overflowY: isSubjectiveQuestion ? "hidden" : "auto", minHeight: "calc(100vh - 100px)", height: isSubjectiveQuestion ? "calc(100vh - 100px)" : "auto", display: "flex", flexDirection: "column" }}>
           {/* Top bar */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: isSubjectiveQuestion ? 14 : 24, flexShrink: 0 }}>
+          <div className="debao-question-practice-topbar" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: isSubjectiveQuestion ? 14 : 24, flexShrink: 0 }}>
             <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#2e4260" }}>
               第 {qIndex + 1} / {apiQuestions.length} 题
             </span>
@@ -6318,14 +6409,14 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
           {!isSubjectiveQuestion ? (
             <>
               {/* Question text */}
-              <div style={{ background: "#0f1826", borderRadius: 16, padding: "24px 26px", marginBottom: 18, border: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="debao-question-practice-stem" style={{ background: "#0f1826", borderRadius: 16, padding: "24px 26px", marginBottom: 18, border: "1px solid rgba(255,255,255,0.06)" }}>
                 {q.material && <p style={{ fontSize: 13, color: "#8fa3be", lineHeight: 1.8, marginBottom: 14, whiteSpace: "pre-wrap" }}>{q.material}</p>}
                 <p style={{ fontSize: 15, color: "#dde4f0", lineHeight: 1.9, fontFamily: "'Noto Serif SC',serif", whiteSpace: "pre-wrap" }}>{q.stem}</p>
                 {q.typeLabel === "多选" && <div style={{ marginTop: 10, fontSize: 11, color: "#c9973e", display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 5, height: 5, borderRadius: "50%", background: "#c9973e", display: "inline-block" }} />多选题，请选择所有正确答案</div>}
               </div>
 
               {/* Options */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
+              <div className="debao-question-practice-options" style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
                 {q.options.map(opt => (
                   <button key={opt.key} onClick={() => selectOption(opt.key)} style={optionStyle(opt.key)}>
                     <div style={keyCircleStyle(opt.key)}>{opt.key}</div>
@@ -6362,7 +6453,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                     <p style={{ fontSize: 13, color: "#5a7898", lineHeight: 1.9 }}>{q.analysis || "本题暂未配置解析。"}</p>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div className="debao-question-practice-nav" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <button onClick={handlePrev} disabled={qIndex === 0}
                       style={{ padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: qIndex === 0 ? "not-allowed" : "pointer", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: qIndex === 0 ? "#1e3050" : "#5a7898", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                       <ChevronLeft size={15} /> 上一题
@@ -6376,8 +6467,8 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
               )}
             </>
           ) : (
-            <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: "minmax(160px, 0.42fr) minmax(260px, 0.58fr) auto", gap: 12 }}>
-              <div style={{ minHeight: 0, background: "#0f1826", borderRadius: 14, border: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div className="debao-question-practice-subjective" style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: "minmax(160px, 0.42fr) minmax(260px, 0.58fr) auto", gap: 12 }}>
+              <div className="debao-question-practice-material" style={{ minHeight: 0, background: "#0f1826", borderRadius: 14, border: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
                 <div style={{ padding: "13px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                   <div style={{ width: 3, height: 14, borderRadius: 2, background: "linear-gradient(to bottom,#4e8ef7,#4e8ef755)" }} />
                   <span style={{ fontSize: 13, fontWeight: 800, color: "#dde4f0" }}>题干材料</span>
@@ -6388,7 +6479,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                 </div>
               </div>
 
-              <div style={{ minHeight: 0, background: "#0f1826", borderRadius: 14, border: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <div className="debao-question-practice-answer" style={{ minHeight: 0, background: "#0f1826", borderRadius: 14, border: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
                 <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                   <div style={{ width: 3, height: 14, borderRadius: 2, background: "linear-gradient(to bottom,#1dc9a4,#1dc9a455)" }} />
                   <span style={{ fontSize: 13, fontWeight: 800, color: "#dde4f0", flexShrink: 0 }}>小问作答</span>
@@ -6447,7 +6538,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignItems: "center", flexShrink: 0 }}>
+              <div className="debao-question-practice-nav" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignItems: "center", flexShrink: 0 }}>
                 <button onClick={() => activeSubjectiveBlockIndex > 0 ? gotoSubjectiveBlock(-1) : handlePrev()} disabled={qIndex === 0 && activeSubjectiveBlockIndex === 0}
                   style={{ padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: qIndex === 0 && activeSubjectiveBlockIndex === 0 ? "not-allowed" : "pointer", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: qIndex === 0 && activeSubjectiveBlockIndex === 0 ? "#1e3050" : "#5a7898", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                   <ChevronLeft size={15} /> {activeSubjectiveBlockIndex > 0 ? "上一问" : "上一题"}
@@ -6462,9 +6553,9 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
         </div>
 
         {/* ── RIGHT: Answer sheet + stats ── */}
-        <div style={{ borderLeft: "1px solid rgba(255,255,255,0.05)", padding: "24px 20px 40px", overflowY: "auto", height: "calc(100vh - 100px)", position: "sticky", top: 58 }}>
+        <div className="debao-question-practice-aside" style={{ borderLeft: "1px solid rgba(255,255,255,0.05)", padding: "24px 20px 40px", overflowY: "auto", height: "calc(100vh - 100px)", position: "sticky", top: 58 }}>
           {/* Session stats */}
-          <div style={{ marginBottom: 20 }}>
+          <div className="debao-question-practice-stats" style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
               <div style={{ width: 3, height: 13, borderRadius: 2, background: "linear-gradient(to bottom,#c9973e,#c9973e55)" }} />
               <span style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 13, fontWeight: 600, color: "#dde4f0" }}>本次练习</span>
@@ -6492,7 +6583,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
           <div style={{ width: "100%", height: 1, background: "rgba(255,255,255,0.05)", marginBottom: 18 }} />
 
           {/* Answer sheet grid */}
-          <div>
+          <div className="debao-question-practice-answer-sheet">
             <div style={{ fontSize: 12, color: "#2e4260", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
               <span>答题卡</span>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", color: "#1e3050" }}>{answerSheetDone}/{answerSheetTotal}</span>

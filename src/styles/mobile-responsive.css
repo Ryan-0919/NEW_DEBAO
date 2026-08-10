@@ -2492,6 +2492,250 @@ textarea {
   }
 }
 
+@media (max-width: 767px) {
+  .debao-question-practice-page {
+    min-height: 100dvh !important;
+    overflow-x: hidden;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+
+  .debao-question-practice-breadcrumb {
+    position: sticky;
+    top: 0;
+    z-index: 38;
+    backdrop-filter: blur(14px);
+  }
+
+  .debao-question-practice-breadcrumb-inner {
+    max-width: none !important;
+    padding: 9px 12px !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+
+  .debao-question-practice-breadcrumb-inner::-webkit-scrollbar,
+  .debao-question-practice-subject-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .debao-question-practice-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 12px !important;
+  }
+
+  .debao-question-practice-sidebar {
+    position: static !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    padding: 12px 0 10px !important;
+    overflow: visible !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .debao-question-practice-mode {
+    padding: 0 0 10px !important;
+  }
+
+  .debao-question-practice-mode > div {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+  }
+
+  .debao-question-practice-mode button {
+    min-width: 0;
+    min-height: 40px;
+    padding: 6px 3px !important;
+    gap: 3px !important;
+    line-height: 1.2;
+  }
+
+  .debao-question-practice-sidebar > div[style*="height: 1px"] {
+    display: none !important;
+  }
+
+  .debao-question-practice-subject-list {
+    display: flex !important;
+    gap: 8px;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 1px 0 2px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .debao-question-practice-subject {
+    flex: 0 0 164px;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.025);
+    scroll-snap-align: start;
+  }
+
+  .debao-question-practice-subject-toggle,
+  .debao-question-practice-subject-select {
+    min-height: 42px;
+    padding: 8px 10px !important;
+  }
+
+  .debao-question-practice-subject-select {
+    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .debao-question-practice-main {
+    width: 100% !important;
+    min-width: 0;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 14px 0 20px !important;
+    overflow: visible !important;
+  }
+
+  .debao-question-practice-topbar {
+    align-items: flex-start !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .debao-question-practice-topbar > div:first-of-type {
+    order: 3;
+    flex: 1 0 100%;
+    min-width: 0;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .debao-question-practice-topbar > div:last-child {
+    margin-left: auto !important;
+  }
+
+  .debao-question-practice-topbar button {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .debao-question-practice-stem {
+    padding: 16px !important;
+    margin-bottom: 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .debao-question-practice-stem p {
+    font-size: 15px !important;
+    line-height: 1.85 !important;
+  }
+
+  .debao-question-practice-options {
+    gap: 8px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .debao-question-practice-options > button {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 13px !important;
+    font-size: 14px !important;
+    line-height: 1.65 !important;
+  }
+
+  .debao-question-practice-subjective {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    gap: 10px !important;
+  }
+
+  .debao-question-practice-material {
+    min-height: 240px !important;
+    max-height: 52dvh;
+  }
+
+  .debao-question-practice-answer {
+    min-height: 430px !important;
+  }
+
+  .debao-question-practice-answer > div:first-child {
+    align-items: flex-start !important;
+    flex-wrap: wrap !important;
+  }
+
+  .debao-question-practice-answer > div:first-child > span:last-child {
+    width: 100%;
+  }
+
+  .debao-question-practice-answer textarea {
+    min-height: 220px !important;
+    font-size: 16px !important;
+  }
+
+  .debao-question-practice-nav {
+    position: sticky;
+    bottom: calc(62px + env(safe-area-inset-bottom));
+    z-index: 24;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(9, 14, 26, 0.92);
+    backdrop-filter: blur(14px);
+  }
+
+  .debao-question-practice-nav button {
+    min-height: 42px;
+  }
+
+  .debao-question-practice-aside {
+    position: static !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    padding: 18px 0 24px !important;
+    overflow: visible !important;
+    border-left: 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .debao-question-practice-stats > div:nth-child(2) {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .debao-question-practice-stats > div:nth-child(2) > div {
+    padding: 9px 8px !important;
+  }
+
+  .debao-question-practice-stats > div:nth-child(2) > div > div:last-child {
+    font-size: 15px !important;
+  }
+
+  .debao-question-practice-answer-sheet > div:nth-child(2) {
+    grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+  }
+
+  .debao-question-practice-modal-backdrop {
+    align-items: flex-end !important;
+    padding: 12px !important;
+  }
+
+  .debao-question-practice-modal {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom)) !important;
+    border-radius: 14px !important;
+  }
+}
+
 @media (max-width: 1023px) {
   .review-shell {
     display: flex !important;
