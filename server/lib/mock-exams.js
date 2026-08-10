@@ -2292,9 +2292,14 @@ export const startMockExamRecord = async ({ db, paperId, userId, currentTime = n
 };
 
 export const saveMockExamAnswer = async ({ db, recordId, userId, questionId, answerKeys, answerText, subQuestionId, currentTime = new Date() }) => {
-  const currentRecord = await getMockExamRecordForUser({ db, recordId, userId, currentTime, finalizeExpired: true });
+  // A delayed autosave must never finalize the record before the client can send
+  // its complete final snapshot through the submit endpoint.
+  const currentRecord = await getMockExamRecordForUser({ db, recordId, userId, currentTime, finalizeExpired: false });
 
   assertMockExamRecordInProgress(currentRecord);
+  if (getRemainingSeconds(currentRecord, currentTime) <= 0) {
+    throw createHttpError("考试时间已到，正在提交最终答案", 409);
+  }
 
   return db.$transaction(async (tx) => {
     const record = await getRecordWithPaper(tx, recordId);

@@ -303,6 +303,7 @@ test("saveMockExamAnswer 在交卷事务开始后发现记录已提交时应阻�
       questionId: "question_1",
       answerText: "新的主观题答案",
       subQuestionId: "sub_1",
+      currentTime: new Date("2026-07-05T10:00:30.000Z"),
     }),
     (error) => {
       assert.equal(error?.statusCode, 409);
@@ -356,4 +357,43 @@ test("saveMockExamAnswer should reject stale autosave when record becomes submit
       return true;
     },
   );
+});
+
+test("saveMockExamAnswer does not auto-submit an expired record before the final answer snapshot arrives", async () => {
+  const currentRecord = {
+    ...buildRecord("in_progress"),
+    allottedSeconds: 60,
+    startedAt: new Date("2026-08-10T10:00:00.000Z"),
+  };
+  let transactionCalled = false;
+
+  const db = {
+    course: { findMany: async () => [] },
+    systemConfig: { findUnique: async () => null },
+    mockExamPaper: { findUnique: async () => ({ id: "paper_1", status: "published", permissionRequired: false }) },
+    mockExamRecord: { findUnique: async () => currentRecord },
+    $transaction: async () => {
+      transactionCalled = true;
+      throw new Error("expired autosave must not enter a write transaction");
+    },
+  };
+
+  await assert.rejects(
+    saveMockExamAnswer({
+      db,
+      recordId: "record_1",
+      userId: "user_1",
+      questionId: "question_1",
+      subQuestionId: "sub_1",
+      answerText: "late autosave",
+      currentTime: new Date("2026-08-10T10:01:00.000Z"),
+    }),
+    (error) => {
+      assert.equal(error?.statusCode, 409);
+      assert.match(error?.message ?? "", /考试时间已到/);
+      return true;
+    },
+  );
+
+  assert.equal(transactionCalled, false);
 });

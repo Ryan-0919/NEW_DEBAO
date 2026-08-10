@@ -16,7 +16,6 @@ import { MockExamQuestion, MockExamRecordDetail, MockExamSubjectiveSubQuestion, 
 import {
   shouldStartMockExamSubmit,
   trackMockExamSaveTask,
-  waitForMockExamSaveTasks,
 } from "../../lib/mockExamSubmitHelpers.mjs";
 import { getUserPhone } from "../../lib/user-session";
 import {
@@ -41,7 +40,6 @@ import { getMockExamHomePath } from "./mockExamLaunchShared";
 import { DebaoLawSearchPage } from "./DebaoLawSearchPage";
 
 const SAVE_DELAY = 600;
-const SAVE_TASK_WAIT_TIMEOUT_MS = 3500;
 const UNDO_HISTORY_LIMIT = 120;
 const VIEW_KEY = "mock-exam-official-view";
 const MARK_KEY_PREFIX = "mock-exam-official-marks:";
@@ -625,7 +623,7 @@ export function MockExamRoom() {
           }
           if (pendingRef.current[key]?.text === entry.text) delete pendingRef.current[key];
         } catch (error) {
-          if (!submittingRef.current && !skipPauseRef.current) {
+          if (!submittingRef.current && !skipPauseRef.current && recordRef.current?.status === "in_progress") {
             toast.error(error instanceof Error ? error.message : "主观题答案保存失败");
           }
           throw error;
@@ -634,7 +632,7 @@ export function MockExamRoom() {
     });
   };
 
-  const flushPending = async (options?: { persistPending?: boolean; timeoutMs?: number }) => {
+  const captureSubjectiveSubmitAnswers = (active: MockExamRecordDetail) => {
     commitAnswerTextarea({ force: true });
     for (const key of Object.keys(timersRef.current)) {
       if (timersRef.current[key]) {
@@ -642,34 +640,22 @@ export function MockExamRoom() {
         delete timersRef.current[key];
       }
     }
-    const firstWaitCompleted = await waitForMockExamSaveTasks(inFlightSaveTasksRef.current, {
-      timeoutMs: options?.timeoutMs,
-      clearOnTimeout: Boolean(options?.timeoutMs),
-    });
-    if (options?.persistPending === false) return firstWaitCompleted;
-    for (const [key, entry] of Object.entries(pendingRef.current)) {
-      await persistSubjective(entry);
-    }
-    const finalWaitCompleted = await waitForMockExamSaveTasks(inFlightSaveTasksRef.current, {
-      timeoutMs: options?.timeoutMs,
-      clearOnTimeout: Boolean(options?.timeoutMs),
-    });
-    return firstWaitCompleted && finalWaitCompleted;
+    return buildSubjectiveSubmitAnswers(active, draftRef.current);
   };
 
   const handleSubmit = async (isAuto = false) => {
     const active = recordRef.current;
     if (!shouldStartMockExamSubmit({ hasActiveRecord: Boolean(active), submitting, submittingRefCurrent: submittingRef.current })) return;
+    // Take the answer snapshot before any asynchronous request can race with it.
+    const subjectiveAnswers = captureSubjectiveSubmitAnswers(active);
     submittingRef.current = true;
     setSubmitting(true);
     try {
-      const saveCompleted = await flushPending({ persistPending: false, timeoutMs: SAVE_TASK_WAIT_TIMEOUT_MS });
-      if (!saveCompleted) {
-        toast.warning("自动保存响应较慢，正在直接提交当前答案");
-      }
       const detail = await mockApi.submitMockExam(active.id, {
-        subjectiveAnswers: buildSubjectiveSubmitAnswers(active, draftRef.current),
+        subjectiveAnswers,
       });
+      recordRef.current = detail;
+      setRecord(detail);
       toast.success(isAuto ? "考试时间已到，系统已自动交卷" : "交卷成功");
       navigateAfterSubmit(detail.id, detail.reviewWorkflowStatus, detail.reviewEnabled);
     } catch (error) {
@@ -687,6 +673,7 @@ export function MockExamRoom() {
     value: string,
     options?: { skipHistory?: boolean },
   ) => {
+    if (submittingRef.current) return;
     const key = buildDraftKey(questionId, subQuestion.id);
     const previous = draftRef.current[key] ?? subQuestion.answer ?? "";
     if (previous === value) return;
@@ -1353,6 +1340,7 @@ export function MockExamRoom() {
                                 id="textArea02"
                                 ref={answerTextareaRef}
                                 defaultValue={currentSubText}
+                                disabled={submitting}
                                 onMouseUp={handleQuestionMouseUp}
                                 onCompositionStart={() => { answerComposingRef.current = true; }}
                                 onCompositionEnd={(event) => {
