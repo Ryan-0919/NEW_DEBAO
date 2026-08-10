@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, RefreshCw } from "lucide-react";
+import { ArrowRight, CalendarDays, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
 import { AdminMockExamReviewGlobalRecord, AdminMockExamReviewerWorkload, adminMockExamReviewService } from "../../services/adminMockExamReviewService";
@@ -10,6 +10,22 @@ const getReviewerIdFromUrl = () => {
   return new URLSearchParams(window.location.search).get("reviewerId") ?? "";
 };
 
+const formatDateInputValue = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const formatStatsDateLabels = (value: string) => {
+  const [year, month, day] = value.split("-").map(Number);
+  const today = formatDateInputValue();
+  return {
+    date: value === today ? "今日" : `${month}月${day}日`,
+    month: value.slice(0, 7) === today.slice(0, 7) ? "本月" : `${year}年${month}月`,
+  };
+};
+
 export function ReviewTeacherAssignmentsPage() {
   const [reviewers, setReviewers] = useState<AdminMockExamReviewerWorkload[]>([]);
   const [selectedReviewerId, setSelectedReviewerId] = useState(() => getReviewerIdFromUrl());
@@ -17,6 +33,8 @@ export function ReviewTeacherAssignmentsPage() {
   const [publishedRecords, setPublishedRecords] = useState<AdminMockExamReviewGlobalRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [recordsLoading, setRecordsLoading] = useState(false);
+  const [statsDate, setStatsDate] = useState(() => formatDateInputValue());
+  const statsDateLabels = useMemo(() => formatStatsDateLabels(statsDate), [statsDate]);
 
   const selectedReviewer = useMemo(
     () => reviewers.find((item) => item.id === selectedReviewerId) ?? null,
@@ -31,10 +49,10 @@ export function ReviewTeacherAssignmentsPage() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
   };
 
-  const loadReviewers = async () => {
+  const loadReviewers = async (date = statsDate) => {
     setLoading(true);
     try {
-      const payload = await adminMockExamReviewService.getReviewers();
+      const payload = await adminMockExamReviewService.getReviewers({ date });
       setReviewers(payload);
       setSelectedReviewerId((current) => current || payload[0]?.id || "");
     } catch (error) {
@@ -76,8 +94,8 @@ export function ReviewTeacherAssignmentsPage() {
   };
 
   useEffect(() => {
-    void loadReviewers();
-  }, []);
+    void loadReviewers(statsDate);
+  }, [statsDate]);
 
   useEffect(() => {
     syncReviewerIdToUrl(selectedReviewerId);
@@ -105,7 +123,7 @@ export function ReviewTeacherAssignmentsPage() {
     try {
       await adminMockExamReviewService.unassignReviewer(record.id);
       toast.success("试卷已收回到公共池");
-      await Promise.all([loadReviewers(), loadReviewerRecords(selectedReviewerId)]);
+      await Promise.all([loadReviewers(statsDate), loadReviewerRecords(selectedReviewerId)]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "收回试卷失败");
     }
@@ -118,20 +136,40 @@ export function ReviewTeacherAssignmentsPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">批改老师分配</p>
             <h1 className="mt-2 text-[26px] font-semibold leading-tight text-slate-950">批改老师</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">查看所有兼职批改老师的实时批改统计，点进某位老师可查看其名下试卷，并按已批改 / 未批改分类。</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">选择日期查看每位兼职批改老师当日及当月的完成量，点进老师可继续查看其名下全部已批改 / 未批改试卷。</p>
           </div>
-          <Button
-            className="h-11 rounded-full border-slate-200 bg-white px-5 text-slate-700 hover:bg-slate-50"
-            variant="outline"
-            disabled={loading || recordsLoading}
-            onClick={() => {
-              void loadReviewers();
-              if (selectedReviewerId) void loadReviewerRecords(selectedReviewerId);
-            }}
-          >
-            <RefreshCw className={`size-4 ${loading || recordsLoading ? "animate-spin" : ""}`} />
-            刷新
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+              <CalendarDays className="size-4 text-slate-400" />
+              <span>统计日期</span>
+              <input
+                type="date"
+                value={statsDate}
+                onChange={(event) => setStatsDate(event.target.value || formatDateInputValue())}
+                className="bg-transparent text-sm text-slate-900 outline-none"
+              />
+            </label>
+            <Button
+              className="h-11 rounded-lg border-slate-200 bg-white px-4 text-slate-700 hover:bg-slate-50"
+              variant="outline"
+              disabled={statsDate === formatDateInputValue()}
+              onClick={() => setStatsDate(formatDateInputValue())}
+            >
+              今天
+            </Button>
+            <Button
+              className="h-11 rounded-lg border-slate-200 bg-white px-4 text-slate-700 hover:bg-slate-50"
+              variant="outline"
+              disabled={loading || recordsLoading}
+              onClick={() => {
+                void loadReviewers(statsDate);
+                if (selectedReviewerId) void loadReviewerRecords(selectedReviewerId);
+              }}
+            >
+              <RefreshCw className={`size-4 ${loading || recordsLoading ? "animate-spin" : ""}`} />
+              刷新
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -158,8 +196,8 @@ export function ReviewTeacherAssignmentsPage() {
                 <ArrowRight className="size-4 text-slate-400" />
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2">
-                <ReviewMetricCard label="近1小时" value={reviewer.lastHourCount} />
-                <ReviewMetricCard label="今日" value={reviewer.todayCount} />
+                <ReviewMetricCard label={statsDateLabels.date} value={reviewer.selectedDateCount} />
+                <ReviewMetricCard label={statsDateLabels.month} value={reviewer.selectedMonthCount} />
                 <ReviewMetricCard label="总量" value={reviewer.totalCount} />
                 <ReviewMetricCard label="待处理" value={reviewer.assignedPendingCount} />
               </div>
@@ -171,10 +209,11 @@ export function ReviewTeacherAssignmentsPage() {
       {selectedReviewer ? (
         <>
           <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
               <ReviewMetricCard label="批改老师" value={selectedReviewer.name || selectedReviewer.account} />
               <ReviewMetricCard label="近1小时" value={selectedReviewer.lastHourCount} tone="blue" />
-              <ReviewMetricCard label="今日" value={selectedReviewer.todayCount} tone="violet" />
+              <ReviewMetricCard label={statsDateLabels.date} value={selectedReviewer.selectedDateCount} tone="violet" />
+              <ReviewMetricCard label={statsDateLabels.month} value={selectedReviewer.selectedMonthCount} tone="blue" />
               <ReviewMetricCard label="总量" value={selectedReviewer.totalCount} tone="emerald" />
               <ReviewMetricCard label="当前待处理" value={selectedReviewer.assignedPendingCount} tone="amber" />
             </div>

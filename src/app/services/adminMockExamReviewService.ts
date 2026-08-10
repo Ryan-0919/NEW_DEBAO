@@ -10,6 +10,9 @@ export type AdminMockExamReviewerWorkload = {
   assignedPendingCount: number;
   lastHourCount: number;
   todayCount: number;
+  monthCount: number;
+  selectedDateCount: number;
+  selectedMonthCount: number;
   totalCount: number;
   claimedCount: number;
   lastPublishedAt: string;
@@ -261,7 +264,8 @@ export const adminMockExamReviewService = {
     params: { page?: number; pageSize?: number; status?: string; keyword?: string; assignedReviewerId?: string } = {},
   ) => adminRequest<AdminMockExamReviewRecordPage>(`/api/admin/mock-exam-reviews/papers/${encodeURIComponent(paperId)}/records${buildAdminQueryString(params)}`),
   getRecord: (recordId: string) => adminRequest<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}`),
-  getReviewers: () => adminRequest<AdminMockExamReviewerWorkload[]>("/api/admin/mock-exam-reviews/reviewers"),
+  getReviewers: (params: { date?: string } = {}) =>
+    adminRequest<AdminMockExamReviewerWorkload[]>(`/api/admin/mock-exam-reviews/reviewers${buildAdminQueryString(params)}`),
   assignReviewer: (recordId: string, reviewerId: string) =>
     adminPostJson<AdminMockExamReviewDetail>(`/api/admin/mock-exam-reviews/records/${encodeURIComponent(recordId)}/assign-reviewer`, { reviewerId }),
   batchAssignReviewer: (recordIds: string[], reviewerId: string) =>

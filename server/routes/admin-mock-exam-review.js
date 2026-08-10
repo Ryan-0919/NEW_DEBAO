@@ -60,6 +60,27 @@ const assertReviewAssignmentManager = (req) => {
   throw error;
 };
 
+const parseReviewerStatsDate = (value, fallback = new Date()) => {
+  const normalized = `${value ?? ""}`.trim();
+  if (!normalized) return fallback;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  if (!match) {
+    const error = new Error("统计日期格式不正确");
+    error.statusCode = 400;
+    throw error;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) {
+    const error = new Error("统计日期不存在");
+    error.statusCode = 400;
+    throw error;
+  }
+  return parsed;
+};
+
 const buildAssignedReviewerFilter = (req) =>
   isPartTimeReviewerRole(getAdminRole(req)) ? { assignedReviewerId: req.auth.adminId } : {};
 
@@ -879,6 +900,7 @@ adminMockExamReviewRouter.get("/reviewers", async (req, res) => {
   try {
     assertReviewAssignmentManager(req);
     const currentTime = new Date();
+    const selectedDate = parseReviewerStatsDate(req.query?.date, currentTime);
     const reviewers = await prisma.admin.findMany({
       where: { role: "part_time_reviewer" },
       orderBy: [{ name: "asc" }, { account: "asc" }],
@@ -908,7 +930,7 @@ adminMockExamReviewRouter.get("/reviewers", async (req, res) => {
         : [];
 
     const items = reviewers.map((reviewer) => {
-      const stats = summarizeReviewerStats({ reviewerId: reviewer.id, currentTime, records });
+      const stats = summarizeReviewerStats({ reviewerId: reviewer.id, currentTime, selectedDate, records });
       const claimedCount = records.filter((record) => {
         const lockExpiresAt = record.manualReviewLockExpiresAt ? new Date(record.manualReviewLockExpiresAt) : null;
         return (
@@ -931,6 +953,9 @@ adminMockExamReviewRouter.get("/reviewers", async (req, res) => {
         assignedPendingCount: stats.assignedPendingCount,
         lastHourCount: stats.lastHourCount,
         todayCount: stats.todayCount,
+        monthCount: stats.monthCount,
+        selectedDateCount: stats.selectedDateCount,
+        selectedMonthCount: stats.selectedMonthCount,
         totalCount: stats.totalCount,
         claimedCount,
         lastPublishedAt: lastPublishedAtMs > 0 ? formatDateTime(new Date(lastPublishedAtMs)) : "",

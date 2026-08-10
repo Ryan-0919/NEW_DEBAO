@@ -120,6 +120,12 @@ test("老师统计按最终 publishedReviewer 归属和当前分配待处理量�
       },
       {
         assignedReviewerId: "reviewer_a",
+        publishedReviewerId: "reviewer_a",
+        publishedAt: "2026-06-30T18:00:00+08:00",
+        reviewWorkflowStatus: "published",
+      },
+      {
+        assignedReviewerId: "reviewer_a",
         publishedReviewerId: null,
         publishedAt: null,
         reviewWorkflowStatus: "manual_pending",
@@ -136,7 +142,30 @@ test("老师统计按最终 publishedReviewer 归属和当前分配待处理量�
   assert.deepEqual(stats, {
     lastHourCount: 1,
     todayCount: 2,
-    totalCount: 2,
+    monthCount: 2,
+    selectedDateCount: 2,
+    selectedMonthCount: 2,
+    totalCount: 3,
     assignedPendingCount: 2,
   });
+});
+
+test("老师统计支持选择历史日期并计算对应自然日和自然月", () => {
+  const stats = summarizeReviewerStats({
+    reviewerId: "reviewer_a",
+    currentTime: new Date("2026-08-10T12:00:00+08:00"),
+    selectedDate: new Date("2026-07-15T12:00:00+08:00"),
+    records: [
+      { publishedReviewerId: "reviewer_a", publishedAt: "2026-07-15T08:00:00+08:00", reviewWorkflowStatus: "published" },
+      { publishedReviewerId: "reviewer_a", publishedAt: "2026-07-15T20:00:00+08:00", reviewWorkflowStatus: "published" },
+      { publishedReviewerId: "reviewer_a", publishedAt: "2026-07-16T09:00:00+08:00", reviewWorkflowStatus: "published" },
+      { publishedReviewerId: "reviewer_a", publishedAt: "2026-08-10T09:00:00+08:00", reviewWorkflowStatus: "published" },
+    ],
+  });
+
+  assert.equal(stats.selectedDateCount, 2);
+  assert.equal(stats.selectedMonthCount, 3);
+  assert.equal(stats.todayCount, 1);
+  assert.equal(stats.monthCount, 1);
+  assert.equal(stats.totalCount, 4);
 });
