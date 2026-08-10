@@ -4833,6 +4833,7 @@ type Question = {
 type QuestionPracticeModeLabel = "顺序练习" | "随机练习" | "只看错题" | "收藏题目";
 type QuestionPracticeTarget = { bookId?: string; subjectId?: string; chapterId?: string; name: string; paperType?: "objective" | "subjective"; layout?: "officialSubjective"; source?: "my" | "public" } | null;
 type QuestionPracticeRouteState = { mode: QuestionPracticeModeLabel; chapter: QuestionPracticeTarget; questionId?: string };
+const QUESTION_BANK_PRACTICE_ITEM_LIMIT = 1000;
 
 const parseQuestionPracticeMode = (raw: string | null): QuestionPracticeModeLabel => {
   if (raw === "random" || raw === "随机练习") return "随机练习";
@@ -5210,7 +5211,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
         const items = await questionBankService.getItems(activeBookId, {
           subjectId: activeChapter?.subjectId,
           mode: mapQuestionPracticeMode(mode),
-          limit: 100,
+          limit: QUESTION_BANK_PRACTICE_ITEM_LIMIT,
         });
         if (!active) return;
         const restoredIndex = restoreQuestionId ? items.findIndex(item => item.id === restoreQuestionId) : 0;

@@ -1923,10 +1923,12 @@ const questionBankModeFromQuery = (value) => {
   return "sequence";
 };
 
+const QUESTION_BANK_ITEM_LIMIT_MAX = 1000;
+
 const parseQuestionBankLimit = (value, fallback = 50) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return fallback;
-  return Math.max(1, Math.min(200, Math.floor(numeric)));
+  return Math.max(1, Math.min(QUESTION_BANK_ITEM_LIMIT_MAX, Math.floor(numeric)));
 };
 
 const getQuestionBankColor = (index = 0) => QUESTION_BANK_COLORS[index % QUESTION_BANK_COLORS.length];
