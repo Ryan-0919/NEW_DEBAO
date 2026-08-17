@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { AppLogo } from "../../components/branding/AppLogo";
 import { Button } from "../../components/ui/button";
 
 const MOBILE_BREAKPOINT = 768;
@@ -142,8 +141,7 @@ export function DesktopOnlyNotice({
           <div className="h-px w-full bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.35),transparent)]" />
 
           <div className="relative p-5 md:p-8">
-            <div className="relative flex items-center justify-between gap-3">
-              <AppLogo compact className="[&_p:first-of-type]:text-white [&_p:last-of-type]:text-white/40" />
+            <div className="relative flex items-center justify-end gap-3">
               <div
                 className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold tracking-[0.18em]"
                 style={{ borderColor: `${config.accent}33`, background: `${config.accent}16`, color: config.accent }}

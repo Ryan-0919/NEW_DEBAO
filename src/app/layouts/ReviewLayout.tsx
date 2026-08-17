@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
 import { AlertTriangle, BarChart3, FileText, ListChecks, LogOut, RefreshCw, ShieldCheck, UserCheck, Users } from "lucide-react";
-import { AppLogo } from "../components/branding/AppLogo";
 import { Button } from "../components/ui/button";
 import { clearAdminSession, getAdminAccount, getAdminRole, getAdminToken, isReviewManagementRole } from "../lib/admin-session";
 
@@ -64,8 +63,7 @@ export function ReviewLayout({ children, pageTitle = "批改后台", pageDescrip
     <div className="review-shell flex h-screen overflow-hidden bg-[#f3f6fb] text-slate-900">
       <aside className="flex h-screen w-[240px] shrink-0 flex-col border-r border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-5 py-5">
-          <AppLogo />
-          <div className="mt-5 flex items-center gap-3">
+          <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
               <ShieldCheck className="size-5" />
             </div>

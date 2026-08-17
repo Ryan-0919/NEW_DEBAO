@@ -5,7 +5,6 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Toaster } from "../../components/ui/sonner";
-import { AppLogo } from "../../components/branding/AppLogo";
 import { saveAdminSession } from "../../lib/admin-session";
 import { adminAuthService } from "../../services/adminAuthService";
 
@@ -38,8 +37,7 @@ export function AdminLogin() {
       <Toaster richColors position="top-center" />
       <form onSubmit={handleSubmit} className="w-full max-w-[420px] rounded-lg border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/60">
         <div className="mb-7">
-          <AppLogo />
-          <div className="mt-7 flex items-center gap-3">
+          <div className="flex items-center gap-3">
             <div className="grid size-11 place-items-center rounded-lg bg-blue-50 text-blue-700">
               <LockKeyhole className="size-5" />
             </div>

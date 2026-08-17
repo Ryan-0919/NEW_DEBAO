@@ -55,7 +55,6 @@ import type { LegacyUser, UserStudySummary } from "./services/userService";
 import { shopService } from "./services/shopService";
 import type { ShopConfig, ShopOrder, ShopProduct } from "./services/shopService";
 import { mockApi, type UserHomeConfig } from "./lib/mockData";
-import { AppLogo } from "./components/branding/AppLogo";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 const buildApiUrl = (path = "") => (path && API_BASE_URL && path.startsWith("/") ? `${API_BASE_URL}${path}` : path);
@@ -1435,13 +1434,6 @@ function Nav({ activeNav, setActiveNav, setPage, currentUser, studySummary, home
   return (
     <header className="debao-nav-shell" style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(7,12,24,0.96)", backdropFilter: "blur(24px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
       <div className="debao-nav-inner" style={{ maxWidth: 1340, margin: "0 auto", padding: "0 36px", height: 58, display: "flex", alignItems: "center", gap: 40 }}>
-        <div
-          className="debao-nav-brand"
-          style={{ display: "flex", alignItems: "center", gap: 11, flexShrink: 0, cursor: "pointer" }}
-          onClick={() => { setActiveNav(0); setPage("home"); }}
-        >
-          <AppLogo compact className="debao-nav-logo" />
-        </div>
         <nav className="debao-nav-tabs" style={{ display: "flex", gap: 2 }}>
           {navItems.map((item, i) => {
             const NavIcon = navIcons[i] ?? Circle;
@@ -1676,10 +1668,6 @@ function AuthPage({
             <X size={16} />
           </button>
         )}
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
-          <AppLogo className="debao-auth-logo" />
-        </div>
-
         <div style={{ marginBottom: 22 }}>
           <h1 style={{ fontFamily: "'Noto Serif SC',serif", fontSize: 24, color: "#dde4f0", margin: "0 0 8px" }}>{title}</h1>
           <p style={{ fontSize: 13, lineHeight: 1.8, color: "#5a7898", margin: 0 }}>{authSubtitle || subtitle}</p>
@@ -1933,12 +1921,6 @@ function HomePage({
           </aside>
         );
       })}
-      <div className="debao-mobile-home-head">
-        <div className="debao-mobile-home-titlebar">
-          <AppLogo compact className="debao-mobile-home-logo" />
-        </div>
-      </div>
-
       {/* Banner */}
       <div className="debao-home-hero-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 18, alignItems: "stretch" }}>
         <div
@@ -9667,7 +9649,6 @@ function ImageTargetPreviewPage() {
     <div className="debao-image-preview-page" style={{ minHeight: "100vh", background: "#0b1020", color: "#dde4f0", fontFamily: "'Noto Sans SC',sans-serif", display: "flex", flexDirection: "column" }}>
       <header style={{ height: 64, padding: "0 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, background: "rgba(11,16,32,0.92)", backdropFilter: "blur(12px)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-          <AppLogo compact />
           <span style={{ fontSize: 14, color: "#8fa3be", whiteSpace: "nowrap" }}>图片预览</span>
         </div>
         <button

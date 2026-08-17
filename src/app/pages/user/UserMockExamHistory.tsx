@@ -2,7 +2,6 @@ import { BookOpenText, FileText, PenSquare, Sparkles } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { AppLogo } from "../../components/branding/AppLogo";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { cn } from "../../components/ui/utils";
@@ -181,10 +180,6 @@ export function UserMockExamHistory() {
       <div className="pointer-events-none absolute left-1/2 top-[320px] h-[420px] w-[920px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.12),transparent_62%)] blur-3xl" />
 
       <div className="relative mx-auto max-w-[1320px] px-5 pb-10 pt-5 md:px-8 md:pt-8 xl:px-10">
-        <div className="mb-5 md:hidden">
-          <AppLogo compact className="text-white" />
-        </div>
-
         <motion.section
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}

@@ -39,7 +39,6 @@ import {
   isUserManagementRole,
 } from "../lib/admin-session";
 import { Button } from "../components/ui/button";
-import { AppLogo } from "../components/branding/AppLogo";
 
 type AdminLayoutProps = {
   children: ReactNode;
@@ -182,8 +181,7 @@ export function AdminLayout({ children, pageTitle = "后台管理", pageDescript
       {mobileMenuOpen ? (
         <div className="fixed inset-0 z-40 bg-slate-950/35 lg:hidden" onClick={() => setMobileMenuOpen(false)}>
           <aside className="flex h-full w-[min(320px,calc(100vw-40px))] flex-col bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <AppLogo />
+            <div className="flex items-center justify-end border-b border-slate-200 px-5 py-4">
               <Button variant="ghost" size="icon" className="text-slate-600 hover:bg-slate-100 hover:text-slate-950" onClick={() => setMobileMenuOpen(false)} aria-label="关闭后台导航">
                 <X className="size-5" />
               </Button>
@@ -206,8 +204,7 @@ export function AdminLayout({ children, pageTitle = "后台管理", pageDescript
 
       <aside className="hidden h-screen w-[272px] shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
         <div className="border-b border-slate-200 px-6 py-6">
-          <AppLogo />
-          <div className="mt-5 flex items-center gap-3">
+          <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
               <ShieldCheck className="size-5" />
             </div>

@@ -1,6 +1,5 @@
 import { ClipboardCheck, FileText, Home, Library, UserRound } from "lucide-react";
 import { NavLink, Navigate, Outlet, useLocation } from "react-router";
-import { AppLogo } from "../components/branding/AppLogo";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { cn } from "../components/ui/utils";
 import { getUserAvatarUrl, getUserDisplayName, getUserToken } from "../lib/user-session";
@@ -112,8 +111,6 @@ export function UserLayout() {
           )}
         >
           <div className="mx-auto flex h-[76px] max-w-7xl items-center gap-5 px-6 xl:px-8">
-            <AppLogo compact className={cn("shrink-0", isDarkShell ? "text-white" : "")} />
-
             <nav
               className={cn(
                 "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full p-1",
