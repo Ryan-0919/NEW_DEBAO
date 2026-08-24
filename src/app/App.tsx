@@ -6661,9 +6661,12 @@ function QuestionBankHomePage({
       setLoadingBanks(true);
       setBankError("");
       try {
-        const nextBanks = await questionBankService.getPublicQuestionBanks();
+        const [publicBanks, authorizedBanks] = await Promise.all([
+          questionBankService.getPublicQuestionBanks(),
+          questionBankService.getMyQuestionBanks(),
+        ]);
         if (!active) return;
-        setBanks(nextBanks);
+        setBanks(Array.from(new Map([...publicBanks, ...authorizedBanks].map(bank => [bank.id, bank])).values()));
       } catch (error) {
         if (!active) return;
         setBankError(error instanceof Error ? error.message : "题库加载失败");
@@ -6693,7 +6696,7 @@ function QuestionBankHomePage({
 
   const objQuickEntries = [
     { icon: BookOpen, label: "我的题库", sub: "客观题授权题库",     color: "#4e8ef7", glow: "rgba(78,142,247,0.12)", action: () => openMyQuestionBank("objective") },
-    { icon: Flag,     label: "错题本",   sub: `${wrongCount} 道待复习`, color: "#f76e6e", glow: "rgba(247,110,110,0.12)", action: () => startQuestionPractice("只看错题", activeBank ? { bookId: activeBank.id, name: "错题本", paperType: "objective", source: "public" } : null) },
+    { icon: Flag,     label: "错题本",   sub: `${wrongCount} 道待复习`, color: "#f76e6e", glow: "rgba(247,110,110,0.12)", action: () => setSubNav("错题本") },
     { icon: Zap,      label: "速记刷题", sub: "高频考点快速刷",     color: "#c9973e", glow: "rgba(201,151,62,0.12)", action: () => startQuestionPractice("顺序练习", activeBank ? { bookId: activeBank.id, name: activeBank.name, paperType: "objective", source: "public" } : { name: "客观题练习", paperType: "objective", source: "public" }) },
     { icon: Target,   label: "专项练习", sub: "暂未配置",           color: "#1dc9a4", glow: "rgba(29,201,164,0.12)", action: () => notify("专项练习暂未配置", "info") },
     { icon: PenLine,  label: "我的笔记", sub: "学习笔记整理",       color: "#c97ef5", glow: "rgba(201,126,245,0.12)", action: () => setPage("myNotes") },
@@ -6719,6 +6722,8 @@ function QuestionBankHomePage({
       .map(subject => ({
         id: `${bank.id}:${subject.id}`,
         bookId: bank.id,
+        accessType: bank.accessType,
+        paperType: bank.paperType,
         subjectId: subject.id,
         subject: subject.name,
         chapter: bank.name,
@@ -6730,6 +6735,7 @@ function QuestionBankHomePage({
   );
   const wrongSubjects = ["全部", ...Array.from(new Set(wrongRows.map(q => q.subject)))];
   const filteredWrong = wrongFilter === "全部" ? wrongRows : wrongRows.filter(q => q.subject === wrongFilter);
+  const filteredWrongCount = filteredWrong.reduce((sum, row) => sum + row.wrongCount, 0);
 
   const allSubjects: Record<string, { id: number; name: string; total: number; done: number; color: string }[]> = {
     "客观题一": [
@@ -6955,7 +6961,7 @@ function QuestionBankHomePage({
               </button>
             ))}
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#2e4260" }}>
-              <span>共 {filteredWrong.length} 道</span>
+              <span>共 {filteredWrongCount} 道</span>
             </div>
           </div>
           {!loadingBanks && filteredWrong.length === 0 && (
@@ -6971,13 +6977,13 @@ function QuestionBankHomePage({
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 5, background: `${q.color}15`, color: q.color }}>{q.subject}</span>
                     <span style={{ fontSize: 10, color: "#2e4260" }}>{q.chapter}</span>
-                    <span style={{ fontSize: 10, color: "#f76e6e", fontFamily: "'JetBrains Mono',monospace", marginLeft: "auto" }}>错误 {q.wrongCount} 次</span>
+                    <span style={{ fontSize: 10, color: "#f76e6e", fontFamily: "'JetBrains Mono',monospace", marginLeft: "auto" }}>错题 {q.wrongCount} 道</span>
                     {q.mastered && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 5, background: "rgba(29,201,164,0.1)", color: "#1dc9a4" }}>已掌握</span>}
                   </div>
                   <p style={{ fontSize: 13, color: "#8fa3be", lineHeight: 1.6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{q.text}</p>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
-                  <button onClick={() => startQuestionPractice("只看错题", { bookId: q.bookId, subjectId: q.subjectId, chapterId: q.subjectId, name: q.subject, paperType: activeBank?.paperType, source: "public" })}
+                  <button onClick={() => startQuestionPractice("只看错题", { bookId: q.bookId, subjectId: q.subjectId, chapterId: q.subjectId, name: q.subject, paperType: q.paperType, source: q.accessType === "authorized" ? "my" : "public" })}
                     style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", background: "rgba(247,110,110,0.12)", color: "#f76e6e" }}>
                     重做
                   </button>

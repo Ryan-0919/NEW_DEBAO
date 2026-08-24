@@ -2477,7 +2477,7 @@ userRouter.get("/question-banks/:bookId/items", async (req, res) => {
       const itemIds = states
         .filter((state) =>
           mode === "wrong"
-            ? state.isAnswered && isBookQuestionStateWrong(state)
+            ? isBookQuestionStateWrong(state)
             : questionBankMetaFromDraft(state.draftText).bookmarked === true,
         )
         .map((state) => state.bookItemId);
