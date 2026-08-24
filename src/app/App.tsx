@@ -5047,6 +5047,7 @@ const questions: Question[] = [
 
 function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习", initialChapter = null, initialQuestionId, notify }: { setPage: (p: string) => void; setActiveNav: (i: number) => void; initialMode?: QuestionPracticeModeLabel; initialChapter?: QuestionPracticeTarget; initialQuestionId?: string; notify: Notify }) {
   const [banks, setBanks] = useState<QuestionBankBook[]>([]);
+  const [banksReady, setBanksReady] = useState(false);
   const [activeBookId, setActiveBookId] = useState<string | null>(initialChapter?.bookId ?? null);
   const [expandedSubjects, setExpandedSubjects] = useState<string[]>([]);
   const [activeChapter, setActiveChapter] = useState<QuestionPracticeTarget>(initialChapter);
@@ -5220,6 +5221,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
     let active = true;
 
     const loadBanks = async () => {
+      setBanksReady(false);
       setLoadingQuestions(true);
       setQuestionError("");
       try {
@@ -5234,10 +5236,20 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
         const nextBook = scopedBanks.find(book => book.id === initialChapter?.bookId) ?? scopedBanks[0] ?? nextBanks[0] ?? null;
         setActiveBookId(nextBook?.id ?? null);
         setExpandedSubjects(nextBook?.subjects?.[0]?.id ? [nextBook.subjects[0].id] : []);
-        if (!initialChapter && nextBook?.subjects?.[0]) {
-          const firstSubject = nextBook.subjects[0];
-          setActiveChapter({ bookId: nextBook.id, subjectId: firstSubject.id, chapterId: firstSubject.id, name: firstSubject.name, paperType: nextBook.paperType });
+        const requestedSubject = nextBook?.subjects.find(subject => subject.id === initialChapter?.subjectId);
+        const shouldResolveAuthorizedSubject = nextBook?.accessType === "authorized" || initialChapter?.source === "my";
+        const resolvedSubject = requestedSubject ?? ((!initialChapter || shouldResolveAuthorizedSubject) ? nextBook?.subjects[0] : undefined);
+        if (nextBook && resolvedSubject) {
+          setActiveChapter({
+            ...initialChapter,
+            bookId: nextBook.id,
+            subjectId: resolvedSubject.id,
+            chapterId: resolvedSubject.id,
+            name: resolvedSubject.name,
+            paperType: nextBook.paperType,
+          });
         }
+        setBanksReady(true);
       } catch (error) {
         if (!active) return;
         setQuestionError(error instanceof Error ? error.message : "题库加载失败");
@@ -5254,7 +5266,12 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
   }, []);
 
   useEffect(() => {
-    if (!activeBookId) {
+    if (!banksReady || !activeBookId) {
+      setApiQuestions([]);
+      return;
+    }
+
+    if (activeBook?.accessType === "authorized" && activeBook.subjects.length > 0 && !activeChapter?.subjectId) {
       setApiQuestions([]);
       return;
     }
@@ -5271,16 +5288,19 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
           limit: QUESTION_BANK_PRACTICE_ITEM_LIMIT,
         });
         if (!active) return;
-        const restoredIndex = restoreQuestionId ? items.findIndex(item => item.id === restoreQuestionId) : 0;
+        const scopedItems = activeChapter?.subjectId
+          ? items.filter(item => item.subjectId === activeChapter.subjectId)
+          : items;
+        const restoredIndex = restoreQuestionId ? scopedItems.findIndex(item => item.id === restoreQuestionId) : 0;
         const nextQuestionIndex = restoredIndex >= 0 ? restoredIndex : 0;
-        const nextQuestion = items[nextQuestionIndex] ?? items[0];
-        setApiQuestions(items);
+        const nextQuestion = scopedItems[nextQuestionIndex] ?? scopedItems[0];
+        setApiQuestions(scopedItems);
         setQIndex(nextQuestionIndex);
         setSelected(nextQuestion?.state.selectedAnswers ?? []);
         setSubmitted(Boolean(nextQuestion?.state.isAnswered || nextQuestion?.state.hasViewedAnswer));
         setResults(
           Object.fromEntries(
-            items.flatMap(item => {
+            scopedItems.flatMap(item => {
               if (isQuestionBankSubjectiveItem(item)) {
                 return item.state.hasViewedAnswer ? [[item.id, "viewed" as const]] : [];
               }
@@ -5290,7 +5310,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
         );
         setSubjectiveDrafts(
           Object.fromEntries(
-            items
+            scopedItems
               .filter(item => isQuestionBankSubjectiveItem(item) && Object.keys(item.state.subjectiveDrafts ?? {}).length > 0)
               .map(item => [item.id, item.state.subjectiveDrafts ?? {}]),
           ),
@@ -5309,7 +5329,7 @@ function QuestionBankPage({ setPage, setActiveNav, initialMode = "顺序练习",
     return () => {
       active = false;
     };
-  }, [activeBookId, activeChapter?.subjectId, mode, restoreQuestionId]);
+  }, [activeBookId, activeBook?.accessType, activeChapter?.subjectId, banksReady, mode, restoreQuestionId]);
 
   useEffect(() => {
     if (apiQuestions.length === 0) return;
@@ -7065,9 +7085,10 @@ function MyQuestionBankPage({
   };
 
   const startBankPractice = (bank: (typeof unlocked)[number], subject?: QuestionBankSubject) => {
+    const targetSubject = subject ?? bank.subjects.find(item => item.id === lastSubjectByBook[bank.id]) ?? bank.subjects[0];
+    if (!targetSubject) return;
+
     if (bank.paperType === "subjective") {
-      const targetSubject = subject ?? bank.subjects.find(item => item.id === lastSubjectByBook[bank.id]) ?? bank.subjects[0];
-      if (!targetSubject) return;
       if (typeof window !== "undefined") {
         window.localStorage.setItem(`debao:my-subjective-subject:${bank.id}`, targetSubject.id);
       }
@@ -7084,7 +7105,14 @@ function MyQuestionBankPage({
       return;
     }
 
-    startQuestionPractice("顺序练习", { bookId: bank.id, name: bank.book, paperType: "objective", source: "my" });
+    startQuestionPractice("顺序练习", {
+      bookId: bank.id,
+      subjectId: targetSubject.id,
+      chapterId: targetSubject.id,
+      name: targetSubject.name,
+      paperType: "objective",
+      source: "my",
+    });
   };
 
   const objectiveBanks = unlocked.filter(bank => bank.paperType === "objective");
