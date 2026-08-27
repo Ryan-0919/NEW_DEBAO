@@ -43,6 +43,7 @@ const SAVE_DELAY = 600;
 const UNDO_HISTORY_LIMIT = 120;
 const VIEW_KEY = "mock-exam-official-view";
 const MARK_KEY_PREFIX = "mock-exam-official-marks:";
+const DRAFT_KEY_PREFIX = "mock-exam-official-drafts:";
 const SECTION_ORDERS = ["一、", "二、", "三、", "四、", "五、", "六、"];
 const THEME_BG = { 1: "#ddebf6", 2: "#cae0e0", 3: "#f5e9dc", 4: "#f5dce4", 5: "#deddf6" } as const;
 const MOCK_EXAM_SHADOW_RESET = ":host{all:initial;display:block}:host,:host *,:host *::before,:host *::after{box-sizing:content-box}:host img{display:inline-block;max-width:none}:host button,:host input,:host textarea,:host select{font:inherit;letter-spacing:normal}:host textarea{resize:none}";
@@ -75,6 +76,55 @@ type LawDialogAction =
   | { type: "resize"; direction: ResizeDirection; startX: number; startY: number; startRect: LawDialogRect };
 type HighlightBlock = "prompt" | "subjective-title";
 type HighlightSelection = { block: HighlightBlock; key: string; start: number; end: number };
+
+const getSubjectiveDraftStorageKey = (recordId: string) => `${DRAFT_KEY_PREFIX}${recordId}`;
+
+const readSubjectiveDraftBackup = (recordId: string): Record<string, string> => {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = window.localStorage.getItem(getSubjectiveDraftStorageKey(recordId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    const source = parsed && typeof parsed === "object" && parsed.answers && typeof parsed.answers === "object" ? parsed.answers : parsed;
+    if (!source || typeof source !== "object" || Array.isArray(source)) return {};
+    return Object.fromEntries(
+      Object.entries(source)
+        .filter(([key, value]) => key.includes(":") && typeof value === "string")
+        .map(([key, value]) => [key, value]),
+    );
+  } catch {
+    return {};
+  }
+};
+
+const writeSubjectiveDraftBackup = (recordId: string, answers: Record<string, string>) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    const storageKey = getSubjectiveDraftStorageKey(recordId);
+    if (Object.keys(answers).length === 0) {
+      window.localStorage.removeItem(storageKey);
+      return;
+    }
+    window.localStorage.setItem(storageKey, JSON.stringify(answers));
+  } catch {}
+};
+
+const updateSubjectiveDraftBackup = (recordId: string, key: string, text: string) => {
+  const answers = readSubjectiveDraftBackup(recordId);
+  answers[key] = text;
+  writeSubjectiveDraftBackup(recordId, answers);
+};
+
+const removeSubjectiveDraftBackupValue = (recordId: string, key: string, text: string) => {
+  const answers = readSubjectiveDraftBackup(recordId);
+  if (answers[key] !== text) return;
+  delete answers[key];
+  writeSubjectiveDraftBackup(recordId, answers);
+};
+
+const clearSubjectiveDraftBackup = (recordId: string) => writeSubjectiveDraftBackup(recordId, {});
 
 const pushBoundedHistory = (historyMap: Record<string, string[]>, key: string, value: string) => {
   if (!historyMap[key]) historyMap[key] = [];
@@ -390,6 +440,7 @@ export function MockExamRoom() {
   const timersRef = useRef<Record<string, number>>({});
   const pendingRef = useRef<Record<string, PendingEntry>>({});
   const inFlightSaveTasksRef = useRef<Record<string, { text: string; promise: Promise<unknown> }>>({});
+  const saveRequestRevisionRef = useRef(0);
   const undoHistoryRef = useRef<Record<string, string[]>>({});
   const redoHistoryRef = useRef<Record<string, string[]>>({});
   const lawDialogActionRef = useRef<LawDialogAction | null>(null);
@@ -496,14 +547,40 @@ export function MockExamRoom() {
     const load = async () => {
       try {
         const detail = await mockApi.getMockExamRecord(recordId);
-        if (detail.status === "submitted") return void navigateAfterSubmit(detail.id, detail.reviewWorkflowStatus, detail.reviewEnabled);
-        const drafts = buildSubjectiveDraftMap(detail.questions);
+        if (detail.status === "submitted") {
+          clearSubjectiveDraftBackup(detail.id);
+          return void navigateAfterSubmit(detail.id, detail.reviewWorkflowStatus, detail.reviewEnabled);
+        }
+        const serverDrafts = buildSubjectiveDraftMap(detail.questions);
+        const localDrafts = readSubjectiveDraftBackup(detail.id);
+        const drafts = { ...serverDrafts, ...localDrafts };
         setRecord(detail);
+        recordRef.current = detail;
         setCountdown(detail.remainingSeconds);
         setActiveIndex(getInitialQuestionIndex(detail.questions));
         setActiveSubQuestionIndex(0);
         setDraftAnswers(drafts);
         draftRef.current = drafts;
+        pendingRef.current = {};
+        Object.keys(timersRef.current).forEach((key) => {
+          window.clearTimeout(timersRef.current[key]);
+          delete timersRef.current[key];
+        });
+        Object.entries(localDrafts).forEach(([key, text]) => {
+          const separatorIndex = key.indexOf(":");
+          if (separatorIndex <= 0 || separatorIndex >= key.length - 1) return;
+          pendingRef.current[key] = {
+            questionId: key.slice(0, separatorIndex),
+            subQuestionId: key.slice(separatorIndex + 1),
+            text,
+          };
+          window.setTimeout(() => {
+            const entry = pendingRef.current[key];
+            if (entry?.text === text && recordRef.current?.id === detail.id) {
+              void persistSubjective(entry).catch(() => {});
+            }
+          }, 0);
+        });
         setGroupVisibility(Object.fromEntries(buildQuestionGroups(detail.questions).map((group) => [group.key, true])));
         setZhuguanAH("300px");
         setZhuguanQH("340px");
@@ -535,6 +612,7 @@ export function MockExamRoom() {
       allowUnmountPauseRef.current = true;
     }, 0);
     const handlePageHide = () => {
+      flushSubjectiveDrafts(true);
       void pauseExam({ keepalive: true, skipState: true });
     };
     window.addEventListener("pagehide", handlePageHide);
@@ -542,6 +620,7 @@ export function MockExamRoom() {
       window.removeEventListener("pagehide", handlePageHide);
       window.clearTimeout(armPause);
       if (allowUnmountPauseRef.current) {
+        flushSubjectiveDrafts(true);
         void pauseExam({ keepalive: true, skipState: true });
       }
       allowUnmountPauseRef.current = false;
@@ -600,7 +679,7 @@ export function MockExamRoom() {
     } catch {}
   };
 
-  const persistSubjective = async (entry: PendingEntry) => {
+  const persistSubjective = async (entry: PendingEntry, options?: { keepalive?: boolean }) => {
     const key = buildDraftKey(entry.questionId, entry.subQuestionId);
     return trackMockExamSaveTask({
       taskMap: inFlightSaveTasksRef.current,
@@ -609,19 +688,25 @@ export function MockExamRoom() {
       run: async () => {
         const active = recordRef.current;
         if (!active || active.status !== "in_progress") return;
+        const requestRevision = ++saveRequestRevisionRef.current;
         try {
           const saved = await mockApi.saveMockExamAnswer(active.id, {
             questionId: entry.questionId,
             subQuestionId: entry.subQuestionId,
             answerText: entry.text,
-          });
-          recordRef.current = saved;
-          setRecord(saved);
+          }, options);
+          if (requestRevision === saveRequestRevisionRef.current) {
+            recordRef.current = saved;
+            setRecord(saved);
+          }
           if (saved.status === "submitted") {
             navigateAfterSubmit(saved.id, saved.reviewWorkflowStatus, saved.reviewEnabled);
             return;
           }
-          if (pendingRef.current[key]?.text === entry.text) delete pendingRef.current[key];
+          if (pendingRef.current[key]?.text === entry.text) {
+            delete pendingRef.current[key];
+            removeSubjectiveDraftBackupValue(active.id, key, entry.text);
+          }
         } catch (error) {
           if (!submittingRef.current && !skipPauseRef.current && recordRef.current?.status === "in_progress") {
             toast.error(error instanceof Error ? error.message : "主观题答案保存失败");
@@ -656,6 +741,7 @@ export function MockExamRoom() {
       });
       recordRef.current = detail;
       setRecord(detail);
+      clearSubjectiveDraftBackup(active.id);
       toast.success(isAuto ? "考试时间已到，系统已自动交卷" : "交卷成功");
       navigateAfterSubmit(detail.id, detail.reviewWorkflowStatus, detail.reviewEnabled);
     } catch (error) {
@@ -684,6 +770,8 @@ export function MockExamRoom() {
     const nextDrafts = { ...draftRef.current, [key]: value };
     draftRef.current = nextDrafts;
     setDraftAnswers(nextDrafts);
+    const active = recordRef.current;
+    if (active) updateSubjectiveDraftBackup(active.id, key, value);
     pendingRef.current[key] = { questionId, subQuestionId: subQuestion.id, text: value };
     if (timersRef.current[key]) window.clearTimeout(timersRef.current[key]);
     timersRef.current[key] = window.setTimeout(() => {
@@ -742,6 +830,20 @@ export function MockExamRoom() {
     const textarea = answerTextareaRef.current;
     if (!textarea) return;
     syncDraft(currentQuestion.id, currentSubQuestion, textarea.value);
+  };
+
+  const flushSubjectiveDrafts = (keepalive = false) => {
+    const active = recordRef.current;
+    if (!active || active.status !== "in_progress" || submittingRef.current || skipPauseRef.current) return;
+
+    commitAnswerTextarea({ force: true });
+    Object.keys(timersRef.current).forEach((key) => {
+      window.clearTimeout(timersRef.current[key]);
+      delete timersRef.current[key];
+    });
+    Object.values(pendingRef.current).forEach((entry) => {
+      void persistSubjective(entry, keepalive ? { keepalive: true } : undefined).catch(() => {});
+    });
   };
 
   const performJump = (index: number) => {

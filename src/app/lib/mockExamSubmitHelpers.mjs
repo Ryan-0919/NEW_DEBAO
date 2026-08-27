@@ -7,15 +7,22 @@ export const trackMockExamSaveTask = ({ taskMap, key, text, run }) => {
     return existing.promise;
   }
 
-  const promise = Promise.resolve()
-    .then(run)
+  const task = { text, promise: null, startedAt: Date.now() };
+  const promise = (existing?.promise ? existing.promise.catch(() => undefined) : Promise.resolve())
+    .then(() => {
+      // A newer edit may have replaced this task while it was waiting. Skip
+      // stale payloads so the latest text is the only one sent to the server.
+      if (taskMap[key] !== task) return undefined;
+      return run();
+    })
     .finally(() => {
       if (taskMap[key]?.promise === promise) {
         delete taskMap[key];
       }
     });
 
-  taskMap[key] = { text, promise, startedAt: Date.now() };
+  task.promise = promise;
+  taskMap[key] = task;
   return promise;
 };
 

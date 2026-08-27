@@ -593,7 +593,13 @@ export const mockApi = {
     payload:
       | { questionId: string; answerKeys: string[] }
       | { questionId: string; subQuestionId: string; answerText: string },
-  ) => patchJson<MockExamRecordDetail>(`/api/user/mock-exams/records/${encodeId(recordId)}/answers`, payload),
+    options?: { keepalive?: boolean },
+  ) =>
+    patchJson<MockExamRecordDetail>(
+      `/api/user/mock-exams/records/${encodeId(recordId)}/answers`,
+      payload,
+      options?.keepalive ? { keepalive: true } : undefined,
+    ),
   submitMockExam: (
     recordId: string,
     payload?: { subjectiveAnswers?: Array<{ questionId: string; subQuestionId: string; answerText: string }> },

@@ -52,6 +52,38 @@ test("trackMockExamSaveTask 对同一小问同一文本只保留一个并发保�
   assert.deepEqual(taskMap, {});
 });
 
+test("trackMockExamSaveTask 不会让旧文本在最新文本之后发送", async () => {
+  const taskMap = {};
+  const calls = [];
+  let releaseFirst;
+  const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
+
+  const first = trackMockExamSaveTask({
+    taskMap,
+    key: "q1:sub1",
+    text: "旧答案",
+    run: async () => {
+      calls.push("旧答案");
+      await firstGate;
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const second = trackMockExamSaveTask({
+    taskMap,
+    key: "q1:sub1",
+    text: "新答案",
+    run: async () => {
+      calls.push("新答案");
+    },
+  });
+
+  releaseFirst();
+  await Promise.all([first, second]);
+  assert.deepEqual(calls, ["旧答案", "新答案"]);
+  assert.deepEqual(taskMap, {});
+});
+
 test("waitForMockExamSaveTasks 会等待当前进行中的保存任务完成", async () => {
   const taskMap = {};
   let finished = false;

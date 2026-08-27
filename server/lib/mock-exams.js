@@ -2054,6 +2054,14 @@ const getRecordWithPaper = (db, recordId) =>
     },
   });
 
+const lockMockExamRecord = async (tx, recordId) => {
+  // All subjective sub-answers are stored in one JSON column per question.
+  // Locking the parent record serializes reads and merges across concurrent
+  // autosaves, including concurrent submit requests.
+  if (typeof tx?.$queryRaw !== "function") return;
+  await tx.$queryRaw`SELECT id FROM \`MockExamRecord\` WHERE id = ${recordId} FOR UPDATE`;
+};
+
 const assertMockExamPaperPermission = async ({ db, userId, paperId }) => {
   const paper = await db.mockExamPaper.findUnique({
     where: { id: paperId },
@@ -2302,12 +2310,17 @@ export const saveMockExamAnswer = async ({ db, recordId, userId, questionId, ans
   }
 
   return db.$transaction(async (tx) => {
+    await lockMockExamRecord(tx, recordId);
     const record = await getRecordWithPaper(tx, recordId);
     if (!record || record.userId !== userId) {
       throw createHttpError("考试记录不存在", 404);
     }
 
     assertMockExamRecordInProgress(record);
+
+    if (getRemainingSeconds(record, currentTime) <= 0) {
+      throw createHttpError("考试时间已到，正在提交最终答案", 409);
+    }
 
     const paper = getRecordPaper(record);
     const question = (paper.questions ?? []).find((item) => item.id === questionId);
@@ -2399,6 +2412,7 @@ export const saveMockExamAnswer = async ({ db, recordId, userId, questionId, ans
 
 export const finalizeMockExamRecord = async ({ db, recordId, userId, currentTime = new Date(), subjectiveAnswers = [] }) =>
   db.$transaction(async (tx) => {
+    await lockMockExamRecord(tx, recordId);
     let record = await getRecordWithPaper(tx, recordId);
     if (!record || record.userId !== userId) {
       throw createHttpError("考试记录不存在", 404);

@@ -118,11 +118,13 @@ export const postJson = <T>(path: string, body?: unknown) =>
     body: JSON.stringify(body ?? {}),
   });
 
-export const patchJson = <T>(path: string, body?: unknown) =>
+export const patchJson = <T>(path: string, body?: unknown, options?: RequestInit) =>
   request<T>(path, {
+    ...options,
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
+      ...(options?.headers ?? {}),
     },
     body: JSON.stringify(body ?? {}),
   });

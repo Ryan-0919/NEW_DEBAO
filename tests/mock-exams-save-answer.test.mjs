@@ -359,6 +359,50 @@ test("saveMockExamAnswer should reject stale autosave when record becomes submit
   );
 });
 
+test("saveMockExamAnswer locks the record before reading the answer JSON", async () => {
+  const currentRecord = buildRecord("in_progress");
+  const events = [];
+  const savedAnswers = [];
+  const db = {
+    mockExamRecord: {
+      findUnique: async () => ({ ...currentRecord, answers: savedAnswers }),
+    },
+    mockExamPaper: {
+      findUnique: async () => ({ id: "paper_1", status: "published", permissionRequired: false }),
+    },
+    $transaction: async (callback) => callback({
+      $queryRaw: async () => { events.push("lock"); },
+      mockExamRecord: {
+        findUnique: async () => {
+          events.push("read");
+          return { ...currentRecord, answers: savedAnswers };
+        },
+        updateMany: async () => ({ count: 1 }),
+      },
+      mockExamAnswer: {
+        create: async ({ data }) => {
+          const answer = { id: "answer_1", ...data };
+          savedAnswers.push(answer);
+          return answer;
+        },
+      },
+    }),
+  };
+
+  await saveMockExamAnswer({
+    db,
+    recordId: "record_1",
+    userId: "user_1",
+    questionId: "question_1",
+    subQuestionId: "sub_1",
+    answerText: "答案",
+    currentTime: new Date("2026-07-05T10:00:30.000Z"),
+  });
+
+  assert.equal(events[0], "lock");
+  assert.equal(events[1], "read");
+});
+
 test("saveMockExamAnswer does not auto-submit an expired record before the final answer snapshot arrives", async () => {
   const currentRecord = {
     ...buildRecord("in_progress"),
