@@ -226,6 +226,83 @@ test("finalizeMockExamRecord saves final subjective draft payload before submitt
   assert.equal(submitUpdate?.answeredCount, 1);
 });
 
+test("finalizeMockExamRecord saves final objective answer snapshot before scoring", async () => {
+  const objectiveQuestion = {
+    id: "objective_1",
+    type: "multiple_choice",
+    score: 2,
+    stem: "客观题题干",
+    material: "",
+    analysis: "",
+    questionMetaJson: null,
+    options: [
+      { id: "option_a", optionKey: "A", content: "选项A", sortOrder: 1 },
+      { id: "option_b", optionKey: "B", content: "选项B", sortOrder: 2 },
+    ],
+    correctAnswerJson: JSON.stringify(["A", "B"]),
+  };
+  const baseRecord = {
+    ...buildRecord("in_progress"),
+    paper: {
+      ...buildRecord("in_progress").paper,
+      paperType: "objective",
+      reviewEnabled: false,
+      questions: [objectiveQuestion],
+    },
+    answers: [],
+  };
+  const savedAnswers = [];
+  const recordUpdates = [];
+  const tx = {
+    mockExamRecord: {
+      findUnique: async () => ({ ...baseRecord, answers: savedAnswers }),
+      update: async ({ data }) => {
+        recordUpdates.push(data);
+        return { ...baseRecord, ...data, answers: savedAnswers };
+      },
+    },
+    mockExamAnswer: {
+      create: async ({ data }) => {
+        const answer = { id: "objective_answer_1", score: 0, isCorrect: null, ...data };
+        savedAnswers.push(answer);
+        return answer;
+      },
+      update: async ({ where, data }) => {
+        const index = savedAnswers.findIndex((item) => item.id === where.id);
+        if (index >= 0) savedAnswers[index] = { ...savedAnswers[index], ...data };
+        return savedAnswers[index] ?? { id: where.id, ...data };
+      },
+      delete: async ({ where }) => {
+        const index = savedAnswers.findIndex((item) => item.id === where.id);
+        if (index >= 0) savedAnswers.splice(index, 1);
+        return {};
+      },
+    },
+    userMockExamPermission: {
+      updateMany: async () => ({}),
+    },
+  };
+  const db = {
+    $transaction: async (callback) => callback(tx),
+  };
+
+  await finalizeMockExamRecord({
+    db,
+    recordId: "record_1",
+    userId: "user_1",
+    currentTime: new Date("2026-07-05T10:20:00.000Z"),
+    objectiveAnswers: [{ questionId: "objective_1", answerKeys: ["A", "B"] }],
+  });
+
+  assert.equal(savedAnswers.length, 1);
+  assert.deepEqual(JSON.parse(savedAnswers[0].answerJson), ["A", "B"]);
+  assert.equal(savedAnswers[0].isCorrect, true);
+  assert.equal(savedAnswers[0].score, 2);
+  const submitUpdate = recordUpdates.find((item) => item.status === "submitted");
+  assert.equal(submitUpdate?.correctCount, 1);
+  assert.equal(submitUpdate?.totalScore, 2);
+});
+
 const buildRecord = (status) => ({
   id: "record_1",
   userId: "user_1",

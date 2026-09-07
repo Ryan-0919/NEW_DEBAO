@@ -168,7 +168,13 @@ mockExamRouter.patch("/records/:recordId/answers", async (req, res) => {
       subQuestionId: req.body?.subQuestionId,
     });
 
-    return ok(res, serializeMockExamRecordDetail(record), "答案已保存");
+    return ok(
+      res,
+      req.query?.compact === "1"
+        ? { id: record.id, status: record.status }
+        : serializeMockExamRecordDetail(record),
+      "答案已保存",
+    );
   } catch (error) {
     return fail(res, error.message || "保存答案失败", error.statusCode || 400);
   }
@@ -213,6 +219,7 @@ mockExamRouter.post("/records/:recordId/submit", async (req, res) => {
       recordId: `${req.params.recordId ?? ""}`.trim(),
       userId: req.auth.userId,
       subjectiveAnswers: req.body?.subjectiveAnswers,
+      objectiveAnswers: req.body?.objectiveAnswers,
     });
 
     enqueueAutoReviewIfNeeded(record);

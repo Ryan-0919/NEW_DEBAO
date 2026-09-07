@@ -40,10 +40,15 @@ import { getMockExamHomePath } from "./mockExamLaunchShared";
 import { DebaoLawSearchPage } from "./DebaoLawSearchPage";
 
 const SAVE_DELAY = 600;
-const UNDO_HISTORY_LIMIT = 120;
+const SAVE_REQUEST_TIMEOUT_MS = 10_000;
+const SUBMIT_REQUEST_TIMEOUT_MS = 20_000;
+const SAVE_RETRY_LIMIT = 3;
+const SUBMIT_RETRY_LIMIT = 3;
+const UNDO_HISTORY_LIMIT = 60;
 const VIEW_KEY = "mock-exam-official-view";
 const MARK_KEY_PREFIX = "mock-exam-official-marks:";
 const DRAFT_KEY_PREFIX = "mock-exam-official-drafts:";
+const OBJECTIVE_DRAFT_KEY_PREFIX = "mock-exam-official-objective-drafts:";
 const SECTION_ORDERS = ["一、", "二、", "三、", "四、", "五、", "六、"];
 const THEME_BG = { 1: "#ddebf6", 2: "#cae0e0", 3: "#f5e9dc", 4: "#f5dce4", 5: "#deddf6" } as const;
 const MOCK_EXAM_SHADOW_RESET = ":host{all:initial;display:block}:host,:host *,:host *::before,:host *::after{box-sizing:content-box}:host img{display:inline-block;max-width:none}:host button,:host input,:host textarea,:host select{font:inherit;letter-spacing:normal}:host textarea{resize:none}";
@@ -117,14 +122,58 @@ const updateSubjectiveDraftBackup = (recordId: string, key: string, text: string
   writeSubjectiveDraftBackup(recordId, answers);
 };
 
-const removeSubjectiveDraftBackupValue = (recordId: string, key: string, text: string) => {
-  const answers = readSubjectiveDraftBackup(recordId);
-  if (answers[key] !== text) return;
-  delete answers[key];
-  writeSubjectiveDraftBackup(recordId, answers);
+const clearSubjectiveDraftBackup = (recordId: string) => writeSubjectiveDraftBackup(recordId, {});
+
+const getObjectiveDraftStorageKey = (recordId: string) => `${OBJECTIVE_DRAFT_KEY_PREFIX}${recordId}`;
+
+const readObjectiveDraftBackup = (recordId: string): Record<string, string[]> => {
+  if (typeof window === "undefined") return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(getObjectiveDraftStorageKey(recordId)) ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(([questionId, answerKeys]) => questionId && Array.isArray(answerKeys))
+        .map(([questionId, answerKeys]) => [
+          questionId,
+          Array.from(new Set(answerKeys.map((key) => `${key ?? ""}`.trim().toUpperCase()).filter(Boolean))).sort(),
+        ]),
+    );
+  } catch {
+    return {};
+  }
 };
 
-const clearSubjectiveDraftBackup = (recordId: string) => writeSubjectiveDraftBackup(recordId, {});
+const writeObjectiveDraftBackup = (recordId: string, answers: Record<string, string[]>) => {
+  if (typeof window === "undefined") return;
+  try {
+    const storageKey = getObjectiveDraftStorageKey(recordId);
+    if (Object.keys(answers).length === 0) window.localStorage.removeItem(storageKey);
+    else window.localStorage.setItem(storageKey, JSON.stringify(answers));
+  } catch {}
+};
+
+const updateObjectiveDraftBackup = (recordId: string, questionId: string, answerKeys: string[]) => {
+  const answers = readObjectiveDraftBackup(recordId);
+  // Keep an empty array as an explicit local cancellation of a server answer.
+  answers[questionId] = [...answerKeys];
+  writeObjectiveDraftBackup(recordId, answers);
+};
+
+const clearObjectiveDraftBackup = (recordId: string) => writeObjectiveDraftBackup(recordId, {});
+
+const applyObjectiveDraftBackup = (record: MockExamRecordDetail, drafts: Record<string, string[]>) =>
+  Object.entries(drafts).reduce((current, [questionId, answerKeys]) => {
+    const question = current.questions.find((item) => item.id === questionId && !isSubjectiveQuestion(item));
+    if (!question) return current;
+    const validOptionKeys = new Set(question.options.map((option) => option.key));
+    const validAnswerKeys = answerKeys.filter((key) => validOptionKeys.has(key));
+    const normalizedAnswerKeys = question.type === "single_choice" ? validAnswerKeys.slice(-1) : validAnswerKeys;
+    return applyObjectiveAnswerToRecord(current, questionId, normalizedAnswerKeys, {});
+  }, record);
+
+const waitForRetry = (attempt: number) =>
+  new Promise<void>((resolve) => window.setTimeout(resolve, 250 * attempt));
 
 const pushBoundedHistory = (historyMap: Record<string, string[]>, key: string, value: string) => {
   if (!historyMap[key]) historyMap[key] = [];
@@ -144,6 +193,14 @@ const buildSubjectiveSubmitAnswers = (active: MockExamRecordDetail, drafts: Reco
       answerText: drafts[buildDraftKey(question.id, subQuestion.id)] ?? subQuestion.answer ?? "",
     }));
   });
+
+const buildObjectiveSubmitAnswers = (active: MockExamRecordDetail) =>
+  active.questions
+    .filter((question) => !isSubjectiveQuestion(question))
+    .map((question) => ({
+      questionId: question.id,
+      answerKeys: question.userAnswerKeys,
+    }));
 
 const LAW_DIALOG_MIN_WIDTH = 640;
 const LAW_DIALOG_MIN_HEIGHT = 420;
@@ -440,7 +497,11 @@ export function MockExamRoom() {
   const timersRef = useRef<Record<string, number>>({});
   const pendingRef = useRef<Record<string, PendingEntry>>({});
   const inFlightSaveTasksRef = useRef<Record<string, { text: string; promise: Promise<unknown> }>>({});
-  const saveRequestRevisionRef = useRef(0);
+  const objectiveSaveTasksRef = useRef<Record<string, { text: string; promise: Promise<unknown> }>>({});
+  const objectiveAnswerRevisionRef = useRef<Record<string, number>>({});
+  const autoSubmitRetryCountRef = useRef(0);
+  const autoSubmitRetryTimerRef = useRef<number | null>(null);
+  const componentAliveRef = useRef(true);
   const undoHistoryRef = useRef<Record<string, string[]>>({});
   const redoHistoryRef = useRef<Record<string, string[]>>({});
   const lawDialogActionRef = useRef<LawDialogAction | null>(null);
@@ -448,6 +509,8 @@ export function MockExamRoom() {
   const lastClipboardWarningAtRef = useRef(0);
   const answerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const answerComposingRef = useRef(false);
+  const currentQuestionRef = useRef<MockExamQuestion | null>(null);
+  const currentSubQuestionRef = useRef<MockExamSubjectiveSubQuestion | null>(null);
   const questionPromptRef = useRef<HTMLSpanElement | null>(null);
   const subjectiveTitleRef = useRef<HTMLDivElement | null>(null);
   const highlightSelectionRef = useRef<HighlightSelection | null>(null);
@@ -455,6 +518,17 @@ export function MockExamRoom() {
   useEffect(() => { recordRef.current = record; }, [record]);
   useEffect(() => { draftRef.current = draftAnswers; }, [draftAnswers]);
   useEffect(() => { submittingRef.current = submitting; }, [submitting]);
+
+  useEffect(() => {
+    componentAliveRef.current = true;
+    return () => {
+      componentAliveRef.current = false;
+      if (autoSubmitRetryTimerRef.current !== null) {
+        window.clearTimeout(autoSubmitRetryTimerRef.current);
+        autoSubmitRetryTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -549,15 +623,17 @@ export function MockExamRoom() {
         const detail = await mockApi.getMockExamRecord(recordId);
         if (detail.status === "submitted") {
           clearSubjectiveDraftBackup(detail.id);
+          clearObjectiveDraftBackup(detail.id);
           return void navigateAfterSubmit(detail.id, detail.reviewWorkflowStatus, detail.reviewEnabled);
         }
         const serverDrafts = buildSubjectiveDraftMap(detail.questions);
         const localDrafts = readSubjectiveDraftBackup(detail.id);
         const drafts = { ...serverDrafts, ...localDrafts };
-        setRecord(detail);
-        recordRef.current = detail;
+        const restoredDetail = applyObjectiveDraftBackup(detail, readObjectiveDraftBackup(detail.id));
+        setRecord(restoredDetail);
+        recordRef.current = restoredDetail;
         setCountdown(detail.remainingSeconds);
-        setActiveIndex(getInitialQuestionIndex(detail.questions));
+        setActiveIndex(getInitialQuestionIndex(restoredDetail.questions));
         setActiveSubQuestionIndex(0);
         setDraftAnswers(drafts);
         draftRef.current = drafts;
@@ -585,6 +661,7 @@ export function MockExamRoom() {
         setZhuguanAH("300px");
         setZhuguanQH("340px");
         autoSubmitRef.current = false;
+        autoSubmitRetryCountRef.current = 0;
         try {
           const rawMarks = window.localStorage.getItem(`${MARK_KEY_PREFIX}${detail.id}`);
           const marks = rawMarks ? JSON.parse(rawMarks) : [];
@@ -679,6 +756,43 @@ export function MockExamRoom() {
     } catch {}
   };
 
+  const saveAnswerWithRetry = async (
+    activeRecordId: string,
+    payload: Parameters<typeof mockApi.saveMockExamAnswer>[1],
+    options?: { keepalive?: boolean; isCurrent?: () => boolean },
+  ) => {
+    const maxAttempts = options?.keepalive ? 1 : SAVE_RETRY_LIMIT;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      if ((!componentAliveRef.current && !options?.keepalive) || (options?.isCurrent && !options.isCurrent())) return null;
+      const controller = options?.keepalive ? null : new AbortController();
+      const timeoutId = controller
+        ? window.setTimeout(() => controller.abort(), SAVE_REQUEST_TIMEOUT_MS)
+        : null;
+      try {
+        return await mockApi.saveMockExamAnswer(activeRecordId, payload, {
+          keepalive: options?.keepalive,
+          signal: controller?.signal,
+        });
+      } catch (error) {
+        lastError = error;
+        const status = Number((error as { status?: number })?.status ?? 0);
+        const shouldStop =
+          attempt >= maxAttempts ||
+          (status >= 400 && status < 500) ||
+          (!componentAliveRef.current && !options?.keepalive) ||
+          Boolean(options?.isCurrent && !options.isCurrent());
+        if (shouldStop) throw error;
+        await waitForRetry(attempt);
+      } finally {
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+      }
+    }
+
+    throw lastError;
+  };
+
   const persistSubjective = async (entry: PendingEntry, options?: { keepalive?: boolean }) => {
     const key = buildDraftKey(entry.questionId, entry.subQuestionId);
     return trackMockExamSaveTask({
@@ -688,24 +802,17 @@ export function MockExamRoom() {
       run: async () => {
         const active = recordRef.current;
         if (!active || active.status !== "in_progress") return;
-        const requestRevision = ++saveRequestRevisionRef.current;
         try {
-          const saved = await mockApi.saveMockExamAnswer(active.id, {
+          const saved = await saveAnswerWithRetry(active.id, {
             questionId: entry.questionId,
             subQuestionId: entry.subQuestionId,
             answerText: entry.text,
-          }, options);
-          if (requestRevision === saveRequestRevisionRef.current) {
-            recordRef.current = saved;
-            setRecord(saved);
-          }
-          if (saved.status === "submitted") {
-            navigateAfterSubmit(saved.id, saved.reviewWorkflowStatus, saved.reviewEnabled);
-            return;
-          }
-          if (pendingRef.current[key]?.text === entry.text) {
+          }, {
+            keepalive: options?.keepalive,
+            isCurrent: () => pendingRef.current[key]?.text === entry.text && recordRef.current?.id === active.id,
+          });
+          if (saved && pendingRef.current[key]?.text === entry.text) {
             delete pendingRef.current[key];
-            removeSubjectiveDraftBackupValue(active.id, key, entry.text);
           }
         } catch (error) {
           if (!submittingRef.current && !skipPauseRef.current && recordRef.current?.status === "in_progress") {
@@ -716,6 +823,38 @@ export function MockExamRoom() {
       },
     });
   };
+
+  const persistObjective = (
+    activeRecordId: string,
+    questionId: string,
+    answerKeys: string[],
+    revision: number,
+  ) =>
+    trackMockExamSaveTask({
+      taskMap: objectiveSaveTasksRef.current,
+      key: questionId,
+      text: JSON.stringify(answerKeys),
+      run: async () => {
+        const isCurrent = () =>
+          objectiveAnswerRevisionRef.current[questionId] === revision &&
+          recordRef.current?.id === activeRecordId &&
+          recordRef.current.status === "in_progress" &&
+          !submittingRef.current;
+        try {
+          const saved = await saveAnswerWithRetry(
+            activeRecordId,
+            { questionId, answerKeys },
+            { isCurrent },
+          );
+          void saved;
+        } catch (error) {
+          if (isCurrent()) {
+            toast.error(error instanceof Error ? error.message : "保存答案失败，交卷时将再次提交当前答案");
+          }
+          throw error;
+        }
+      },
+    });
 
   const captureSubjectiveSubmitAnswers = (active: MockExamRecordDetail) => {
     commitAnswerTextarea({ force: true });
@@ -728,28 +867,68 @@ export function MockExamRoom() {
     return buildSubjectiveSubmitAnswers(active, draftRef.current);
   };
 
+  const submitFinalSnapshotWithRetry = async (
+    activeRecordId: string,
+    payload: Parameters<typeof mockApi.submitMockExam>[1],
+  ) => {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= SUBMIT_RETRY_LIMIT; attempt += 1) {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), SUBMIT_REQUEST_TIMEOUT_MS);
+      try {
+        return await mockApi.submitMockExam(activeRecordId, payload, { signal: controller.signal });
+      } catch (error) {
+        lastError = error;
+        const status = Number((error as { status?: number })?.status ?? 0);
+        if (attempt >= SUBMIT_RETRY_LIMIT || (status >= 400 && status < 500) || !componentAliveRef.current) {
+          throw error;
+        }
+        await waitForRetry(attempt);
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+    }
+    throw lastError;
+  };
+
   const handleSubmit = async (isAuto = false) => {
     const active = recordRef.current;
     if (!shouldStartMockExamSubmit({ hasActiveRecord: Boolean(active), submitting, submittingRefCurrent: submittingRef.current })) return;
     // Take the answer snapshot before any asynchronous request can race with it.
     const subjectiveAnswers = captureSubjectiveSubmitAnswers(active);
+    const objectiveAnswers = buildObjectiveSubmitAnswers(recordRef.current ?? active);
     submittingRef.current = true;
     setSubmitting(true);
+    let submittedSuccessfully = false;
     try {
-      const detail = await mockApi.submitMockExam(active.id, {
+      // The final snapshot is authoritative, so a stalled autosave must never
+      // block submission.
+      const detail = await submitFinalSnapshotWithRetry(active.id, {
         subjectiveAnswers,
+        objectiveAnswers,
       });
+      submittedSuccessfully = true;
       recordRef.current = detail;
       setRecord(detail);
       clearSubjectiveDraftBackup(active.id);
+      clearObjectiveDraftBackup(active.id);
+      autoSubmitRetryCountRef.current = 0;
       toast.success(isAuto ? "考试时间已到，系统已自动交卷" : "交卷成功");
       navigateAfterSubmit(detail.id, detail.reviewWorkflowStatus, detail.reviewEnabled);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "交卷失败");
+      toast.error(`${error instanceof Error ? error.message : "交卷失败"}，答案草稿已保留`);
+      if (isAuto && autoSubmitRetryCountRef.current < 2 && componentAliveRef.current) {
+        autoSubmitRetryCountRef.current += 1;
+        autoSubmitRetryTimerRef.current = window.setTimeout(() => {
+          autoSubmitRetryTimerRef.current = null;
+          autoSubmitRef.current = false;
+          void handleSubmit(true);
+        }, 3_000);
+      }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
-      setSubmitDialogOpen(false);
+      if (submittedSuccessfully || isAuto) setSubmitDialogOpen(false);
     }
   };
 
@@ -791,6 +970,8 @@ export function MockExamRoom() {
   const currentQuestion = record.questions[activeIndex] ?? record.questions[0];
   const isSubjective = isSubjectiveQuestion(currentQuestion);
   const currentSubQuestion = isSubjective ? currentQuestion.subjectiveSubQuestions[activeSubQuestionIndex] ?? currentQuestion.subjectiveSubQuestions[0] : null;
+  currentQuestionRef.current = currentQuestion;
+  currentSubQuestionRef.current = currentSubQuestion;
   const currentSubText = isSubjective && currentSubQuestion ? getDraftAnswer(currentQuestion.id, currentSubQuestion, draftAnswers) : "";
   const currentGroupIndex = groups.findIndex((group) => group.questions.some((question) => question.id === currentQuestion.id));
   const currentGroup = groups[currentGroupIndex] ?? groups[0];
@@ -825,11 +1006,13 @@ export function MockExamRoom() {
   const selectWindowText = () => getExamSelection()?.toString() ?? "";
 
   const commitAnswerTextarea = (options?: { force?: boolean }) => {
-    if (!currentSubQuestion) return;
+    const question = currentQuestionRef.current;
+    const subQuestion = currentSubQuestionRef.current;
+    if (!question || !subQuestion || !isSubjectiveQuestion(question)) return;
     if (answerComposingRef.current && !options?.force) return;
     const textarea = answerTextareaRef.current;
     if (!textarea) return;
-    syncDraft(currentQuestion.id, currentSubQuestion, textarea.value);
+    syncDraft(question.id, subQuestion, textarea.value);
   };
 
   const flushSubjectiveDrafts = (keepalive = false) => {
@@ -1012,20 +1195,22 @@ export function MockExamRoom() {
     clearHighlightSelection();
   };
 
-  const handleObjectiveAnswer = async (optionKey: string) => {
+  const handleObjectiveAnswer = (optionKey: string) => {
     const active = recordRef.current;
-    if (!active || submitting) return;
-    const nextAnswerKeys = buildNextAnswerKeys(currentQuestion, optionKey);
-    const previous = active;
-    setRecord(applyObjectiveAnswerToRecord(active, currentQuestion.id, nextAnswerKeys, draftRef.current));
-    try {
-      const saved = await mockApi.saveMockExamAnswer(active.id, { questionId: currentQuestion.id, answerKeys: nextAnswerKeys });
-      if (saved.status === "submitted") return void navigateAfterSubmit(saved.id, saved.reviewWorkflowStatus, saved.reviewEnabled);
-      setRecord(saved);
-    } catch (error) {
-      setRecord(previous);
-      toast.error(error instanceof Error ? error.message : "保存答案失败");
-    }
+    const questionId = currentQuestionRef.current?.id ?? "";
+    const question = active?.questions.find((item) => item.id === questionId);
+    if (!active || !question || submittingRef.current) return;
+
+    // Update the ref before starting the request so rapid multi-select clicks
+    // always build on the latest local selection.
+    const nextAnswerKeys = buildNextAnswerKeys(question, optionKey);
+    const optimistic = applyObjectiveAnswerToRecord(active, question.id, nextAnswerKeys, draftRef.current);
+    const revision = (objectiveAnswerRevisionRef.current[question.id] ?? 0) + 1;
+    objectiveAnswerRevisionRef.current[question.id] = revision;
+    recordRef.current = optimistic;
+    setRecord(optimistic);
+    updateObjectiveDraftBackup(active.id, question.id, nextAnswerKeys);
+    void persistObjective(active.id, question.id, nextAnswerKeys, revision).catch(() => {});
   };
 
   const handleUndo = () => {

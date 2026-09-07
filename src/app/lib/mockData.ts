@@ -7,6 +7,11 @@ export type MockExamRecordStatus = "in_progress" | "submitted";
 export type MockExamQuestionAnswerState = "unanswered" | "partial" | "answered";
 export type MockExamReviewWorkflowStatus = "not_required" | "ai_pending" | "ai_processing" | "manual_pending" | "published" | "returned_for_redo";
 
+export interface MockExamAnswerSaveResult {
+  id: string;
+  status: MockExamRecordStatus;
+}
+
 export interface MockExamLaunchConfigTab {
   key: "notice" | "rules" | "guide";
   label: string;
@@ -593,17 +598,21 @@ export const mockApi = {
     payload:
       | { questionId: string; answerKeys: string[] }
       | { questionId: string; subQuestionId: string; answerText: string },
-    options?: { keepalive?: boolean },
+    options?: { keepalive?: boolean; signal?: AbortSignal },
   ) =>
-    patchJson<MockExamRecordDetail>(
-      `/api/user/mock-exams/records/${encodeId(recordId)}/answers`,
+    patchJson<MockExamAnswerSaveResult>(
+      `/api/user/mock-exams/records/${encodeId(recordId)}/answers?compact=1`,
       payload,
-      options?.keepalive ? { keepalive: true } : undefined,
+      options ? { keepalive: options.keepalive, signal: options.signal } : undefined,
     ),
   submitMockExam: (
     recordId: string,
-    payload?: { subjectiveAnswers?: Array<{ questionId: string; subQuestionId: string; answerText: string }> },
-  ) => postJson<MockExamRecordDetail>(`/api/user/mock-exams/records/${encodeId(recordId)}/submit`, payload ?? {}),
+    payload?: {
+      subjectiveAnswers?: Array<{ questionId: string; subQuestionId: string; answerText: string }>;
+      objectiveAnswers?: Array<{ questionId: string; answerKeys: string[] }>;
+    },
+    options?: { signal?: AbortSignal },
+  ) => postJsonWithOptions<MockExamRecordDetail>(`/api/user/mock-exams/records/${encodeId(recordId)}/submit`, payload ?? {}, options),
   submitMockExamReviewFeedback: (recordId: string, questionId: string, payload: { stars: number }) =>
     postJson<MockExamRecordDetail>(
       `/api/user/mock-exams/records/${encodeId(recordId)}/questions/${encodeId(questionId)}/review-feedback`,

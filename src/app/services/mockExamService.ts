@@ -203,5 +203,11 @@ export const mockExamService = {
     recordId: string | number,
     payload: { questionId: string; answerKeys?: string[]; answerText?: string; subQuestionId?: string },
   ) => patchJson<MockExamRecordDetail>(`/api/user/mock-exams/records/${encodeId(recordId)}/answers`, payload),
-  submitRecord: (recordId: string | number) => postJson<MockExamRecordDetail>(`/api/user/mock-exams/records/${encodeId(recordId)}/submit`),
+  submitRecord: (
+    recordId: string | number,
+    payload?: {
+      subjectiveAnswers?: Array<{ questionId: string; subQuestionId: string; answerText: string }>;
+      objectiveAnswers?: Array<{ questionId: string; answerKeys: string[] }>;
+    },
+  ) => postJson<MockExamRecordDetail>(`/api/user/mock-exams/records/${encodeId(recordId)}/submit`, payload ?? {}),
 };

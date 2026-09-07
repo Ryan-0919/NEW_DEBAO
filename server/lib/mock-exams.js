@@ -341,6 +341,63 @@ const normalizeSubjectiveSubmitAnswers = (answers = []) =>
     }))
     .filter((item) => item.questionId && item.subQuestionId);
 
+const normalizeObjectiveSubmitAnswers = (answers = []) =>
+  (Array.isArray(answers) ? answers : [])
+    .slice(0, 300)
+    .map((item) => ({
+      questionId: `${item?.questionId ?? ""}`.trim(),
+      answerKeys: normalizeAnswerKeys(item?.answerKeys),
+    }))
+    .filter((item) => item.questionId);
+
+const saveObjectiveSubmitAnswers = async ({ tx, record, paper, objectiveAnswers = [] }) => {
+  const normalizedAnswers = normalizeObjectiveSubmitAnswers(objectiveAnswers);
+  if (normalizedAnswers.length === 0) return false;
+
+  const objectiveQuestions = new Map(
+    (paper.questions ?? []).filter((question) => !isSubjectiveQuestion(question)).map((question) => [question.id, question]),
+  );
+  const existingAnswers = new Map((record.answers ?? []).map((answer) => [answer.questionId, answer]));
+
+  for (const item of normalizedAnswers) {
+    const question = objectiveQuestions.get(item.questionId);
+    if (!question) continue;
+
+    const validOptionKeys = new Set((question.options ?? []).map((option) => option.optionKey));
+    if (questionTypeMeta[question.type]?.maxSelections === 1 && item.answerKeys.length > 1) {
+      throw createHttpError("单选题只能选择一个答案", 400);
+    }
+    if (item.answerKeys.some((key) => !validOptionKeys.has(key))) {
+      throw createHttpError("答案选项不合法", 400);
+    }
+
+    const existingAnswer = existingAnswers.get(question.id);
+    if (item.answerKeys.length === 0) {
+      if (existingAnswer) await tx.mockExamAnswer.delete({ where: { id: existingAnswer.id } });
+      continue;
+    }
+
+    const data = {
+      answerJson: JSON.stringify(item.answerKeys),
+      isCorrect: null,
+      score: 0,
+    };
+    if (existingAnswer) {
+      await tx.mockExamAnswer.update({ where: { id: existingAnswer.id }, data });
+    } else {
+      await tx.mockExamAnswer.create({
+        data: {
+          recordId: record.id,
+          questionId: question.id,
+          ...data,
+        },
+      });
+    }
+  }
+
+  return true;
+};
+
 const saveSubjectiveSubmitAnswers = async ({ tx, record, paper, subjectiveAnswers = [] }) => {
   const normalizedAnswers = normalizeSubjectiveSubmitAnswers(subjectiveAnswers);
   if (normalizedAnswers.length === 0) return false;
@@ -2410,7 +2467,14 @@ export const saveMockExamAnswer = async ({ db, recordId, userId, questionId, ans
   });
 };
 
-export const finalizeMockExamRecord = async ({ db, recordId, userId, currentTime = new Date(), subjectiveAnswers = [] }) =>
+export const finalizeMockExamRecord = async ({
+  db,
+  recordId,
+  userId,
+  currentTime = new Date(),
+  subjectiveAnswers = [],
+  objectiveAnswers = [],
+}) =>
   db.$transaction(async (tx) => {
     await lockMockExamRecord(tx, recordId);
     let record = await getRecordWithPaper(tx, recordId);
@@ -2423,13 +2487,19 @@ export const finalizeMockExamRecord = async ({ db, recordId, userId, currentTime
     }
 
     let paper = getRecordPaper(record);
+    const savedFinalObjectiveAnswers = await saveObjectiveSubmitAnswers({
+      tx,
+      record,
+      paper,
+      objectiveAnswers,
+    });
     const savedFinalSubjectiveAnswers = await saveSubjectiveSubmitAnswers({
       tx,
       record,
       paper,
       subjectiveAnswers,
     });
-    if (savedFinalSubjectiveAnswers) {
+    if (savedFinalObjectiveAnswers || savedFinalSubjectiveAnswers) {
       record = await getRecordWithPaper(tx, record.id);
       paper = getRecordPaper(record);
     }
