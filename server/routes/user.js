@@ -25,6 +25,7 @@ import {
   summarizeVideoCourseProgress,
 } from "../lib/course-content.js";
 import { normalizeCourseQuestionBankLinks } from "../../src/shared/portal-config.js";
+import { getMockExamActivityDetail } from "../lib/user-study-summary.js";
 
 export const userRouter = Router();
 
@@ -484,10 +485,7 @@ const buildUserStudySummary = async (userId) => {
     ...mockRecords.map((record) => ({
       type: record.paper?.paperType === "subjective" ? "subjective_exam" : "objective_exam",
       title: record.status === "submitted" ? `提交${record.paper?.title || "考试"}` : `开始${record.paper?.title || "考试"}`,
-      detail:
-        record.status === "submitted"
-          ? `得分 ${Number(record.totalScore ?? 0)} / 作答 ${Number(record.answeredCount ?? 0)}/${Number(record.questionCount ?? 0)}`
-          : `已作答 ${Number(record.answeredCount ?? 0)}/${Number(record.questionCount ?? 0)}`,
+      detail: getMockExamActivityDetail(record),
       occurredAt: record.submittedAt ?? record.startedAt ?? record.updatedAt,
     })),
     ...typingRecords.map((record) => ({
