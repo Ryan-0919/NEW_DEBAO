@@ -617,6 +617,8 @@ const mergeSnapshotWithLivePaper = (snapshotPaper, livePaper) => {
 
       return {
         ...question,
+        // 参考答案以当前题库题目为准，批改记录中的副本只保留历史快照，不参与展示。
+        questionMetaJson: liveQuestion.questionMetaJson ?? question.questionMetaJson,
         lessonAudioUrl: liveQuestion.lessonAudioUrl || question.lessonAudioUrl,
         lessonAudioObjectKey: liveQuestion.lessonAudioObjectKey || question.lessonAudioObjectKey,
         lessonAudioDurationSeconds: liveQuestion.lessonAudioDurationSeconds || question.lessonAudioDurationSeconds,
@@ -758,7 +760,7 @@ const serializeQuestion = (question, answer, revealAnswer) => {
         score,
         maxScore,
         reviewComment: revealAnswer ? normalizeReviewCommentText(reviewItem?.reviewComment ?? "") : "",
-        referenceAnswer: revealAnswer ? `${reviewItem?.referenceAnswer ?? item.referenceAnswer ?? ""}`.trim() : "",
+        referenceAnswer: revealAnswer ? `${item.referenceAnswer ?? ""}`.trim() : "",
         reviewSource: reviewItem?.reviewSource ?? reviewSource,
         reviewProvider: normalizeReviewProvider(reviewItem?.reviewProvider ?? reviewProvider),
         isReviewed: revealAnswer && Boolean(reviewItem),
@@ -1602,7 +1604,8 @@ const normalizeReturnedAiSubQuestion = ({ item, fallback, index, runtimeConfig }
       title: fallback.title,
       missedPoints,
     }),
-    referenceAnswer: `${item?.referenceAnswer ?? item?.reference_answer ?? fallback.referenceAnswer ?? ""}`.trim(),
+    // AI 返回的 referenceAnswer 不作为权威来源，始终回退到题库原题答案。
+    referenceAnswer: `${fallback.referenceAnswer ?? ""}`.trim(),
     reviewSource: "ai",
     reviewProvider: "openai-compatible",
     abilityLabel: `${item?.abilityLabel ?? item?.ability_label ?? fallback.abilityLabel ?? fallback.title ?? ""}`.trim(),

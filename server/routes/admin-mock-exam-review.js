@@ -303,7 +303,15 @@ const mergeSnapshotWithLivePaper = (snapshotPaper, livePaper) => {
     ...snapshotPaper,
     questions: snapshotPaper.questions.map((question) => {
       const liveQuestion = liveQuestionMap.get(question.id);
-      return liveQuestion ? { ...question, lessonAudioUrl: liveQuestion.lessonAudioUrl, lessonAudioObjectKey: liveQuestion.lessonAudioObjectKey } : question;
+      return liveQuestion
+        ? {
+            ...question,
+            // 参考答案以当前题库题目为准，批改记录中的副本只保留历史快照，不参与展示。
+            questionMetaJson: liveQuestion.questionMetaJson ?? question.questionMetaJson,
+            lessonAudioUrl: liveQuestion.lessonAudioUrl,
+            lessonAudioObjectKey: liveQuestion.lessonAudioObjectKey,
+          }
+        : question;
     }),
   };
 };
@@ -529,7 +537,7 @@ const serializeReviewDetail = (record, req, currentTime = new Date()) => {
             score,
             maxScore,
             reviewComment: normalizeReviewCommentText(reviewItem?.reviewComment ?? ""),
-            referenceAnswer: normalizeText(reviewItem?.referenceAnswer ?? subQuestion.referenceAnswer ?? ""),
+            referenceAnswer: normalizeText(subQuestion.referenceAnswer ?? ""),
             abilityLabel: normalizeText(reviewItem?.abilityLabel ?? subQuestion.abilityLabel ?? subQuestion.title),
             rubricGuidance: normalizeText(reviewItem?.rubricGuidance ?? subQuestion.rubricGuidance ?? ""),
             rubricPoints: normalizeRubricPoints(reviewItem?.rubricPoints ?? subQuestion.rubricPoints),
@@ -641,7 +649,7 @@ const normalizeReviewPayload = ({ record, payloadAnswers = [] }) => {
         score,
         maxScore,
         reviewComment: normalizeReviewCommentText(item?.reviewComment ?? ""),
-        referenceAnswer: normalizeText(item?.referenceAnswer ?? subQuestion.referenceAnswer ?? ""),
+        referenceAnswer: normalizeText(subQuestion.referenceAnswer ?? ""),
         reviewSource: "manual",
         reviewProvider: "manual",
         abilityLabel: normalizeText(item?.abilityLabel ?? subQuestion.abilityLabel ?? subQuestion.title),
