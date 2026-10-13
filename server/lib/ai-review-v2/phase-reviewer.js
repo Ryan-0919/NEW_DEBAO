@@ -20,7 +20,7 @@ export class PhaseReviewer {
   /**
    * 批改单个小问（分阶段）
    */
-  async reviewSubQuestion({ question, subQuestion, answer, rubric }) {
+  async reviewSubQuestion({ question, subQuestion, answer, rubric, onProgress }) {
     const startTime = Date.now();
 
     try {
@@ -33,6 +33,7 @@ export class PhaseReviewer {
         answer,
         rubric
       });
+      await onProgress?.();
 
       const phase1Time = Date.now() - phase1StartTime;
 
@@ -61,6 +62,7 @@ export class PhaseReviewer {
         rubric,
         phase1Result: phase1Result.data
       });
+      await onProgress?.();
 
       const phase2Time = Date.now() - phase2StartTime;
 

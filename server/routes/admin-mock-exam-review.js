@@ -1555,6 +1555,8 @@ adminMockExamReviewRouter.post("/records/:recordId/ai-review", async (req, res) 
               data: {
                 publishedReviewJson: null,
                 publishedScore: null,
+                reviewJson: null,
+                score: 0,
               },
             })
           )
@@ -1632,6 +1634,8 @@ adminMockExamReviewRouter.post("/records/batch-ai-review", async (req, res) => {
                 data: {
                   publishedReviewJson: null,
                   publishedScore: null,
+                  reviewJson: null,
+                  score: 0,
                 },
               })
             )

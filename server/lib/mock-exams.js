@@ -13,6 +13,7 @@ const DEFAULT_OBJECTIVE_COVER = "/mock-exam/default-objective-cover.svg";
 const DEFAULT_SUBJECTIVE_COVER = "/mock-exam/default-subjective-cover.svg";
 const RETURNED_FOR_REDO_WORKFLOW_STATUS = "returned_for_redo";
 const SUBJECTIVE_REVIEW_ATTEMPT_STATUSES = new Set(["ai_pending", "ai_processing", "manual_pending", "published"]);
+const AI_REVIEW_CHECKPOINT_VERSION = 1;
 
 const questionTypeMeta = {
   single_choice: {
@@ -146,6 +147,68 @@ const normalizeAnswerKeys = (answerKeys = []) =>
   ).sort();
 
 const parseObjectiveAnswerJson = (value) => normalizeAnswerKeys(parseJsonSafely(value, []));
+
+const touchAiReviewProcessing = async ({ db, recordId, currentTime = new Date() }) => {
+  const touched = await db.mockExamRecord.updateMany({
+    where: {
+      id: recordId,
+      status: "submitted",
+      reviewWorkflowStatus: "ai_processing",
+    },
+    data: {
+      aiReviewStartedAt: currentTime,
+    },
+  });
+  if (Number(touched.count ?? 0) !== 1) {
+    throw createHttpError("该试卷已被其他流程接管，请刷新后重试", 409);
+  }
+};
+
+const saveAiReviewQuestionCheckpoint = async ({ db, recordId, questionId, score, reviewJson, currentTime = new Date() }) =>
+  db.$transaction(async (tx) => {
+    await lockMockExamRecord(tx, recordId);
+    const latestRecord = await tx.mockExamRecord.findUnique({
+      where: { id: recordId },
+      select: { status: true, reviewWorkflowStatus: true },
+    });
+    if (latestRecord?.status !== "submitted" || latestRecord.reviewWorkflowStatus !== "ai_processing") {
+      throw createHttpError("该试卷已被其他流程接管，请刷新后重试", 409);
+    }
+    const answer = await tx.mockExamAnswer.findUnique({
+      where: {
+        recordId_questionId: {
+          recordId,
+          questionId,
+        },
+      },
+    });
+    const data = {
+      score,
+      reviewJson: JSON.stringify(reviewJson),
+    };
+    if (answer) {
+      await tx.mockExamAnswer.update({ where: { id: answer.id }, data });
+    } else {
+      await tx.mockExamAnswer.create({
+        data: {
+          recordId,
+          questionId,
+          answerJson: "{}",
+          ...data,
+        },
+      });
+    }
+    await tx.mockExamRecord.updateMany({
+      where: {
+        id: recordId,
+        status: "submitted",
+        reviewWorkflowStatus: "ai_processing",
+      },
+      data: {
+        aiReviewStartedAt: currentTime,
+      },
+    });
+  });
 
 const normalizePlainText = (value) => `${value ?? ""}`.replace(/\r\n/g, "\n").trimEnd();
 
@@ -658,7 +721,10 @@ const getVisibleMockExamTotalScore = (record) => {
     if (!isSubjectiveQuestion(question)) return sum + (Number(answer?.score ?? 0) || 0);
 
     const publishedReviewJson = parseJsonSafely(answer?.publishedReviewJson, null);
-    if (!publishedReviewJson) return sum + (Number(answer?.score ?? 0) || 0);
+    // AI/manual draft scores are not visible to students until the teacher
+    // publishes the review. This also prevents partial long-paper checkpoints
+    // from appearing as a final score while the paper is still processing.
+    if (!publishedReviewJson) return sum;
     return sum + getSubjectiveReviewJsonScore({ question, reviewJson: publishedReviewJson });
   }, 0);
 };
@@ -1934,8 +2000,6 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
   if (!["ai_pending", "ai_processing"].includes(workflowStatus)) {
     return record;
   }
-  const hasPublishedSnapshot = (record.answers ?? []).some((answer) => answer.publishedReviewJson);
-
   await db.$transaction(async (tx) => {
     const latestRecord = await tx.mockExamRecord.findUnique({
       where: { id: record.id },
@@ -1986,7 +2050,6 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
   });
 
   const answerMap = new Map((record.answers ?? []).map((answer) => [answer.questionId, answer]));
-  const reviewUpdates = [];
   let subjectiveTotalScore = 0;
 
   const { reviewWithV2 } = await import("./ai-review-v2/index.js");
@@ -1994,17 +2057,44 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
   for (const question of subjectiveQuestions) {
     const existingAnswer = answerMap.get(question.id) ?? null;
 
-    const result = await reviewWithV2({ question, answer: existingAnswer, recordId: record.id });
+    await touchAiReviewProcessing({ db, recordId: record.id, currentTime: new Date() });
+
+    const existingReviewJson = parseJsonSafely(existingAnswer?.reviewJson, null);
+    if (existingReviewJson?.aiReviewCheckpoint?.version === AI_REVIEW_CHECKPOINT_VERSION) {
+      const checkpointScore = clampScore(
+        existingReviewJson.totalScore,
+        0,
+        Number(question.score ?? existingReviewJson.maxScore ?? 0) || 0,
+      );
+      subjectiveTotalScore += checkpointScore;
+      console.log(`[AI批改V2] 跳过已完成检查点 questionId=${question.id}`);
+      continue;
+    }
+
+    const result = await reviewWithV2({
+      question,
+      answer: existingAnswer,
+      recordId: record.id,
+      onProgress: () => touchAiReviewProcessing({ db, recordId: record.id, currentTime: new Date() }),
+    });
     const reviewJson = result.reviewJson;
     console.log(`[AI批改V2] 批改成功 questionId=${question.id}, logId=${result.logId}`);
 
     const score = clampScore(reviewJson.totalScore, 0, Number(question.score ?? reviewJson.maxScore ?? 0) || 0);
     subjectiveTotalScore += score;
-    reviewUpdates.push({
+    await saveAiReviewQuestionCheckpoint({
+      db,
+      recordId: record.id,
       questionId: question.id,
-      answerId: existingAnswer?.id ?? "",
       score,
-      reviewJson: JSON.stringify(reviewJson),
+      reviewJson: {
+        ...reviewJson,
+        aiReviewCheckpoint: {
+          version: AI_REVIEW_CHECKPOINT_VERSION,
+          completedAt: new Date().toISOString(),
+        },
+      },
+      currentTime: new Date(),
     });
   }
 
@@ -2012,12 +2102,14 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
     .filter((question) => !isSubjectiveQuestion(question))
     .reduce((sum, question) => sum + Number(answerMap.get(question.id)?.score ?? 0), 0);
 
+  const finishedAt = new Date();
   await db.$transaction(async (tx) => {
     const latestRecord = await tx.mockExamRecord.findUnique({
       where: { id: record.id },
       select: {
         id: true,
         status: true,
+        reviewWorkflowStatus: true,
         manualReviewerId: true,
         manualReviewLockToken: true,
         manualReviewLockExpiresAt: true,
@@ -2044,34 +2136,8 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
       throw createHttpError("该试卷已被人工领取，本次自动批改已终止", 409);
     }
 
-    for (const item of reviewUpdates) {
-      if (item.answerId) {
-        const existingAnswer = answerMap.get(item.questionId);
-        const shouldSeedPublishedSnapshot = !hasPublishedSnapshot && Boolean(record.publishedAt && existingAnswer?.reviewJson);
-        await tx.mockExamAnswer.update({
-          where: { id: item.answerId },
-          data: {
-            score: item.score,
-            reviewJson: item.reviewJson,
-            ...(shouldSeedPublishedSnapshot
-              ? {
-                  publishedReviewJson: existingAnswer.reviewJson,
-                  publishedScore: Number(existingAnswer.score ?? 0) || 0,
-                }
-              : {}),
-          },
-        });
-      } else {
-        await tx.mockExamAnswer.create({
-          data: {
-            recordId: record.id,
-            questionId: item.questionId,
-            answerJson: "{}",
-            score: item.score,
-            reviewJson: item.reviewJson,
-          },
-        });
-      }
+    if (latestRecord.reviewWorkflowStatus !== "ai_processing") {
+      throw createHttpError("该试卷已被其他流程接管，请刷新后重试", 409);
     }
 
     await tx.mockExamRecord.update({
@@ -2079,9 +2145,9 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
       data: {
         totalScore: objectiveScore + subjectiveTotalScore,
         reviewWorkflowStatus: "manual_pending",
-        reviewedAt: currentTime,
+        reviewedAt: finishedAt,
         publishedAt: null,
-        aiReviewFinishedAt: currentTime,
+        aiReviewFinishedAt: finishedAt,
         aiReviewNextRetryAt: null,
         aiReviewRetryCount: 0,
         lastAiReviewError: null,

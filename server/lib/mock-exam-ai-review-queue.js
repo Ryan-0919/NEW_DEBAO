@@ -9,7 +9,10 @@ const DEFAULT_RETRY_DELAY_MS = 15000;
 const DEFAULT_RETRY_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_QUEUE_POLL_INTERVAL_MS = 3000;
 const DEFAULT_QUEUE_SCAN_BATCH_SIZE = 20;
-const STALE_AI_PROCESSING_MIN_RECOVERY_MS = 5 * 60 * 1000;
+// A long paper can legitimately spend several minutes in one processing run.
+// Heartbeats refresh aiReviewStartedAt, while this floor protects a task from
+// being reset just because it is a large paper rather than a dead worker.
+const STALE_AI_PROCESSING_MIN_RECOVERY_MS = 15 * 60 * 1000;
 const STALE_AI_PROCESSING_EXTRA_BUFFER_MS = 60 * 1000;
 const STALE_AI_PROCESSING_ERROR_MESSAGE = "AI批改任务异常中断，已恢复为待处理状态，请重新批改";
 

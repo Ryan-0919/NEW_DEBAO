@@ -59,7 +59,7 @@ export async function getActiveStrategy() {
   return normalizeStrategy(strategy);
 }
 
-export async function reviewWithV2({ question, answer, recordId }) {
+export async function reviewWithV2({ question, answer, recordId, onProgress }) {
   const startTime = Date.now();
   const strategy = await getActiveStrategy();
   const runtimeConfig = await getMockExamAiReviewConfig({ db: prisma });
@@ -77,7 +77,7 @@ export async function reviewWithV2({ question, answer, recordId }) {
   });
 
   try {
-    const reviewResult = await handler.review({ question, answer, recordId });
+    const reviewResult = await handler.review({ question, answer, recordId, onProgress });
 
     if (reviewResult.success) {
       await logger.success({

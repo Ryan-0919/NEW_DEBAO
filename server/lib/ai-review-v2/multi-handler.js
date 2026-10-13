@@ -19,7 +19,7 @@ export class MultiSubQuestionHandler {
   /**
    * 智能批改入口
    */
-  async review({ question, answer, recordId }) {
+  async review({ question, answer, recordId, onProgress }) {
     const questionMeta = this.getQuestionMeta(question);
     const subQuestionCount = questionMeta.subQuestions.length;
 
@@ -27,7 +27,7 @@ export class MultiSubQuestionHandler {
 
     // 策略：所有情况都逐个批改，确保JSON不会过长
     console.log(`[多小问处理] 使用逐个批改（避免JSON截断）`);
-    return await this.sequentialReview({ question, answer, recordId, questionMeta });
+    return await this.sequentialReview({ question, answer, recordId, questionMeta, onProgress });
   }
 
   /**
@@ -40,7 +40,7 @@ export class MultiSubQuestionHandler {
   /**
    * 逐个小问批改（真正串行执行，降低上游限流与 502 概率）
    */
-  async sequentialReview({ question, answer, recordId, questionMeta }) {
+  async sequentialReview({ question, answer, recordId, questionMeta, onProgress }) {
     const startTime = Date.now();
     const answerMap = this.parseSubjectiveAnswerMap(answer?.answerJson, question);
 
@@ -59,6 +59,7 @@ export class MultiSubQuestionHandler {
     for (let i = 0; i < questionMeta.subQuestions.length; i += 1) {
       const sq = questionMeta.subQuestions[i];
       console.log(`[多小问处理] 启动小问${i + 1}/${questionMeta.subQuestions.length}: ${sq.id}`);
+      await onProgress?.();
       const maxScore = this.getSubQuestionMaxScore(question, sq, questionMeta.subQuestions.length);
       try {
         const result = await this.phaseReviewer.reviewSubQuestion({
@@ -70,7 +71,8 @@ export class MultiSubQuestionHandler {
             points: sq.rubricPoints || [],
             referenceAnswer: sq.referenceAnswer || '',
             guidance: sq.rubricGuidance || ''
-          }
+          },
+          onProgress,
         });
         results.push({
           ...result,
