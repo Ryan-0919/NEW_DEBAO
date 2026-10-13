@@ -69,7 +69,7 @@ export const config = {
     model: optional("MOCK_EXAM_AI_MODEL"),
     disableQueue: optionalBoolean("MOCK_EXAM_AI_DISABLE_QUEUE", false),
     timeoutMs: optionalNonNegativeInt("MOCK_EXAM_AI_TIMEOUT_MS", 120000),
-    maxConcurrency: optionalPositiveInt("MOCK_EXAM_AI_MAX_CONCURRENCY", 3),
+    maxConcurrency: optionalPositiveInt("MOCK_EXAM_AI_MAX_CONCURRENCY", 20),
     maxRetryCount: optionalNonNegativeInt("MOCK_EXAM_AI_MAX_RETRY_COUNT", 3),
     retryDelayMs: optionalNonNegativeInt("MOCK_EXAM_AI_RETRY_DELAY_MS", 15000),
     retryCooldownMs: optionalNonNegativeInt("MOCK_EXAM_AI_RETRY_COOLDOWN_MS", 2 * 60 * 60 * 1000),

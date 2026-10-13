@@ -3,7 +3,7 @@ import { prisma } from "./prisma.js";
 import { getMockExamAiReviewConfig } from "./mock-exam-ai-review-config.js";
 import { autoReviewMockExamRecord } from "./mock-exams.js";
 
-const DEFAULT_MAX_CONCURRENCY = 3;
+const DEFAULT_MAX_CONCURRENCY = 20;
 const DEFAULT_MAX_RETRY_COUNT = 3;
 const DEFAULT_RETRY_DELAY_MS = 15000;
 const DEFAULT_RETRY_COOLDOWN_MS = 2 * 60 * 60 * 1000;
