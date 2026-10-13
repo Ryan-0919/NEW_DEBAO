@@ -5,68 +5,6 @@ import { ReviewValidator } from './validator.js';
 const normalizeBaseUrl = (value = '') => `${value ?? ''}`.trim().replace(/\/+$/, '');
 const isGpt5FamilyModel = (model = '') => /^gpt-5(?:$|[-.])/i.test(`${model ?? ''}`.trim());
 
-const extractBalancedJsonCandidates = (value = '') => {
-  const text = `${value ?? ''}`.replace(/^\uFEFF/, '').trim();
-  const candidates = [];
-  let start = -1;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      continue;
-    }
-
-    if (char === '{' || char === '[') {
-      if (depth === 0) start = index;
-      depth += 1;
-      continue;
-    }
-
-    if (char === '}' || char === ']') {
-      if (depth === 0) continue;
-      depth -= 1;
-      if (depth === 0 && start >= 0) {
-        candidates.push(text.slice(start, index + 1));
-        start = -1;
-      }
-    }
-  }
-
-  return candidates;
-};
-
-const parseJsonCandidates = (content = '') => {
-  const text = `${content ?? ''}`.trim();
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
-  const candidates = [fenced, text, ...extractBalancedJsonCandidates(fenced || text)]
-    .filter(Boolean)
-    .filter((item, index, all) => all.indexOf(item) === index);
-
-  for (const candidate of candidates) {
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      // Continue with the next extraction strategy or the JSON normalizer.
-    }
-  }
-  return null;
-};
-
 export class AiReviewer {
   constructor(strategy, runtimeConfig) {
     this.strategy = strategy;
@@ -300,7 +238,6 @@ export class AiReviewer {
     const requestBody = {
       model,
       temperature,
-      response_format: { type: 'json_object' },
       messages: [
         { role: leadingRole, content: systemPrompt },
         { role: 'user', content: requestText }
@@ -313,28 +250,12 @@ export class AiReviewer {
 
     console.log(`[AI请求] endpoint=${endpoint}, model=${requestBody.model}, temp=${requestBody.temperature}, max_tokens=${requestBody.max_tokens ?? 'omitted'}`);
 
-    let response = await fetch(endpoint, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify(requestBody),
       signal
     });
-
-    // A few OpenAI-compatible gateways do not implement response_format. Keep
-    // JSON mode as the first choice, but remain compatible with those gateways.
-    if (!response.ok && response.status === 400) {
-      const errorText = await response.clone().text();
-      if (/response_format|json_object|unsupported parameter/i.test(errorText)) {
-        const fallbackBody = { ...requestBody };
-        delete fallbackBody.response_format;
-        response = await fetch(endpoint, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(fallbackBody),
-          signal
-        });
-      }
-    }
 
     const responseText = await response.text();
 
@@ -426,72 +347,80 @@ export class AiReviewer {
    * 解析和修复JSON
    */
   async parseAndRepairJson(response) {
-    const content = typeof response?.content === 'string' ? response.content : '';
+    let content = response.content;
 
     console.log(`[JSON解析] 原始内容长度: ${content.length}`);
     console.log(`[JSON解析] 前500字符: ${content.substring(0, 500)}`);
 
-    const parsed = parseJsonCandidates(content);
-    if (parsed) {
-      console.log(`[JSON解析] 本地解析成功`);
+    // 尝试1：直接解析
+    try {
+      const parsed = JSON.parse(content);
+      console.log(`[JSON解析] 直接解析成功`);
       return parsed;
+    } catch (e) {
+      console.log(`[JSON解析] 直接解析失败: ${e.message}`);
     }
 
-    const repaired = await this.repairJsonWithAi(content);
-    if (repaired) {
-      console.log(`[JSON解析] 标准化模型修复成功`);
-      return repaired;
+    // 尝试2：提取代码块中的JSON
+    const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      try {
+        const parsed = JSON.parse(codeBlockMatch[1]);
+        console.log(`[JSON解析] 代码块解析成功`);
+        return parsed;
+      } catch (e) {
+        console.log(`[JSON解析] 代码块解析失败: ${e.message}`);
+
+        // 尝试修复：去掉最后不完整的部分
+        let jsonStr = codeBlockMatch[1].trim();
+
+        // 如果JSON看起来不完整，尝试修复
+        if (e.message.includes('Unexpected end') || e.message.includes('Expected')) {
+          console.log(`[JSON修复] 尝试修复不完整的JSON...`);
+
+          // 找到最后一个完整的对象结束位置
+          let depth = 0;
+          let lastValidPos = -1;
+
+          for (let i = 0; i < jsonStr.length; i++) {
+            if (jsonStr[i] === '{' || jsonStr[i] === '[') depth++;
+            if (jsonStr[i] === '}' || jsonStr[i] === ']') {
+              depth--;
+              if (depth === 0) {
+                lastValidPos = i + 1;
+              }
+            }
+          }
+
+          if (lastValidPos > 0) {
+            const fixedJson = jsonStr.substring(0, lastValidPos);
+            try {
+              const parsed = JSON.parse(fixedJson);
+              console.log(`[JSON修复] 修复成功`);
+              return parsed;
+            } catch (e2) {
+              console.log(`[JSON修复] 修复失败: ${e2.message}`);
+            }
+          }
+        }
+      }
+    }
+
+    // 尝试3：提取大括号中的内容
+    const braceMatch = content.match(/\{[\s\S]*\}/);
+    if (braceMatch) {
+      try {
+        const parsed = JSON.parse(braceMatch[0]);
+        console.log(`[JSON解析] 大括号解析成功`);
+        return parsed;
+      } catch (e) {
+        console.log(`[JSON解析] 大括号解析失败: ${e.message}`);
+      }
     }
 
     console.error(`[JSON解析] 所有方法都失败了`);
     console.error(`[JSON解析] 内容预览:`, content.substring(0, 1000));
-    throw new Error(`无法解析AI返回的JSON（finish_reason=${response?.finishReason || 'unknown'}）`);
-  }
-
-  async repairJsonWithAi(brokenContent) {
-    const normalizerEnabled = this.runtimeConfig?.jsonNormalizerEnabled !== false;
-    const baseUrl = normalizeBaseUrl(this.runtimeConfig?.jsonNormalizerBaseUrl || this.runtimeConfig?.baseUrl);
-    const apiKey = `${this.runtimeConfig?.jsonNormalizerApiKey || this.runtimeConfig?.apiKey || ''}`.trim();
-    const model = `${this.runtimeConfig?.jsonNormalizerModel || this.strategy?.model || this.runtimeConfig?.model || ''}`.trim();
-    if (!normalizerEnabled || !baseUrl || !apiKey || !model || !brokenContent.trim()) return null;
-
-    const defaultSystemPrompt = [
-      '你是 JSON 修复器，不是阅卷老师。',
-      '只修复语法问题，不改变原始批改的分数、结论、评语、错误标注或遗漏点。',
-      '将 Markdown 包裹、未转义引号、错误逗号、截断括号修复为合法 JSON。',
-      '最终只能返回一个 JSON 对象，不要解释、不要 Markdown、不要代码块。',
-    ].join('\n');
-    const template = `${this.runtimeConfig?.jsonNormalizerUserPromptTemplate || ''}`.trim();
-    const userPrompt = template
-      ? template.split('{{原始批改输出}}').join(brokenContent)
-      : `请修复下面的 AI 批改结果，使其成为合法 JSON，保留原始字段和内容，不要重新批改：\n\n${brokenContent}`;
-
-    const timeoutMs = Number(this.runtimeConfig?.timeoutMs || this.strategy?.timeoutMs || 120000);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), Math.max(1000, timeoutMs));
-
-    try {
-      const response = await this.sendChatCompletionsRequest({
-        baseUrl,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        model,
-        systemPrompt: `${this.runtimeConfig?.jsonNormalizerSystemPrompt || defaultSystemPrompt}`.trim(),
-        temperature: 0,
-        maxTokens: Number(this.runtimeConfig?.jsonNormalizerMaxTokens || 16000),
-        requestText: userPrompt,
-        signal: controller.signal,
-      });
-      if (!response.ok) return null;
-      return parseJsonCandidates(response.result?.content || response.content || '');
-    } catch (error) {
-      console.warn(`[JSON标准化] 请求失败: ${error.message}`);
-      return null;
-    } finally {
-      clearTimeout(timer);
-    }
+    throw new Error('无法解析AI返回的JSON');
   }
 
   /**
