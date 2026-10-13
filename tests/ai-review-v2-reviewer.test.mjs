@@ -57,6 +57,7 @@ test("gpt-5 family 只走 openai 兼容 chat completions 接口", async () => {
     const body = JSON.parse(calls[0].options.body);
     assert.equal(body.model, "gpt-5.5");
     assert.equal(body.temperature, 0.4);
+    assert.deepEqual(body.response_format, { type: "json_object" });
     assert.equal("max_tokens" in body, false);
     assert.equal(body.messages.length, 2);
     assert.deepEqual(body.messages[0], {
@@ -74,6 +75,60 @@ test("gpt-5 family 只走 openai 兼容 chat completions 接口", async () => {
       completion_tokens: 34,
       total_tokens: 46,
     });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("阶段1返回非法JSON时使用配置的标准化模型修复", async () => {
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return createJsonResponse({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              subQuestions: [
+                {
+                  id: "sub_1",
+                  score: 2,
+                  reviewComment: "已修复",
+                  answerMarks: [],
+                },
+              ],
+            }),
+          },
+          finish_reason: "stop",
+        },
+      ],
+    });
+  };
+
+  try {
+    const reviewer = new AiReviewer(
+      { model: "gpt-5.5", maxTokens: 1000 },
+      {
+        baseUrl: "https://ryanai.cc/v1",
+        apiKey: "review-key",
+        jsonNormalizerEnabled: true,
+        jsonNormalizerBaseUrl: "https://normalizer.example/v1",
+        jsonNormalizerApiKey: "normalizer-key",
+        jsonNormalizerModel: "gpt-5.5",
+      },
+    );
+
+    const result = await reviewer.parseAndRepairJson({
+      content: '{"subQuestions":[{"id":"sub_1","reviewComment":"学生说"错误""}]}',
+      finishReason: "stop",
+    });
+
+    assert.equal(result.subQuestions[0].id, "sub_1");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://normalizer.example/v1/chat/completions");
+    const body = JSON.parse(calls[0].options.body);
+    assert.deepEqual(body.response_format, { type: "json_object" });
+    assert.equal("max_tokens" in body, false);
   } finally {
     global.fetch = originalFetch;
   }
