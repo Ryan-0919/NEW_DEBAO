@@ -15,6 +15,13 @@ const RETURNED_FOR_REDO_WORKFLOW_STATUS = "returned_for_redo";
 const SUBJECTIVE_REVIEW_ATTEMPT_STATUSES = new Set(["ai_pending", "ai_processing", "manual_pending", "published"]);
 const AI_REVIEW_CHECKPOINT_VERSION = 1;
 
+const isCompletedAiReviewCheckpoint = ({ reviewJson, questionId }) => {
+  const checkpoint = reviewJson?.aiReviewCheckpoint;
+  if (checkpoint?.version !== AI_REVIEW_CHECKPOINT_VERSION) return false;
+  if (checkpoint.questionId && checkpoint.questionId !== questionId) return false;
+  return Array.isArray(reviewJson?.subQuestions);
+};
+
 const questionTypeMeta = {
   single_choice: {
     label: "单选题",
@@ -2060,7 +2067,7 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
     await touchAiReviewProcessing({ db, recordId: record.id, currentTime: new Date() });
 
     const existingReviewJson = parseJsonSafely(existingAnswer?.reviewJson, null);
-    if (existingReviewJson?.aiReviewCheckpoint?.version === AI_REVIEW_CHECKPOINT_VERSION) {
+    if (isCompletedAiReviewCheckpoint({ reviewJson: existingReviewJson, questionId: question.id })) {
       const checkpointScore = clampScore(
         existingReviewJson.totalScore,
         0,
@@ -2091,6 +2098,7 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
         ...reviewJson,
         aiReviewCheckpoint: {
           version: AI_REVIEW_CHECKPOINT_VERSION,
+          questionId: question.id,
           completedAt: new Date().toISOString(),
         },
       },
