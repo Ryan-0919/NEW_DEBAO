@@ -3,6 +3,33 @@ import { AiReviewer } from './reviewer.js';
 import { PhaseReviewer } from './phase-reviewer.js';
 import { getPerformanceMonitor } from './performance-monitor.js';
 
+const SUB_QUESTION_MAX_ATTEMPTS = 3;
+const SUB_QUESTION_RETRY_DELAYS_MS = [1000, 3000];
+
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const isTransientSubQuestionError = (error = '') => {
+  const message = `${error ?? ''}`.toLowerCase();
+  return [
+    'json',
+    'unexpected end',
+    'timeout',
+    'timed out',
+    'abort',
+    'fetch failed',
+    'network',
+    'terminated',
+    'upstream',
+    'temporarily unavailable',
+    'service unavailable',
+    '502',
+    '503',
+    '504',
+    '429',
+    'rate limit',
+  ].some((marker) => message.includes(marker));
+};
+
 /**
  * 智能多小问批改处理器
  * 根据小问数量决定是一次性批改还是逐个批改
@@ -81,7 +108,7 @@ export class MultiSubQuestionHandler {
       const maxScore = this.getSubQuestionMaxScore(question, sq, questionMeta.subQuestions.length);
       let result;
       try {
-        result = await this.phaseReviewer.reviewSubQuestion({
+        result = await this.reviewSubQuestionWithRetry({
           question,
           subQuestion: sq,
           answer: answerMap[sq.id] || '',
@@ -230,6 +257,25 @@ export class MultiSubQuestionHandler {
     return Object.fromEntries(
       subQuestions.map(sq => [sq.id, raw[sq.id] || ''])
     );
+  }
+
+  async reviewSubQuestionWithRetry(args) {
+    let lastResult = null;
+    for (let attempt = 1; attempt <= SUB_QUESTION_MAX_ATTEMPTS; attempt += 1) {
+      lastResult = await this.phaseReviewer.reviewSubQuestion(args);
+      if (lastResult?.success || attempt >= SUB_QUESTION_MAX_ATTEMPTS) return lastResult;
+
+      const error = `${lastResult?.error ?? ''}`;
+      if (!isTransientSubQuestionError(error)) return lastResult;
+
+      const delayMs = SUB_QUESTION_RETRY_DELAYS_MS[attempt - 1] ?? 3000;
+      console.warn(
+        `[多小问处理] 小问瞬时错误，${delayMs}ms 后重试 (${attempt + 1}/${SUB_QUESTION_MAX_ATTEMPTS}): ${error}`,
+      );
+      await args.onProgress?.();
+      await wait(delayMs);
+    }
+    return lastResult;
   }
 
   getPartialCheckpoint(reviewJson, questionId) {

@@ -149,3 +149,43 @@ test("多小问批改从局部断点继续，并在第一个失败的小问停�
   assert.deepEqual(checkpoints, []);
   assert.match(result.error, /sub_2/);
 });
+
+test("小问遇到可恢复的上游错误时在消耗试卷重试次数前自动重试", async () => {
+  const handler = new MultiSubQuestionHandler(
+    { model: "gpt-5.5" },
+    { baseUrl: "https://ryanai.cc/v1", apiKey: "test-key" },
+  );
+  let attempts = 0;
+  handler.phaseReviewer.reviewSubQuestion = async ({ subQuestion }) => {
+    attempts += 1;
+    if (attempts < 3) {
+      return { success: false, error: "AI API错误: 502 Upstream request failed", usage: {} };
+    }
+    return {
+      success: true,
+      result: {
+        id: subQuestion.id,
+        title: subQuestion.title,
+        score: 1,
+        maxScore: 1,
+        answer: "",
+        reviewComment: "",
+        answerMarks: [],
+        rubricPoints: [],
+        missedPoints: [],
+      },
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    };
+  };
+
+  const questionMeta = { subQuestions: [{ id: "sub_1", title: "小问1", maxScore: 1, rubricPoints: [] }] };
+  const result = await handler.sequentialReview({
+    question: { id: "q_1", score: 1, questionMetaJson: JSON.stringify(questionMeta) },
+    answer: { answerJson: JSON.stringify({ sub_1: "a" }) },
+    recordId: "record_1",
+    questionMeta,
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(attempts, 3);
+});
