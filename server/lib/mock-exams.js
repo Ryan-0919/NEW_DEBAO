@@ -19,7 +19,8 @@ const isCompletedAiReviewCheckpoint = ({ reviewJson, questionId }) => {
   const checkpoint = reviewJson?.aiReviewCheckpoint;
   if (checkpoint?.version !== AI_REVIEW_CHECKPOINT_VERSION) return false;
   if (checkpoint.questionId && checkpoint.questionId !== questionId) return false;
-  return Array.isArray(reviewJson?.subQuestions);
+  if (checkpoint.partial === true) return false;
+  return Array.isArray(reviewJson?.subQuestions) && reviewJson.subQuestions.length > 0;
 };
 
 const questionTypeMeta = {
@@ -192,6 +193,91 @@ const saveAiReviewQuestionCheckpoint = async ({ db, recordId, questionId, score,
     const data = {
       score,
       reviewJson: JSON.stringify(reviewJson),
+    };
+    if (answer) {
+      await tx.mockExamAnswer.update({ where: { id: answer.id }, data });
+    } else {
+      await tx.mockExamAnswer.create({
+        data: {
+          recordId,
+          questionId,
+          answerJson: "{}",
+          ...data,
+        },
+      });
+    }
+    await tx.mockExamRecord.updateMany({
+      where: {
+        id: recordId,
+        status: "submitted",
+        reviewWorkflowStatus: "ai_processing",
+      },
+      data: {
+        aiReviewStartedAt: currentTime,
+      },
+    });
+  });
+
+const saveAiReviewSubQuestionCheckpoint = async ({
+  db,
+  recordId,
+  questionId,
+  completedResults = [],
+  currentTime = new Date(),
+}) =>
+  db.$transaction(async (tx) => {
+    await lockMockExamRecord(tx, recordId);
+    const latestRecord = await tx.mockExamRecord.findUnique({
+      where: { id: recordId },
+      select: { status: true, reviewWorkflowStatus: true },
+    });
+    if (latestRecord?.status !== "submitted" || latestRecord.reviewWorkflowStatus !== "ai_processing") {
+      throw createHttpError("该试卷已被其他流程接管，请刷新后重试", 409);
+    }
+
+    const answer = await tx.mockExamAnswer.findUnique({
+      where: {
+        recordId_questionId: {
+          recordId,
+          questionId,
+        },
+      },
+    });
+    const subQuestions = Array.from(
+      new Map(
+        (Array.isArray(completedResults) ? completedResults : [])
+          .filter((item) => item && `${item.id ?? ""}`.trim())
+          .map((item) => [`${item.id}`.trim(), item]),
+      ).values(),
+    );
+    if (!subQuestions.length) return;
+
+    const totalScore = subQuestions.reduce((sum, item) => sum + (Number(item.score ?? 0) || 0), 0);
+    const maxScore = subQuestions.reduce((sum, item) => sum + (Number(item.maxScore ?? 0) || 0), 0);
+    const previousReviewJson = parseJsonSafely(answer?.reviewJson, null) ?? {};
+    const partialReviewJson = {
+      source: "ai",
+      reviewSource: "ai-v2",
+      reviewProvider: "openai-compatible",
+      totalScore,
+      maxScore,
+      reviewVoiceUrl: "",
+      reviewVoiceObjectKey: "",
+      reviewVoiceDurationSeconds: 0,
+      feedbackStars: Number(previousReviewJson.feedbackStars ?? 0) || 0,
+      feedbackSubmittedAt: previousReviewJson.feedbackSubmittedAt ?? null,
+      subQuestions,
+      aiReviewCheckpoint: {
+        version: AI_REVIEW_CHECKPOINT_VERSION,
+        questionId,
+        partial: true,
+        completedSubQuestionIds: subQuestions.map((item) => `${item.id}`.trim()),
+        updatedAt: currentTime.toISOString(),
+      },
+    };
+    const data = {
+      score: totalScore,
+      reviewJson: JSON.stringify(partialReviewJson),
     };
     if (answer) {
       await tx.mockExamAnswer.update({ where: { id: answer.id }, data });
@@ -2083,6 +2169,14 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
       answer: existingAnswer,
       recordId: record.id,
       onProgress: () => touchAiReviewProcessing({ db, recordId: record.id, currentTime: new Date() }),
+      onSubQuestionComplete: ({ completedResults }) =>
+        saveAiReviewSubQuestionCheckpoint({
+          db,
+          recordId: record.id,
+          questionId: question.id,
+          completedResults,
+          currentTime: new Date(),
+        }),
     });
     const reviewJson = result.reviewJson;
     console.log(`[AI批改V2] 批改成功 questionId=${question.id}, logId=${result.logId}`);
@@ -2099,6 +2193,8 @@ export const autoReviewMockExamRecord = async ({ db, recordId, adminId = "", cur
         aiReviewCheckpoint: {
           version: AI_REVIEW_CHECKPOINT_VERSION,
           questionId: question.id,
+          partial: false,
+          completedSubQuestionIds: reviewJson.subQuestions.map((item) => `${item?.id ?? ""}`.trim()).filter(Boolean),
           completedAt: new Date().toISOString(),
         },
       },

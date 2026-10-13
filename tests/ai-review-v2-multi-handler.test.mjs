@@ -74,3 +74,78 @@ test("多小问处理器按顺序逐个批改，不再并发 Promise.all", async
   assert.deepEqual(started, ["sub_1", "sub_2", "sub_3"]);
   assert.deepEqual(finished, ["sub_1", "sub_2", "sub_3"]);
 });
+
+test("多小问批改从局部断点继续，并在第一个失败的小问停止", async () => {
+  const handler = new MultiSubQuestionHandler(
+    { model: "gpt-5.5" },
+    { baseUrl: "https://ryanai.cc/v1", apiKey: "test-key" },
+  );
+  const started = [];
+  const checkpoints = [];
+
+  handler.phaseReviewer.reviewSubQuestion = async ({ subQuestion }) => {
+    started.push(subQuestion.id);
+    if (subQuestion.id === "sub_2") {
+      return {
+        success: false,
+        error: "模拟上游错误",
+        result: null,
+        usage: { prompt_tokens: 1, completion_tokens: 0, total_tokens: 1 },
+      };
+    }
+    return {
+      success: true,
+      result: {
+        id: subQuestion.id,
+        title: subQuestion.title,
+        score: 1,
+        maxScore: 1,
+        answer: "",
+        reviewComment: "",
+        answerMarks: [],
+        rubricPoints: [],
+        missedPoints: [],
+      },
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      rawResponse: null,
+    };
+  };
+
+  const questionMeta = {
+    subQuestions: [
+      { id: "sub_1", title: "小问1", maxScore: 1, rubricPoints: [] },
+      { id: "sub_2", title: "小问2", maxScore: 1, rubricPoints: [] },
+      { id: "sub_3", title: "小问3", maxScore: 1, rubricPoints: [] },
+    ],
+  };
+  const result = await handler.sequentialReview({
+    question: { id: "q_1", score: 3, questionMetaJson: JSON.stringify(questionMeta) },
+    answer: {
+      answerJson: JSON.stringify({ sub_1: "a", sub_2: "b", sub_3: "c" }),
+      reviewJson: JSON.stringify({
+        subQuestions: [
+          {
+            id: "sub_1",
+            title: "小问1",
+            score: 1,
+            maxScore: 1,
+            answer: "",
+            reviewComment: "已保存",
+            answerMarks: [],
+            rubricPoints: [],
+            missedPoints: [],
+          },
+        ],
+        aiReviewCheckpoint: { version: 1, questionId: "q_1", partial: true },
+      }),
+    },
+    recordId: "record_1",
+    questionMeta,
+    onSubQuestionComplete: ({ completedResults }) => checkpoints.push(completedResults.map((item) => item.id)),
+  });
+
+  assert.equal(result.success, false);
+  assert.deepEqual(started, ["sub_2"]);
+  assert.deepEqual(checkpoints, []);
+  assert.match(result.error, /sub_2/);
+});

@@ -19,7 +19,7 @@ export class MultiSubQuestionHandler {
   /**
    * 智能批改入口
    */
-  async review({ question, answer, recordId, onProgress }) {
+  async review({ question, answer, recordId, onProgress, onSubQuestionComplete }) {
     const questionMeta = this.getQuestionMeta(question);
     const subQuestionCount = questionMeta.subQuestions.length;
 
@@ -27,7 +27,7 @@ export class MultiSubQuestionHandler {
 
     // 策略：所有情况都逐个批改，确保JSON不会过长
     console.log(`[多小问处理] 使用逐个批改（避免JSON截断）`);
-    return await this.sequentialReview({ question, answer, recordId, questionMeta, onProgress });
+    return await this.sequentialReview({ question, answer, recordId, questionMeta, onProgress, onSubQuestionComplete });
   }
 
   /**
@@ -40,9 +40,13 @@ export class MultiSubQuestionHandler {
   /**
    * 逐个小问批改（真正串行执行，降低上游限流与 502 概率）
    */
-  async sequentialReview({ question, answer, recordId, questionMeta, onProgress }) {
+  async sequentialReview({ question, answer, recordId, questionMeta, onProgress, onSubQuestionComplete }) {
     const startTime = Date.now();
     const answerMap = this.parseSubjectiveAnswerMap(answer?.answerJson, question);
+    const partialCheckpoint = this.getPartialCheckpoint(answer?.reviewJson, question.id);
+    const completedSubQuestionMap = new Map(
+      (partialCheckpoint?.subQuestions ?? []).map((item) => [`${item?.id ?? ""}`.trim(), item]),
+    );
 
     let totalUsage = {
       prompt_tokens: 0,
@@ -60,9 +64,24 @@ export class MultiSubQuestionHandler {
       const sq = questionMeta.subQuestions[i];
       console.log(`[多小问处理] 启动小问${i + 1}/${questionMeta.subQuestions.length}: ${sq.id}`);
       await onProgress?.();
+
+      const cachedResult = completedSubQuestionMap.get(sq.id);
+      if (cachedResult) {
+        console.log(`[多小问处理] 跳过已完成小问: ${sq.id}`);
+        results.push({
+          success: true,
+          result: cachedResult,
+          index: i,
+          subQuestionId: sq.id,
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        });
+        continue;
+      }
+
       const maxScore = this.getSubQuestionMaxScore(question, sq, questionMeta.subQuestions.length);
+      let result;
       try {
-        const result = await this.phaseReviewer.reviewSubQuestion({
+        result = await this.phaseReviewer.reviewSubQuestion({
           question,
           subQuestion: sq,
           answer: answerMap[sq.id] || '',
@@ -74,11 +93,7 @@ export class MultiSubQuestionHandler {
           },
           onProgress,
         });
-        results.push({
-          ...result,
-          index: i,
-          subQuestionId: sq.id
-        });
+        results.push({ ...result, index: i, subQuestionId: sq.id });
       } catch (error) {
         console.error(`[多小问处理] 小问${i + 1}异常:`, error);
         results.push({
@@ -89,6 +104,14 @@ export class MultiSubQuestionHandler {
           usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
         });
       }
+
+      if (!result?.success) break;
+      await onSubQuestionComplete?.({
+        question,
+        subQuestion: sq,
+        result: result.result,
+        completedResults: results.filter((item) => item.success).map((item) => item.result),
+      });
     }
 
     results.forEach((result) => {
@@ -207,5 +230,26 @@ export class MultiSubQuestionHandler {
     return Object.fromEntries(
       subQuestions.map(sq => [sq.id, raw[sq.id] || ''])
     );
+  }
+
+  getPartialCheckpoint(reviewJson, questionId) {
+    let parsed = reviewJson;
+    if (typeof reviewJson === 'string') {
+      try {
+        parsed = JSON.parse(reviewJson);
+      } catch {
+        return null;
+      }
+    }
+    const checkpoint = parsed?.aiReviewCheckpoint;
+    if (
+      checkpoint?.version !== 1 ||
+      checkpoint?.partial !== true ||
+      (checkpoint.questionId && checkpoint.questionId !== questionId) ||
+      !Array.isArray(parsed?.subQuestions)
+    ) {
+      return null;
+    }
+    return parsed;
   }
 }
