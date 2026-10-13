@@ -21,6 +21,7 @@ const REVIEW_ASSIGNMENT_MANAGER_ROLES = ["super_admin", "operations_admin", "rev
 const SUBJECTIVE_TYPE = "subjective_case";
 const LOCK_MINUTES = 120;
 const RETURNED_FOR_REDO_STATUS = "returned_for_redo";
+const AI_REVIEW_CHECKPOINT_VERSION = 1;
 const WORKFLOW_STATUSES = new Set(["ai_pending", "ai_processing", "manual_pending", "published"]);
 const REVIEW_WORKFLOW_STATUS_VALUES = [...WORKFLOW_STATUSES];
 
@@ -58,6 +59,26 @@ const assertReviewAssignmentManager = (req) => {
   const error = new Error("当前账号无权执行试卷分配或改派操作");
   error.statusCode = 403;
   throw error;
+};
+
+const shouldResumeAiReviewFromCheckpoint = (record) =>
+  ["ai_pending", "ai_processing"].includes(`${record?.reviewWorkflowStatus ?? ""}`.trim()) &&
+  Boolean(normalizeText(record?.lastAiReviewError ?? ""));
+
+const buildAiReviewAnswerResetData = ({ answer, preserveCheckpoint = false }) => {
+  const reviewJson = parseJsonSafely(answer?.reviewJson, null);
+  const checkpoint = reviewJson?.aiReviewCheckpoint;
+  const canPreserve = Boolean(
+    preserveCheckpoint &&
+      checkpoint?.version === AI_REVIEW_CHECKPOINT_VERSION &&
+      Array.isArray(reviewJson?.subQuestions),
+  );
+
+  return {
+    publishedReviewJson: null,
+    publishedScore: null,
+    ...(canPreserve ? {} : { reviewJson: null, score: 0 }),
+  };
 };
 
 const parseReviewerStatsDate = (value, fallback = new Date()) => {
@@ -1536,6 +1557,8 @@ adminMockExamReviewRouter.post("/records/:recordId/ai-review", async (req, res) 
         throw error;
       }
 
+      const preserveCheckpoint = shouldResumeAiReviewFromCheckpoint(record);
+
       // AI重批时清空已发布的批改快照，避免显示旧数据
       const subjectiveQuestionIds = new Set(
         (getRecordPaper(record)?.questions ?? [])
@@ -1552,12 +1575,7 @@ adminMockExamReviewRouter.post("/records/:recordId/ai-review", async (req, res) 
           subjectiveAnswers.map((answer) =>
             tx.mockExamAnswer.update({
               where: { id: answer.id },
-              data: {
-                publishedReviewJson: null,
-                publishedScore: null,
-                reviewJson: null,
-                score: 0,
-              },
+              data: buildAiReviewAnswerResetData({ answer, preserveCheckpoint }),
             })
           )
         );
@@ -1615,6 +1633,8 @@ adminMockExamReviewRouter.post("/records/batch-ai-review", async (req, res) => {
           throw error;
         }
 
+        const preserveCheckpoint = shouldResumeAiReviewFromCheckpoint(record);
+
         // AI重批时清空已发布的批改快照，避免显示旧数据
         const subjectiveQuestionIds = new Set(
           (getRecordPaper(record)?.questions ?? [])
@@ -1631,12 +1651,7 @@ adminMockExamReviewRouter.post("/records/batch-ai-review", async (req, res) => {
             subjectiveAnswers.map((answer) =>
               tx.mockExamAnswer.update({
                 where: { id: answer.id },
-                data: {
-                  publishedReviewJson: null,
-                  publishedScore: null,
-                  reviewJson: null,
-                  score: 0,
-                },
+                data: buildAiReviewAnswerResetData({ answer, preserveCheckpoint }),
               })
             )
           );
