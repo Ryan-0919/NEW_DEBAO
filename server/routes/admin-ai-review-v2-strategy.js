@@ -55,14 +55,33 @@ const serializeStrategy = (strategy) => ({
   updatedAt: strategy.updatedAt,
 });
 
-const getOrCreateActiveStrategy = async () => {
-  const active = await prisma.aiReviewStrategy.findFirst({
+const isUniqueStrategyConflict = (error) => {
+  if (error?.code !== "P2002") return false;
+  const target = Array.isArray(error.meta?.target) ? error.meta.target.join(",") : `${error.meta?.target ?? ""}`;
+  return !target || target.includes("name") || target.includes("version") || target.includes("uk_name_version");
+};
+
+const findFallbackStrategy = async (client = prisma) => {
+  const active = await client.aiReviewStrategy.findFirst({
     where: { isActive: true },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
   });
   if (active) return active;
 
-  return prisma.aiReviewStrategy.create({
+  // Turning the strategy off must not make the admin page attempt to insert
+  // the same default (name, version) pair on the next load.
+  const defaultStrategy = await client.aiReviewStrategy.findFirst({
+    where: { name: DEFAULT_STRATEGY_NAME, version: DEFAULT_STRATEGY_VERSION },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+  });
+  if (defaultStrategy) return defaultStrategy;
+
+  return client.aiReviewStrategy.findFirst({
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+  });
+};
+
+const createDefaultStrategy = () => prisma.aiReviewStrategy.create({
     data: {
       name: DEFAULT_STRATEGY_NAME,
       version: DEFAULT_STRATEGY_VERSION,
@@ -83,6 +102,24 @@ const getOrCreateActiveStrategy = async () => {
       createdBy: "system",
     },
   });
+
+const getOrCreateActiveStrategy = async () => {
+  const existing = await findFallbackStrategy();
+  if (existing) return existing;
+
+  try {
+    return await createDefaultStrategy();
+  } catch (error) {
+    // Two admins can open this page at the same time during first setup. If
+    // both observe an empty table, the loser should reuse the row just created.
+    if (!isUniqueStrategyConflict(error)) throw error;
+    const createdByAnotherRequest = await prisma.aiReviewStrategy.findFirst({
+      where: { name: DEFAULT_STRATEGY_NAME, version: DEFAULT_STRATEGY_VERSION },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    });
+    if (createdByAnotherRequest) return createdByAnotherRequest;
+    throw error;
+  }
 };
 
 router.get("/strategy", async (_req, res) => {
@@ -146,6 +183,9 @@ router.patch("/strategy", async (req, res) => {
 
     return ok(res, serializeStrategy(updated), "AI批改2.0提示词配置已保存");
   } catch (error) {
+    if (isUniqueStrategyConflict(error)) {
+      return fail(res, "策略名称和版本的组合已存在，请修改名称或版本后再保存", 409);
+    }
     return fail(res, error.message || "保存AI批改2.0提示词配置失败", error.statusCode || 500);
   }
 });
